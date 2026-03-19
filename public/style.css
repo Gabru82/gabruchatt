@@ -1,0 +1,84 @@
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  overflow:hidden;
+  /* background:radial-gradient(circle at center, #17172a 0%, #0b0b14 70%); */
+  background-color: black;
+  font-family:Arial, sans-serif;
+}
+
+canvas{
+  position:fixed;
+  top:0;
+  left:0;
+  z-index:1;
+}
+
+#authUI{
+  position:absolute;
+  display:none;
+  z-index:10;
+  transform-origin:center center;
+}
+
+.form{
+  width:300px;
+  padding:28px;
+  border-radius:18px;
+  background:rgba(0, 0, 0, 0.88);
+  border:1px solid rgba(255,255,255,0.12);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  display:none;
+  flex-direction:column;
+  gap:12px;
+  color:#fff;
+  box-shadow:0 20px 60px rgba(0,0,0,0.35);
+}
+
+.form.active{
+  display:flex;
+}
+
+.form h2{
+  margin:0 0 8px 0;
+  font-size:28px;
+  text-align:center;
+}
+
+.form input{
+  width:100%;
+  padding:12px 14px;
+  border:none;
+  outline:none;
+  border-radius:10px;
+  background:rgba(255,255,255,0.92);
+  font-size:14px;
+}
+
+.form button{
+  border:none;
+  border-radius:10px;
+  padding:12px 14px;
+  background:#ffd447;
+  color:#111;
+  font-weight:700;
+  cursor:pointer;
+  font-size:15px;
+}
+
+.form p{
+  margin:6px 0 0 0;
+  text-align:center;
+  font-size:14px;
+  color:#ddd;
+}
+
+.form span{
+  color:#ffd447;
+  cursor:pointer;
+  font-weight:700;
+}

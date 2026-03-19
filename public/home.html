@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Chat</title>
+
+    <link rel="stylesheet" href="home.css">
+    <link rel="shortcut icon" href="/images/rtable.png" type="image/x-icon">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        /* Pickers Styles */
+        .picker-container {
+            position: absolute;
+            bottom: 70px;
+            left: 20px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 10px;
+            display: none;
+            /* Hidden by default */
+            flex-wrap: wrap;
+            width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        .media-caption {
+            padding: 5px 8px;
+            font-size: 0.9em;
+            word-wrap: break-word;
+        }
+
+        .emoji-item {
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .sticker-item {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .chat-media {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 5px;
+        }
+
+        .chat-sticker {
+            width: 100px;
+            height: 100px;
+        }
+
+        /* Media Menu Toggle */
+        #mediaMenu {
+            display: none;
+            /* Hidden by default */
+            position: absolute;
+            bottom: 70px;
+            left: 10px;
+            background: #fff;
+            border-radius: 50px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 5px;
+            flex-direction: column;
+        }
+
+        #mediaMenu.show {
+            display: flex;
+        }
+
+        .camera-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .camera-controls button {
+            background: rgba(255, 255, 255, 0.3);
+            border: none;
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <div class="app" id="app">
+
+        <!-- TOP BAR -->
+
+        <div class="topbar">
+
+            <img id="profileBtn" class="profile-avatar" src="https://i.pravatar.cc/100?img=5">
+
+            <h2>Chat</h2>
+
+            <div class="top-icons">
+
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <i id="addFriendBtn" class="fa-solid fa-user-plus"></i>
+
+                <i class="fa-solid fa-bell"></i>
+
+            </div>
+
+        </div>
+
+
+        <!-- CHAT LIST -->
+
+        <div class="chat-list">
+
+            <div class="chat-item">
+
+                <img src="https://i.pravatar.cc/100?img=1">
+
+                <div class="chat-info">
+
+                    <div class="chat-name">Mini</div>
+
+                    <div class="chat-msg">
+                        4 new Chats • 17h
+                    </div>
+
+                </div>
+
+                <div class="chat-days">
+                    120 🔥
+                </div>
+
+            </div>
+
+
+            <div class="chat-item">
+
+                <img src="https://i.pravatar.cc/100?img=2">
+
+                <div class="chat-info">
+
+                    <div class="chat-name">Yash</div>
+
+                    <div class="chat-msg">
+                        9+ new Snaps • 4w
+                    </div>
+
+                </div>
+
+                <div class="chat-days">
+                    346 🔥
+                </div>
+
+            </div>
+
+
+            <div class="chat-item">
+
+                <img src="https://i.pravatar.cc/100?img=3">
+
+                <div class="chat-info">
+
+                    <div class="chat-name">Manish</div>
+
+                    <div class="chat-msg">
+                        9+ new Snaps • 4w
+                    </div>
+
+                </div>
+
+                <div class="chat-days">
+                    27 🔥
+                </div>
+
+            </div>
+
+        </div>
+        <div id="addFriendModal">
+
+            <div class="add-box">
+                <button class="close-btn">&times;</button>
+
+                <h3>Add Friends</h3>
+
+                <button id="searchUserBtn">Search User</button>
+
+                <button id="viewRequestsBtn">Friend Requests</button>
+
+            </div>
+
+        </div>
+        <div id="searchModal">
+
+            <div class="search-box">
+                <button class="close-btn">&times;</button>
+
+                <input id="searchInput" placeholder="Search username">
+
+                <button id="searchBtn">Search</button>
+
+                <div id="searchResult"></div>
+
+            </div>
+
+        </div>
+        <div id="requestModal">
+
+            <div class="request-box">
+                <button class="close-btn">&times;</button>
+
+                <h3>Friend Requests</h3>
+
+                <div id="requestList"></div>
+
+            </div>
+
+        </div>
+        <div id="chatScreen">
+
+            <div class="chat-header">
+
+                <button id="backChat">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+
+                <img id="chatAvatar" src="https://i.pravatar.cc/100?img=1">
+
+                <h3 id="chatName"></h3>
+
+            </div>
+
+
+            <div id="messages"></div>
+
+            <div id="typingIndicator" class="typing-indicator" style="display: none;">
+                <span id="typingText">typing...</span>
+            </div>
+
+            <!-- PICKERS -->
+            <div id="emojiPicker" class="picker-container"></div>
+            <div id="stickerPicker" class="picker-container"></div>
+
+            <!-- Hidden File Input for Media -->
+            <input type="file" id="chatFileInput" hidden>
+
+            <!-- MEDIA MENU -->
+
+            <div id="mediaMenu">
+
+                <button class="mediaBtn">
+                    <i class="fa-solid fa-image"></i>
+                </button>
+
+                <button class="mediaBtn">
+                    <i class="fa-solid fa-video"></i>
+                </button>
+
+                <button class="mediaBtn" id="cameraBtn">
+                    <i class="fa-solid fa-camera"></i>
+                </button>
+
+
+            </div>
+
+
+            <!-- INPUT BAR -->
+
+            <div class="chat-input">
+
+                <button id="plusBtn">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+                <div
+                    style="flex: 1; display: flex;flex-direction: column; background: #333; border-radius: 20px; padding: 5px; margin: 0 5px;">
+                    <div id="mediaToSendPreview" style="display: none; position: relative; margin-right: 5px;"></div>
+                    <input id="msgInput" placeholder="Send message"
+                        style="flex: 1; background: transparent; border: none; outline: none; color: white; padding: 0 5px;">
+                </div>
+                <button id="micBtn">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+                <button id="emojiBtn">
+                    <i class="fa-solid fa-face-smile"></i>
+                </button>
+
+                <button id="stickerBtn">
+                    <i class="fa-solid fa-note-sticky"></i>
+                </button>
+
+                <button id="sendBtn">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+
+            </div>
+            <div id="recordingIndicator">
+                <span class="rec-dot"></span>
+
+                <div class="waveform">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <span class="rec-text">Recording...</span>
+            </div>
+
+        </div>
+
+
+
+        <!-- PROFILE PAGE -->
+
+        <div id="profilePage">
+
+            <div class="profile-top">
+
+                <button id="closeProfile">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+
+                <h2>Profile</h2>
+
+            </div>
+
+
+            <div class="profile-container">
+
+                <img id="profileImage" class="profile-avatar-big" src="https://i.pravatar.cc/200?img=5">
+
+
+                <input type="file" id="imageUpload" hidden>
+
+                <button class="change-photo" id="changePhoto">
+                    Change Photo
+                </button>
+
+
+                <h2 id="profileName"></h2>
+
+                <p class="profile-email" id="profileEmail"></p>
+
+
+                <div class="profile-options">
+
+                    <div class="profile-option" id="editProfile">
+                        <i class="fa-solid fa-user-pen"></i>
+                        <span>Edit Profile</span>
+                    </div>
+
+                    <div class="profile-option">
+                        <i class="fa-solid fa-lock"></i>
+                        <span>Change Password</span>
+                    </div>
+
+                    <div class="profile-option">
+                        <i class="fa-solid fa-envelope"></i>
+                        <span>Update Email</span>
+                    </div>
+
+                    <div class="profile-option">
+                        <i class="fa-solid fa-bell"></i>
+                        <span>Notifications</span>
+                    </div>
+
+                    <div class="profile-option">
+                        <i class="fa-solid fa-shield"></i>
+                        <span>Privacy Settings</span>
+                    </div>
+
+                    <div class="profile-option logout" id="logout">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span>Logout</span>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- EDIT PROFILE MODAL -->
+
+            <div id="editModal">
+
+                <div class="edit-box">
+
+                    <h3>Edit Profile</h3>
+
+                    <input id="editUsername" placeholder="Username">
+
+                    <input id="editEmail" placeholder="Email">
+
+                    <input id="editPassword" type="password" placeholder="New Password">
+
+                    <button id="saveProfile">
+                        Save
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+        <div id="messageMenu">
+            <div class="menu-item" data-action="reply"><i class="fa-solid fa-reply"></i> Reply</div>
+            <div class="menu-item" data-action="react"><i class="fa-solid fa-face-smile"></i> React</div>
+            <div class="menu-item" data-action="copy"><i class="fa-solid fa-copy"></i> Copy</div>
+            <div class="menu-item" data-action="edit"><i class="fa-solid fa-pen"></i> Edit</div>
+            <div class="menu-item delete" data-action="delete"><i class="fa-solid fa-trash"></i> Delete</div>
+        </div>
+        <div id="deleteModal"
+            style="display:none; position:fixed; bottom:0; width:100%; background:#111; padding:15px; z-index:1000;">
+            <button id="deleteMe">Delete for me</button>
+            <button id="deleteEveryone">Delete for everyone</button>
+        </div>
+        <!-- CAMERA MODAL -->
+        <div id="cameraView"
+            style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #000; z-index: 10001;">
+            <video id="cameraVideoFeed" autoplay playsinline
+                style="width: 100%; height: 100%; object-fit: cover;"></video>
+            <canvas id="cameraCanvas" style="display: none;"></canvas>
+            <div class="camera-controls">
+                <button id="capturePhotoBtn"><i class="fa-solid fa-camera"></i></button>
+                <button id="startRecordBtn"><i class="fa-solid fa-video"></i></button>
+                <button id="stopRecordBtn" style="display: none; color: red;"><i class="fa-solid fa-stop"></i></button>
+            </div>
+            <button id="closeCameraBtn"
+                style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: white; background: transparent; border: none; cursor: pointer;">&times;</button>
+        </div>
+    </div>
+
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="chat.js"></script>
+
+</body>
+
+</html>

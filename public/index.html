@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gabru</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="authUI">
+    <div id="loginForm" class="form active">
+      <h2>Login</h2>
+      <input type="text" placeholder="Email" />
+      <input type="password" placeholder="Password" />
+      <button>Login</button>
+      <p>No account? <span id="showRegister">Register</span></p>
+    </div>
+
+    <div id="registerForm" class="form">
+      <h2>Register</h2>
+      <input type="text" placeholder="Name" />
+      <input type="email" placeholder="Email" />
+      <input type="password" placeholder="Password" />
+      <button>Create Account</button>
+      <p>Have account? <span id="showLogin">Login</span></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
