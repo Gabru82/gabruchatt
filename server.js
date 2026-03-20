@@ -1,14 +1,11 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
-const bodyParser = require("body-parser");
 const cors = require("cors");
 const http = require("http");
 
 const app = express();
 app.use(express.json({ limit: "100mb" }));
 app.use(cors());
-app.use(bodyParser.json({ limit: "100mb" }));
-app.use(express.static("public"));
 process.on("uncaughtException", (err) => {
   console.error("🔥 UNCAUGHT EXCEPTION:", err);
 });
@@ -43,6 +40,12 @@ db.serialize(() => {
   db.run("ALTER TABLE users ADD COLUMN last_seen DATETIME", (err) => {
     if (err && !err.message.includes("duplicate column")) {
       console.error("last_seen error:", err.message);
+    }
+  });
+
+  db.run("ALTER TABLE users ADD COLUMN avatar TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("avatar error:", err.message);
     }
   });
 
@@ -147,11 +150,34 @@ app.post("/login", (req, res) => {
   );
 });
 
+app.get("/api/getMyProfile/:userId", (req, res) => {
+  const userId = req.params.userId;
+  db.get(
+    "SELECT id, name, email, password, avatar FROM users WHERE id=?",
+    [userId],
+    (err, row) => {
+      if (err || !row) return res.json({ success: false });
+      res.json({ success: true, user: row });
+    },
+  );
+});
+
+app.post("/api/updateProfile", (req, res) => {
+  const { userId, name, email, password, avatar } = req.body;
+  db.run(
+    "UPDATE users SET name=?, email=?, password=?, avatar=? WHERE id=?",
+    [name, email, password, avatar, userId],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true });
+    },
+  );
+});
 app.post("/searchUser", (req, res) => {
   const { name } = req.body;
 
   db.all(
-    "SELECT id, name FROM users WHERE name LIKE ?",
+    "SELECT id, name, avatar FROM users WHERE name LIKE ?",
     [`%${name}%`],
     (err, rows) => {
       if (err) return res.status(500).json({ users: [] });
@@ -225,7 +251,7 @@ app.get("/getRequests/:userId", (req, res) => {
 
   db.all(
     `
-    SELECT friend_requests.id, users.name, users.id as senderId
+    SELECT friend_requests.id, users.name, users.avatar, users.id as senderId
     FROM friend_requests 
     JOIN users ON users.id = friend_requests.sender
     WHERE receiver = ? AND status = 'pending'
@@ -247,7 +273,7 @@ app.get("/getFriends/:userId", (req, res) => {
 
   db.all(
     `
-    SELECT DISTINCT u.id, u.name,
+    SELECT DISTINCT u.id, u.name, u.avatar,
     (SELECT COUNT(*) FROM messages WHERE sender = u.id AND receiver = ? AND status != 'seen') as unreadCount,
     (SELECT message FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessage
     FROM friends f 
@@ -392,10 +418,11 @@ app.get("/getUserStatus/:userId", (req, res) => {
   const userId = req.params.userId;
   const isOnline = onlineUsers.has(String(userId));
 
-  db.get("SELECT last_seen FROM users WHERE id=?", [userId], (err, row) => {
+  db.get("SELECT last_seen, avatar FROM users WHERE id=?", [userId], (err, row) => {
     if (err) return res.json({ online: false, lastSeen: null });
     res.json({
       online: isOnline,
+      avatar: row ? row.avatar : null,
       lastSeen: row ? row.last_seen : null,
     });
   });
@@ -447,6 +474,9 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
     },
   );
 });
+
+// This must be after all API routes to ensure they are handled first.
+app.use(express.static("public"));
 // ================= SOCKET =================
 
 const onlineUsers = new Map();

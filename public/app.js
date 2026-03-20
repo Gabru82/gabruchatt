@@ -1,3 +1,7 @@
+if (localStorage.getItem("userId")) {
+  window.location.href = "/home.html";
+}
+
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
@@ -6,6 +10,31 @@ const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
 const showRegister = document.getElementById("showRegister");
 const showLogin = document.getElementById("showLogin");
+
+function setupCustomPopup() {
+  const popupHTML = `
+        <div id="customPopup" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
+            <div style="background:#222; padding:25px; border-radius:12px; text-align:center; color:white; border:1px solid #444; box-shadow:0 10px 30px rgba(0,0,0,0.5); min-width: 280px;">
+                <p id="customPopupMessage" style="margin-bottom:20px; font-size:56px; line-height:1.4;"></p>
+            </div>
+        </div>
+    `;
+  document.body.insertAdjacentHTML("beforeend", popupHTML);
+}
+
+function showPopup(message) {
+  const popup = document.getElementById("customPopup");
+  const popupMessage = document.getElementById("customPopupMessage");
+  if (popup && popupMessage) {
+    popupMessage.textContent = message;
+    popup.style.display = "flex";
+    setTimeout(() => {
+      popup.style.display = "none";
+    }, 1000);
+  }
+}
+
+setupCustomPopup();
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -16,8 +45,10 @@ function resizeCanvas() {
 }
 window.addEventListener("resize", resizeCanvas);
 
-let state = "enter";
-
+let state = "plane";
+let startTime = null;
+let animationPhase = "flyin"; // flyin → zoom → explode → build → form
+let planeScale = 2;
 const enterBtn = {
   x: 0,
   y: 0,
@@ -36,7 +67,7 @@ const plane = {
   trail: [],
 };
 
-let flyStart = 0;
+let flyStart = null;
 let crashX = 0;
 let crashY = 0;
 
@@ -63,7 +94,7 @@ class Particle {
     this.ty = y;
     this.mode = "explode";
     this.alpha = 1;
-    this.wait = Math.random() * 20;
+    this.wait = Math.random() * 5;
   }
 
   updateExplode() {
@@ -79,8 +110,8 @@ class Particle {
       return;
     }
 
-    this.x += (this.tx - this.x) * 0.08;
-    this.y += (this.ty - this.y) * 0.08;
+    this.x += (this.tx - this.x) * 0.20;
+    this.y += (this.ty - this.y) * 0.20;
     this.vx *= 0.9;
     this.vy *= 0.9;
   }
@@ -175,23 +206,14 @@ class ParachuteGuy {
   }
 }
 
-function initPlanePath() {
-  plane.x = canvas.width / 2;
+function initPlaneEntry() {
+  plane.x = -100; // start off-screen (left)
   plane.y = canvas.height / 2;
-  plane.trail = [];
 
-  let angle;
-  do {
-    angle = Math.random() * Math.PI * 2;
-  } while (
-    Math.abs(Math.cos(angle)) < 0.35 &&
-    Math.abs(Math.sin(angle)) < 0.35
-  );
+  plane.vx = 15;
+  plane.vy = 0;
 
-  const speed = 4.5 + Math.random() * 2;
-  plane.vx = Math.cos(angle) * speed;
-  plane.vy = Math.sin(angle) * speed;
-  plane.angle = Math.atan2(plane.vy, plane.vx);
+  plane.angle = 0;
 }
 
 function drawBackgroundDots() {
@@ -257,6 +279,7 @@ function drawPlane() {
   ctx.save();
   ctx.translate(plane.x, plane.y);
   ctx.rotate(plane.angle);
+  ctx.scale(planeScale, planeScale);
 
   ctx.fillStyle = "#ffffff";
   ctx.shadowBlur = 10;
@@ -332,8 +355,8 @@ function assignParticlesToFormTargets(centerX, centerY) {
     particles[i].wait = Math.random() * 16;
   }
 
-  authUI.style.left = `${left}px`;
-  authUI.style.top = `${top}px`;
+  // authUI.style.left = `${left}px`;
+  // authUI.style.top = `${top}px`;
 }
 
 function pushRectBorderTargets(arr, x, y, w, h, gap) {
@@ -385,73 +408,63 @@ function drawShockwave() {
   ctx.stroke();
   ctx.restore();
 }
-
 function animate(time) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackgroundDots();
 
-  if (state === "enter") {
-    drawEnterButton();
-  }
+  if (!startTime) startTime = time;
 
-  if (state === "morph") {
-    enterBtn.morph += 0.06;
-    if (enterBtn.morph >= 1) {
-      enterBtn.morph = 1;
-      initPlanePath();
-      flyStart = time;
-      state = "plane";
-    }
-    drawEnterButton();
-  }
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
 
+  // ================= ✈️ FLY + INSTANT BLAST =================
   if (state === "plane") {
     plane.x += plane.vx;
-    plane.y += plane.vy;
 
-    if (plane.x < 30 || plane.x > canvas.width - 30) plane.vx *= -1;
-    if (plane.y < 30 || plane.y > canvas.height - 30) plane.vy *= -1;
+    // 🔥 trigger blast EXACTLY when crossing center (no stop)
+    if (plane.x >= centerX) {
+      crashX = centerX;
+      crashY = centerY;
 
-    plane.angle = Math.atan2(plane.vy, plane.vx);
-
-    drawPlane();
-
-    if (time - flyStart > 2000) {
-      crashX = plane.x;
-      crashY = plane.y;
-
-      createExplosion(crashX, crashY, 320);
+      createExplosion(crashX, crashY, 1000);
       spawnParachutes(crashX, crashY);
 
       state = "explode";
+      // return; // stop drawing plane instantly
     }
+
+    drawPlane();
   }
 
-  if (state === "explode") {
+  // ================= 💥 EXPLOSION =================
+  else if (state === "explode") {
     updateParticles();
     updateParachutes();
     drawShockwave();
 
+    // when particles slow → build form
     if (allParticlesSlowEnough()) {
       assignParticlesToFormTargets(crashX, crashY);
       state = "build";
     }
   }
 
-  if (state === "build") {
+  // ================= 🧱 BUILD FORM =================
+  else if (state === "build") {
     updateParticles();
     updateParachutes();
 
     if (allParticlesBuilt()) {
       if (!formReady) {
         formReady = true;
-        authUI.style.display = "block";
+        authUI.style.display = "flex";
       }
       state = "form";
     }
   }
 
-  if (state === "form") {
+  // ================= FINAL =================
+  else if (state === "form") {
     updateParachutes();
   }
 
@@ -542,6 +555,7 @@ function clamp(value, min, max) {
 }
 
 resizeCanvas();
+initPlaneEntry();
 animate();
 
 document.querySelector("#registerForm button").onclick = async () => {
@@ -554,6 +568,11 @@ document.querySelector("#registerForm button").onclick = async () => {
   const password = document.querySelector(
     "#registerForm input[placeholder='Password']",
   ).value;
+
+  if (!name || !email || !password) {
+    showPopup("Please fill the details");
+    return;
+  }
 
   const res = await fetch("/register", {
     method: "POST",
@@ -571,9 +590,10 @@ document.querySelector("#registerForm button").onclick = async () => {
   const data = await res.json();
 
   if (data.success) {
-    alert("Account created!");
+    showPopup("Account created!");
+    switchFormWithParticles(false);
   } else {
-    alert(data.message);
+    showPopup(data.message);
   }
 };
 
@@ -584,6 +604,11 @@ document.querySelector("#loginForm button").onclick = async () => {
   const password = document.querySelector(
     "#loginForm input[placeholder='Password']",
   ).value;
+
+  if (!email || !password) {
+    showPopup("Please fill the details");
+    return;
+  }
 
   const res = await fetch("/login", {
     method: "POST",
@@ -597,8 +622,11 @@ document.querySelector("#loginForm button").onclick = async () => {
     localStorage.setItem("userId", data.id);
     localStorage.setItem("username", data.name);
 
-    window.location.href = "/home.html";
+    showPopup("Login Successful!");
+    setTimeout(() => {
+      window.location.href = "/home.html";
+    }, 1000);
   } else {
-    alert("Invalid login");
+    showPopup("Invalid login");
   }
 };

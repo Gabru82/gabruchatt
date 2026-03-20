@@ -8,6 +8,22 @@ const app = document.getElementById("app");
 if (!app) {
   throw new Error("App container not found!");
 }
+
+// ================= AUTO FULL SCREEN =================
+function enableFullScreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen().catch((err) => console.log(err));
+  } else if (elem.webkitRequestFullscreen) {
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) {
+    elem.msRequestFullscreen();
+  }
+}
+enableFullScreen();
+document.addEventListener("click", enableFullScreen, { once: true });
+document.addEventListener("touchstart", enableFullScreen, { once: true });
+
 // ================= CUSTOM POPUP =================
 function setupCustomPopup() {
   const popupHTML = `
@@ -373,10 +389,10 @@ function openUserProfile() {
   const grid = document.getElementById("sharedMediaGrid");
 
   modal.style.display = "flex";
-  avatar.src = `https://i.pravatar.cc/150?img=${(currentFriendId % 70) + 1}`;
   name.textContent = currentFriendName;
 
   // Get live status from existing chat header or fetch fresh
+  // Note: updateProfileStatus will also now handle fetching the avatar if needed
   updateProfileStatus(currentFriendId);
 
   // Fetch shared info (Days + Media)
@@ -387,6 +403,11 @@ async function updateProfileStatus(friendId) {
   const res = await fetch(`/getUserStatus/${friendId}`);
   const data = await res.json();
   const statusEl = document.getElementById("profileModalStatus");
+
+  // Update avatar in modal
+  const avatar = document.getElementById("profileModalAvatar");
+  avatar.src =
+    data.avatar || `https://i.pravatar.cc/150?img=${(friendId % 70) + 1}`;
 
   if (data.online) {
     statusEl.textContent = "Online";
@@ -491,6 +512,17 @@ async function loadSharedInfo(friendId) {
 setupThemeUI();
 
 // ================= SOCKET =================
+// Helper for avatar
+function getAvatarSrc(user) {
+  if (user && user.avatar) return user.avatar;
+  if (user && user.id)
+    return `https://i.pravatar.cc/150?img=${(user.id % 70) + 1}`;
+  // If passing just ID
+  if (typeof user === "number" || typeof user === "string")
+    return `https://i.pravatar.cc/150?img=${(user % 70) + 1}`;
+  return `https://i.pravatar.cc/150?img=1`;
+}
+
 let activeChat = null;
 
 const socket = io();
@@ -544,7 +576,10 @@ document.getElementById("searchBtn").onclick = async () => {
     }
 
     div.innerHTML = `
-      <span>${user.name}</span>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="${getAvatarSrc(user)}" style="width:30px; height:30px; border-radius:50%;">
+        <span>${user.name}</span>
+      </div>
       ${buttonHtml}
     `;
 
@@ -604,7 +639,11 @@ async function loadRequests() {
     const div = document.createElement("div");
     div.className = "request-item";
 
+    const avatarSrc =
+      r.avatar || `https://i.pravatar.cc/150?img=${(r.senderId % 70) + 1}`;
+
     div.innerHTML = `
+      <img src="${avatarSrc}" style="width:30px; height:30px; border-radius:50%; margin-right:8px;">
       <span>${r.name}</span>
       <button onclick="acceptRequest(${r.id}, ${r.senderId})">Accept</button>
     `;
@@ -705,29 +744,6 @@ const micBtn = document.getElementById("micBtn");
 const themeOptionsPopup = document.getElementById("themeOptionsPopup");
 const themeSelectionModal = document.getElementById("themeSelectionModal");
 const wallpaperInput = document.getElementById("wallpaperInput");
-let themeLongPressTimer;
-
-messagesContainer.addEventListener("mousedown", (e) => {
-  if (e.target === messagesContainer) {
-    // Check if click is on the container itself
-    themeLongPressTimer = setTimeout(() => {
-      if (currentFriendId) themeOptionsPopup.style.display = "flex";
-    }, 500);
-  }
-});
-messagesContainer.addEventListener("mouseup", () => {
-  clearTimeout(themeLongPressTimer);
-});
-messagesContainer.addEventListener("touchstart", (e) => {
-  if (e.target === messagesContainer) {
-    themeLongPressTimer = setTimeout(() => {
-      if (currentFriendId) themeOptionsPopup.style.display = "flex";
-    }, 500);
-  }
-});
-messagesContainer.addEventListener("touchend", () => {
-  clearTimeout(themeLongPressTimer);
-});
 
 document.getElementById("cancelThemeBtn").onclick = () => {
   themeOptionsPopup.style.display = "none";
@@ -836,22 +852,56 @@ function stopRecording() {
   micBtn.classList.remove("recording");
   recordingIndicator.style.display = "none";
 }
-// 🖱️ Desktop hold
-micBtn.addEventListener("mousedown", startRecording);
+let pressTimer = null;
+let longPressTriggered = false;
 
-// 📱 Mobile hold
-micBtn.addEventListener("touchstart", startRecording);
+// ================= START HOLD =================
 
-// 🖱️ Release anywhere
-document.addEventListener("mouseup", stopRecording);
+// Desktop
+micBtn.addEventListener("mousedown", () => {
+  longPressTriggered = false;
 
-// 📱 Touch release anywhere
-document.addEventListener("touchend", stopRecording);
+  pressTimer = setTimeout(() => {
+    longPressTriggered = true;
+    startRecording();
+  }, 500); // 0.5 second hold
+});
 
-// 🔁 Tap again to stop (fallback)
-micBtn.addEventListener("click", () => {
-  if (isRecording) {
+// Mobile
+micBtn.addEventListener("touchstart", () => {
+  longPressTriggered = false;
+
+  pressTimer = setTimeout(() => {
+    longPressTriggered = true;
+    startRecording();
+  }, 500);
+});
+
+// ================= RELEASE =================
+
+// Desktop
+document.addEventListener("mouseup", () => {
+  clearTimeout(pressTimer);
+
+  if (longPressTriggered) {
     stopRecording();
+  }
+});
+
+// Mobile
+document.addEventListener("touchend", () => {
+  clearTimeout(pressTimer);
+
+  if (longPressTriggered) {
+    stopRecording();
+  }
+});
+
+// ================= BLOCK NORMAL CLICK =================
+micBtn.addEventListener("click", (e) => {
+  if (!longPressTriggered) {
+    e.preventDefault();
+    e.stopPropagation();
   }
 });
 
@@ -1509,7 +1559,9 @@ function showMessageMenu(e, messageEl) {
 
   const editBtn = messageMenu.querySelector('[data-action="edit"]');
   if (editBtn) {
-    editBtn.style.display = messageEl.classList.contains("call-log") ? "none" : "";
+    editBtn.style.display = messageEl.classList.contains("call-log")
+      ? "none"
+      : "";
   }
 
   messageMenu.style.display = "flex";
@@ -1779,7 +1831,7 @@ async function loadFriends() {
     item.dataset.friendId = friend.id;
 
     item.innerHTML = `
-      <img src="https://i.pravatar.cc/100?img=${(friend.id % 70) + 1}">
+      <img src="${getAvatarSrc(friend)}">
       <div class="chat-info">
         <div class="chat-name">${friend.name}</div>
         <div class="chat-msg">${friend.lastMessage || "Click to chat"}</div>
@@ -1787,7 +1839,7 @@ async function loadFriends() {
       <div class="chat-days">💬</div>
     `;
 
-    item.onclick = () => openChat(friend.id, friend.name);
+    item.onclick = () => openChat(friend.id, friend.name, friend.avatar);
     chatList.appendChild(item);
   });
   updateFriendList();
@@ -1801,7 +1853,7 @@ function closeAllModals() {
   document.getElementById("requestModal").style.display = "none";
 }
 
-async function openChat(friendId, friendName) {
+async function openChat(friendId, friendName, friendAvatar = null) {
   closeAllModals();
   scrollToBottomBtn.classList.remove("show"); // Ensure button is hidden on open
   currentFriendId = friendId;
@@ -1810,23 +1862,31 @@ async function openChat(friendId, friendName) {
   delete unreadCounts[friendId];
   updateFriendList();
 
+  // If no avatar passed (e.g. from search), use placeholder initially
+  if (!friendAvatar) {
+    friendAvatar = getAvatarSrc({ id: friendId });
+  }
+
   // ✅ Update Header with Name and Status Container
   const chatNameEl = document.getElementById("chatName");
   const headerHTML = `
-    <div class="chat-header-info">
-      <span>${friendName}</span>
-      <span id="chatStatus" class="chat-status">Connecting...</span>
-      
-      <!-- Hanging Character -->
-      <div id="hangingCharacter" class="hanging-character">
-         <div class="hanging-stick"></div>
-         <div class="stickman">
-            <div class="stickman-head"></div>
-            <div class="stickman-body"></div>
-            <div class="stickman-arm-left"></div>
-            <div class="stickman-arm-right"></div>
-            <div class="stickman-leg-left"></div>
-            <div class="stickman-leg-right"></div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+<img src="${friendAvatar}" alt="${friendName}" class="golden-avatar" onclick="openUserProfile()">
+      <div class="chat-header-info">
+        <span>${friendName}</span>
+        <span id="chatStatus" class="chat-status">Connecting...</span>
+        
+        <!-- Hanging Character -->
+        <div id="hangingCharacter" class="hanging-character">
+           <div class="hanging-stick"></div>
+           <div class="stickman">
+              <div class="stickman-head"></div>
+              <div class="stickman-body"></div>
+              <div class="stickman-arm-left"></div>
+              <div class="stickman-arm-right"></div>
+              <div class="stickman-leg-left"></div>
+              <div class="stickman-leg-right"></div>
+           </div>
          </div>
       </div>
     </div>
@@ -1837,16 +1897,24 @@ async function openChat(friendId, friendName) {
       <button class="chat-action-btn" onclick="startVideoCall('${friendId}', '${friendName}')">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
       </button>
+      <button class="chat-action-btn" id="chatOptionsBtn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+      </button>
     </div>
   `;
 
   chatNameEl.innerHTML = headerHTML;
 
-  // ✅ Make header clickable for profile view
-  const headerInfo = chatNameEl.querySelector(".chat-header-info");
-  if (headerInfo) {
-    headerInfo.style.cursor = "pointer";
-    headerInfo.onclick = openUserProfile;
+  // ✅ Handle click on new theme options button
+  document.getElementById("chatOptionsBtn").onclick = () => {
+    themeOptionsPopup.style.display = "flex";
+  };
+
+  // ✅ Make header clickable for profile view (name part)
+  const headerInfoClickable = chatNameEl.querySelector(".chat-header-info");
+  if (headerInfoClickable) {
+    headerInfoClickable.style.cursor = "pointer";
+    headerInfoClickable.onclick = openUserProfile;
   }
 
   // Also make the avatar clickable (if it exists in your DOM structure outside chatName)
@@ -1937,6 +2005,12 @@ async function updateChatStatus(friendId) {
 
   const res = await fetch(`/getUserStatus/${friendId}`);
   const data = await res.json();
+
+  // ✅ Update Avatar in Header to ensure it matches server data
+  const chatAvatar = document.querySelector("#chatName img");
+  if (chatAvatar && data.avatar) {
+    chatAvatar.src = data.avatar;
+  }
 
   if (data.online) {
     statusEl.textContent = "Online";
@@ -2041,8 +2115,7 @@ async function startVoiceCall(friendId, friendName) {
   document.getElementById("activeButtons").style.display = "flex";
   document.getElementById("callName").textContent = friendName;
   document.getElementById("callStatus").textContent = "Calling...";
-  document.getElementById("callAvatar").src =
-    `https://i.pravatar.cc/150?img=${(friendId % 70) + 1}`;
+  document.getElementById("callAvatar").src = getAvatarSrc({ id: friendId });
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -2079,8 +2152,7 @@ async function startVideoCall(friendId, friendName) {
   document.getElementById("activeButtons").style.display = "flex";
   document.getElementById("callName").textContent = friendName;
   document.getElementById("callStatus").textContent = "Calling...";
-  document.getElementById("callAvatar").src =
-    `https://i.pravatar.cc/150?img=${(friendId % 70) + 1}`;
+  document.getElementById("callAvatar").src = getAvatarSrc({ id: friendId });
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({
@@ -2454,7 +2526,6 @@ window.minimizeCall = function () {
 
   // Sync status text immediately
   const status = document.getElementById("callStatus").textContent;
- 
 };
 
 window.maximizeCall = function () {
@@ -2480,8 +2551,7 @@ socket.on("callUser", ({ from, signal, callType }) => {
   document.getElementById("callName").textContent = "Friend";
   document.getElementById("callStatus").textContent =
     `Incoming ${currentCallType === "video" ? "Video" : "Voice"} Call...`;
-  document.getElementById("callAvatar").src =
-    `https://i.pravatar.cc/150?img=${(from % 70) + 1}`;
+  document.getElementById("callAvatar").src = getAvatarSrc({ id: from });
 });
 
 async function acceptCall() {
@@ -2925,63 +2995,78 @@ emojis.forEach((emoji) => {
 });
 
 // 4. Stickers
-const stickers = [
-  "https://img.icons8.com/emoji/96/000000/star-struck.png",
-  "https://img.icons8.com/emoji/96/000000/partying-face.png",
-  "https://img.icons8.com/emoji/96/000000/zany-face.png",
-  "https://img.icons8.com/emoji/96/000000/frowning-face.png",
-  "https://img.icons8.com/emoji/96/000000/pouting-face.png",
-  "https://img.icons8.com/emoji/96/000000/clown-face.png",
-  "https://img.icons8.com/emoji/96/000000/ghost.png",
-  "https://img.icons8.com/emoji/96/000000/alien.png",
-  "https://img.icons8.com/emoji/96/000000/pile-of-poo.png",
-  "https://img.icons8.com/emoji/96/000000/thumbs-up.png",
-];
+// const stickers = [
+//   "https://img.icons8.com/emoji/96/000000/star-struck.png",
+//   "https://img.icons8.com/emoji/96/000000/partying-face.png",
+//   "https://img.icons8.com/emoji/96/000000/zany-face.png",
+//   "https://img.icons8.com/emoji/96/000000/frowning-face.png",
+//   "https://img.icons8.com/emoji/96/000000/pouting-face.png",
+//   "https://img.icons8.com/emoji/96/000000/clown-face.png",
+//   "https://img.icons8.com/emoji/96/000000/ghost.png",
+//   "https://img.icons8.com/emoji/96/000000/alien.png",
+//   "https://img.icons8.com/emoji/96/000000/pile-of-poo.png",
+//   "https://img.icons8.com/emoji/96/000000/thumbs-up.png",
+// ];
 
-const stickerBtn = document.getElementById("stickerBtn");
-const stickerPicker = document.getElementById("stickerPicker");
+// const stickerBtn = document.getElementById("stickerBtn");
+// const stickerPicker = document.getElementById("stickerPicker");
 
-stickerBtn.onclick = () => {
-  stickerPicker.style.display =
-    stickerPicker.style.display === "flex" ? "none" : "flex";
-  document.getElementById("emojiPicker").style.display = "none";
-  mediaMenu.classList.remove("show");
-};
+// stickerBtn.onclick = () => {
+//   stickerPicker.style.display =
+//     stickerPicker.style.display === "flex" ? "none" : "flex";
+//   document.getElementById("emojiPicker").style.display = "none";
+//   mediaMenu.classList.remove("show");
+// };
 
-// Populate Stickers
-stickers.forEach((url) => {
-  const img = document.createElement("img");
-  img.className = "sticker-item";
-  img.src = url;
-  img.onclick = () => {
-    if (!currentFriendId) return;
+// // Populate Stickers
+// stickers.forEach((url) => {
+//   const img = document.createElement("img");
+//   img.className = "sticker-item";
+//   img.src = url;
+//   img.onclick = () => {
+//     if (!currentFriendId) return;
 
-    socket.emit(
-      "sendMessage",
-      {
-        to: currentFriendId,
-        message: url,
-        type: "sticker",
-      },
-      (res) => {
-        if (!res || !res.success) return;
-        const msg = res.data;
-        appendMessage(
-          userId,
-          msg.message,
-          msg.msgId,
-          msg.status,
-          msg.seenAt,
-          "sticker",
-          msg.timestamp,
-        );
-        messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom on send
-        stickerPicker.style.display = "none";
-      },
-    );
-  };
-  stickerPicker.appendChild(img);
-});
+//     socket.emit(
+//       "sendMessage",
+//       {
+//         to: currentFriendId,
+//         message: url,
+//         type: "sticker",
+//       },
+//       (res) => {
+//         if (!res || !res.success) return;
+//         const msg = res.data;
+//         appendMessage(
+//           userId,
+//           msg.message,
+//           msg.msgId,
+//           msg.status,
+//           msg.seenAt,
+//           "sticker",
+//           msg.timestamp,
+//         );
+//         messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom on send
+//         stickerPicker.style.display = "none";
+//       },
+//     );
+//   };
+//   stickerPicker.appendChild(img);
+// });
+
+// ================= AUTO FULL SCREEN =================
+function enableFullScreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen().catch((err) => console.log(err));
+  } else if (elem.webkitRequestFullscreen) {
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) {
+    elem.msRequestFullscreen();
+  }
+}
+// enableFullScreen();
+document.addEventListener("click", enableFullScreen, { once: true });
+document.addEventListener("touchstart", enableFullScreen, { once: true });
 
 // Close pickers when clicking elsewhere (optional simple implementation)
 document.getElementById("messages").onclick = () => {
@@ -2991,3 +3076,8 @@ document.getElementById("messages").onclick = () => {
 };
 
 loadFriends();
+
+// ================= LOAD PROFILE SCRIPT =================
+const profileScript = document.createElement("script");
+profileScript.src = "/profile.js";
+document.body.appendChild(profileScript);

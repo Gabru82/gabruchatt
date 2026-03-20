@@ -1,4 +1,6 @@
 *{
+  margin: 0;
+  padding: 0;
   box-sizing:border-box;
 }
 
@@ -8,6 +10,8 @@ body{
   /* background:radial-gradient(circle at center, #17172a 0%, #0b0b14 70%); */
   background-color: black;
   font-family:Arial, sans-serif;
+  width: 100vw;
+  height: 100vh;
 }
 
 canvas{
@@ -20,12 +24,20 @@ canvas{
 #authUI{
   position:absolute;
   display:none;
+  top: 0;
+  left: 0;
   z-index:10;
   transform-origin:center center;
+  width: 100%;
+  height: 100%;
+  /* border: 2px solid #fff; */
+  /* display: flex; */
+  justify-content: center;
+  align-items: center;
 }
 
 .form{
-  width:300px;
+  width:30%;
   padding:28px;
   border-radius:18px;
   background:rgba(0, 0, 0, 0.88);
@@ -37,7 +49,9 @@ canvas{
   gap:12px;
   color:#fff;
   box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  scale: 2;
 }
+
 
 .form.active{
   display:flex;
