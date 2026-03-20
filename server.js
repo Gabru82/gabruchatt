@@ -9,10 +9,17 @@ app.use(express.json({ limit: "100mb" }));
 app.use(cors());
 app.use(bodyParser.json({ limit: "100mb" }));
 app.use(express.static("public"));
+process.on("uncaughtException", (err) => {
+  console.error("🔥 UNCAUGHT EXCEPTION:", err);
+});
 
+process.on("unhandledRejection", (err) => {
+  console.error("🔥 UNHANDLED REJECTION:", err);
+});
 const server = http.createServer(app);
 const io = require("socket.io")(server, {
-  maxHttpBufferSize: 1e8, // 100 MB
+  maxHttpBufferSize: 1e8,
+  transports: ["websocket", "polling"], // 👈 ADD THIS
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
@@ -239,17 +246,38 @@ app.post("/acceptRequest", (req, res) => {
   const { id, userId } = req.body;
 
   db.get(`SELECT * FROM friend_requests WHERE id=?`, [id], (err, row) => {
-    if (err || !row || row.receiver != userId) {
+    if (err) {
+      console.error("DB ERROR:", err);
+      return res.json({ success: false });
+    }
+
+    if (!row || row.receiver != userId) {
       return res.json({ success: false });
     }
 
     db.run(
-      `INSERT INTO friends(user1,user2,created_at) VALUES(?,?,CURRENT_TIMESTAMP)`,
+      `INSERT OR IGNORE INTO friends(user1,user2,created_at) VALUES(?,?,CURRENT_TIMESTAMP)`,
       [row.sender, row.receiver],
-    );
-    db.run(`UPDATE friend_requests SET status='accepted' WHERE id=?`, [id]);
+      (err) => {
+        if (err) {
+          console.error("INSERT FRIEND ERROR:", err);
+          return res.json({ success: false });
+        }
 
-    res.json({ success: true });
+        db.run(
+          `UPDATE friend_requests SET status='accepted' WHERE id=?`,
+          [id],
+          (err) => {
+            if (err) {
+              console.error("UPDATE REQUEST ERROR:", err);
+              return res.json({ success: false });
+            }
+
+            res.json({ success: true });
+          },
+        );
+      },
+    );
   });
 });
 
