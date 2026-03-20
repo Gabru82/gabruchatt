@@ -29,34 +29,40 @@ const io = require("socket.io")(server, {
 const db = new sqlite3.Database("./users.db");
 
 db.serialize(() => {
-  // ✅ USERS
+  // ================= USERS =================
   db.run(`
     CREATE TABLE IF NOT EXISTS users(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
       email TEXT UNIQUE,
-      password TEXT,
-      last_seen DATETIME
+      password TEXT
     )
   `);
 
-  // ❌ REMOVE THIS (important)
-  // db.run("ALTER TABLE users ADD COLUMN last_seen DATETIME")
+  // ✅ FIX EXISTING DB
+  db.run("ALTER TABLE users ADD COLUMN last_seen DATETIME", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("last_seen error:", err.message);
+    }
+  });
 
-  // ✅ FRIENDS
+  // ================= FRIENDS =================
   db.run(`
     CREATE TABLE IF NOT EXISTS friends(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user1 INTEGER,
-      user2 INTEGER,
-      created_at DATETIME
+      user2 INTEGER
     )
   `);
 
-  // ❌ REMOVE THIS
-  // db.run("ALTER TABLE friends ADD COLUMN created_at DATETIME")
+  // ✅ FIX EXISTING DB
+  db.run("ALTER TABLE friends ADD COLUMN created_at DATETIME", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("created_at error:", err.message);
+    }
+  });
 
-  // ✅ REQUESTS
+  // ================= REQUESTS =================
   db.run(`
     CREATE TABLE IF NOT EXISTS friend_requests(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +72,7 @@ db.serialize(() => {
     )
   `);
 
-  // ✅ MESSAGES
+  // ================= MESSAGES =================
   db.run(`
     CREATE TABLE IF NOT EXISTS messages(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +87,7 @@ db.serialize(() => {
     )
   `);
 
-  // ✅ SAFE ALTERS
+  // ✅ SAFE ALTERS (keep as you had)
   db.run("ALTER TABLE messages ADD COLUMN deleted_for TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN caption TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0", () => {});
@@ -90,7 +96,7 @@ db.serialize(() => {
   db.run("ALTER TABLE messages ADD COLUMN reactions TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN reply_to INTEGER", () => {});
 
-  // ✅ THEMES
+  // ================= THEMES =================
   db.run(`
     CREATE TABLE IF NOT EXISTS chat_themes(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,22 +107,6 @@ db.serialize(() => {
       UNIQUE(user1_id, user2_id)
     )
   `);
-
-  // ✅ BACKFILL (NOW SAFE)
-  db.all(
-    `SELECT id, user1, user2 FROM friends WHERE created_at IS NULL`,
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("Backfill skipped:", err.message);
-        return;
-      }
-
-      if (rows?.length > 0) {
-        console.log(`Backfilling ${rows.length} friendships...`);
-      }
-    }
-  );
 });
 // ================= ROUTES =================
 
