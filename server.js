@@ -263,7 +263,6 @@ app.post("/acceptRequest", (req, res) => {
           console.error("INSERT FRIEND ERROR:", err);
           return res.json({ success: false });
         }
-
         db.run(
           `UPDATE friend_requests SET status='accepted' WHERE id=?`,
           [id],
