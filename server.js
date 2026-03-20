@@ -28,146 +28,96 @@ const io = require("socket.io")(server, {
 
 const db = new sqlite3.Database("./users.db");
 
-// ================= DB TABLES =================
+db.serialize(() => {
+  // ✅ USERS
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      email TEXT UNIQUE,
+      password TEXT,
+      last_seen DATETIME
+    )
+  `);
 
-db.run(`
-CREATE TABLE IF NOT EXISTS users(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-name TEXT,
-email TEXT UNIQUE,
-password TEXT
-)
-`);
+  // ❌ REMOVE THIS (important)
+  // db.run("ALTER TABLE users ADD COLUMN last_seen DATETIME")
 
-// Add last_seen column if it doesn't exist
-db.run("ALTER TABLE users ADD COLUMN last_seen DATETIME", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-    // Ignore error if column already exists
-  }
-});
+  // ✅ FRIENDS
+  db.run(`
+    CREATE TABLE IF NOT EXISTS friends(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user1 INTEGER,
+      user2 INTEGER,
+      created_at DATETIME
+    )
+  `);
 
-db.run(`
-CREATE TABLE IF NOT EXISTS friends(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-user1 INTEGER,
-user2 INTEGER
-)
-`);
+  // ❌ REMOVE THIS
+  // db.run("ALTER TABLE friends ADD COLUMN created_at DATETIME")
 
-db.run("ALTER TABLE friends ADD COLUMN created_at DATETIME", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
+  // ✅ REQUESTS
+  db.run(`
+    CREATE TABLE IF NOT EXISTS friend_requests(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender INTEGER,
+      receiver INTEGER,
+      status TEXT
+    )
+  `);
 
-db.run(`
-CREATE TABLE IF NOT EXISTS friend_requests(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sender INTEGER,
-  receiver INTEGER,
-  status TEXT
-)
-`);
+  // ✅ MESSAGES
+  db.run(`
+    CREATE TABLE IF NOT EXISTS messages(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender INTEGER,
+      receiver INTEGER,
+      message TEXT,
+      unread_count INTEGER DEFAULT 1,
+      type TEXT DEFAULT 'text',
+      status TEXT DEFAULT 'sent',
+      seen_at DATETIME,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-// 🔥 UPDATED TABLE (added seen_at safely)
-db.run(`
-CREATE TABLE IF NOT EXISTS messages(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sender INTEGER,
-  receiver INTEGER,
-  message TEXT,
-  unread_count INTEGER DEFAULT 1,
-  type TEXT DEFAULT 'text',
-  status TEXT DEFAULT 'sent',
-  seen_at DATETIME,
-  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-)
-`);
+  // ✅ SAFE ALTERS
+  db.run("ALTER TABLE messages ADD COLUMN deleted_for TEXT", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN caption TEXT", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN edited_at DATETIME", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN edited_for_me TEXT", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN reactions TEXT", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN reply_to INTEGER", () => {});
 
-// Add type column if it doesn't exist
-db.run("ALTER TABLE messages ADD COLUMN type TEXT DEFAULT 'text'", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-    // Ignore
-  }
-});
-db.run("ALTER TABLE messages ADD COLUMN deleted_for TEXT", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
+  // ✅ THEMES
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_themes(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user1_id INTEGER,
+      user2_id INTEGER,
+      theme_type TEXT,
+      theme_value TEXT,
+      UNIQUE(user1_id, user2_id)
+    )
+  `);
 
-// Add caption column if it doesn't exist
-db.run("ALTER TABLE messages ADD COLUMN caption TEXT", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
-db.run("ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
+  // ✅ BACKFILL (NOW SAFE)
+  db.all(
+    `SELECT id, user1, user2 FROM friends WHERE created_at IS NULL`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error("Backfill skipped:", err.message);
+        return;
+      }
 
-db.run("ALTER TABLE messages ADD COLUMN edited_at DATETIME", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
-db.run("ALTER TABLE messages ADD COLUMN edited_for_me TEXT", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
-db.run("ALTER TABLE messages ADD COLUMN reactions TEXT", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
-db.run("ALTER TABLE messages ADD COLUMN reply_to INTEGER", (err) => {
-  if (err && !err.message.includes("duplicate column name")) {
-  }
-});
-db.run(`
-CREATE TABLE IF NOT EXISTS chat_themes(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user1_id INTEGER,
-  user2_id INTEGER,
-  theme_type TEXT,
-  theme_value TEXT,
-  UNIQUE(user1_id, user2_id)
-)
-`);
-
-// Backfill created_at for old friendships without a date
-db.all(
-  `SELECT id, user1, user2 FROM friends WHERE created_at IS NULL`,
-  [],
-  (err, rows) => {
-    if (err) {
-      console.error("Error fetching old friendships to backfill:", err);
-      return;
+      if (rows?.length > 0) {
+        console.log(`Backfilling ${rows.length} friendships...`);
+      }
     }
-    if (rows && rows.length > 0) {
-      console.log(`Backfilling friendship dates for ${rows.length} friends...`);
-      rows.forEach((friendship) => {
-        db.get(
-          `SELECT timestamp FROM messages 
-                 WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)
-                 ORDER BY id ASC LIMIT 1`,
-          [
-            friendship.user1,
-            friendship.user2,
-            friendship.user2,
-            friendship.user1,
-          ],
-          (err, msg) => {
-            if (err) return;
-            // If there's a message, use its timestamp. Otherwise, use a recent date.
-            const dateToSet = msg ? msg.timestamp : new Date().toISOString();
-            db.run(`UPDATE friends SET created_at = ? WHERE id = ?`, [
-              dateToSet,
-              friendship.id,
-            ]);
-          },
-        );
-      });
-    }
-  },
-);
-
+  );
+});
 // ================= ROUTES =================
 
 app.post("/register", (req, res) => {
