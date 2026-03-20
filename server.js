@@ -229,7 +229,12 @@ app.post("/sendRequest", (req, res) => {
     },
   );
 });
-
+app.get("/debug-users", (req, res) => {
+  db.all("SELECT * FROM users", [], (err, rows) => {
+    if (err) return res.json({ error: err.message });
+    res.json(rows);
+  });
+});
 app.post("/acceptRequest", (req, res) => {
   const { id, userId } = req.body;
 
