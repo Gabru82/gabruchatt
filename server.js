@@ -289,11 +289,15 @@ app.get("/getRequests/:userId", (req, res) => {
     FROM friend_requests 
     JOIN users ON users.id = friend_requests.sender
     WHERE receiver = ? AND status = 'pending'
-  `,
+    `,
     [userId],
     (err, rows) => {
-      if (err) return res.json({ requests: [] });
-      res.json({ requests: rows });
+      if (err) {
+        console.error("GET REQUESTS ERROR:", err);
+        return res.status(500).json({ requests: [] });
+      }
+
+      res.json({ requests: rows || [] });
     },
   );
 });
@@ -309,11 +313,15 @@ app.get("/getFriends/:userId", (req, res) => {
     FROM friends f 
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ?
-  `,
+    `,
     [userId, userId, userId, userId, userId, userId],
     (err, rows) => {
-      if (err) return res.json({ friends: [] });
-      res.json({ friends: rows });
+      if (err) {
+        console.error("GET FRIENDS ERROR:", err);
+        return res.status(500).json({ friends: [] });
+      }
+
+      res.json({ friends: rows || [] });
     },
   );
 });
