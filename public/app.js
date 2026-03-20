@@ -11,6 +11,8 @@ const registerForm = document.getElementById("registerForm");
 const showRegister = document.getElementById("showRegister");
 const showLogin = document.getElementById("showLogin");
 
+let isMobile = window.innerWidth < 768;
+
 function setupCustomPopup() {
   const popupHTML = `
         <div id="customPopup" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
@@ -39,6 +41,7 @@ setupCustomPopup();
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  isMobile = window.innerWidth < 768;
 
   enterBtn.x = canvas.width / 2 - enterBtn.w / 2;
   enterBtn.y = canvas.height / 2 - enterBtn.h / 2;
@@ -120,8 +123,10 @@ class Particle {
     ctx.save();
     ctx.globalAlpha = this.alpha;
     ctx.fillStyle = "#ffd447";
-    ctx.shadowBlur = 14;
-    ctx.shadowColor = "#ffd447";
+    if (!isMobile) {
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = "#ffd447";
+    }
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
     ctx.fill();
@@ -319,7 +324,8 @@ function drawPlane() {
 
 function createExplosion(x, y, count = 300) {
   particles = [];
-  for (let i = 0; i < count; i++) {
+  const finalCount = isMobile ? Math.min(count, 250) : count;
+  for (let i = 0; i < finalCount; i++) {
     particles.push(new Particle(x, y));
   }
 }

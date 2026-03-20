@@ -268,6 +268,63 @@ app.get("/getRequests/:userId", (req, res) => {
   );
 });
 
+function getStreak(user1, user2) {
+  return new Promise((resolve) => {
+    db.all(
+      `SELECT sender, date(timestamp) as day 
+       FROM messages 
+       WHERE ((sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?))
+       AND timestamp >= date('now', '-60 days')
+       GROUP BY sender, day 
+       ORDER BY day DESC`,
+      [user1, user2, user2, user1],
+      (err, rows) => {
+        if (err || !rows || rows.length === 0) return resolve(0);
+
+        const u1Days = new Set();
+        const u2Days = new Set();
+        
+        rows.forEach((r) => {
+          if (String(r.sender) === String(user1)) u1Days.add(r.day);
+          if (String(r.sender) === String(user2)) u2Days.add(r.day);
+        });
+
+        // Intersection (dates where both spoke)
+        const common = [...u1Days].filter((d) => u2Days.has(d)).sort().reverse();
+        if (common.length === 0) return resolve(0);
+
+        const today = new Date().toISOString().split("T")[0];
+        const y = new Date();
+        y.setDate(y.getDate() - 1);
+        const yesterday = y.toISOString().split("T")[0];
+
+        // If the latest interaction day is older than yesterday, streak is dead.
+        if (common[0] !== today && common[0] !== yesterday) {
+          return resolve(0);
+        }
+
+        let streak = 1;
+        let prev = common[0];
+
+        for (let i = 1; i < common.length; i++) {
+          const curr = common[i];
+          const d1 = new Date(prev);
+          const d2 = new Date(curr);
+          const diffDays = Math.round(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 1) {
+            streak++;
+            prev = curr;
+          } else {
+            break;
+          }
+        }
+        resolve(streak);
+      }
+    );
+  });
+}
+
 app.get("/getFriends/:userId", (req, res) => {
   const userId = req.params.userId;
 
@@ -281,10 +338,14 @@ app.get("/getFriends/:userId", (req, res) => {
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ?
     `,
     [userId, userId, userId, userId, userId, userId],
-    (err, rows) => {
+    async (err, rows) => {
       if (err) {
         console.error("GET FRIENDS ERROR:", err);
         return res.status(500).json({ friends: [] });
+      }
+
+      for (let friend of rows) {
+        friend.streak = await getStreak(userId, friend.id);
       }
 
       res.json({ friends: rows || [] });
@@ -416,12 +477,15 @@ app.get("/getSharedInfo/:user1/:user2", (req, res) => {
 
 app.get("/getUserStatus/:userId", (req, res) => {
   const userId = req.params.userId;
-  const isOnline = onlineUsers.has(String(userId));
+  const requesterId = req.query.requesterId;
+
+  // Check if the user is explicitly in chat with the requester
+  const inChatWithRequester = activeChats.get(String(userId)) === String(requesterId);
 
   db.get("SELECT last_seen, avatar FROM users WHERE id=?", [userId], (err, row) => {
     if (err) return res.json({ online: false, lastSeen: null });
     res.json({
-      online: isOnline,
+      online: inChatWithRequester,
       avatar: row ? row.avatar : null,
       lastSeen: row ? row.last_seen : null,
     });
@@ -566,6 +630,10 @@ io.on("connection", (socket) => {
   socket.on("leaveChat", () => {
     const userId = String(socket.userId);
     const friendId = activeChats.get(userId);
+
+    // Update last_seen when user leaves the chat so time is accurate
+    const now = new Date().toISOString();
+    db.run("UPDATE users SET last_seen=? WHERE id=?", [now, userId]);
 
     if (friendId) {
       io.to(`user_${friendId}`).emit("friendLeftChat", { friendId: userId });

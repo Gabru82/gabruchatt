@@ -400,8 +400,7 @@ function openUserProfile() {
 }
 
 async function updateProfileStatus(friendId) {
-  const res = await fetch(`/getUserStatus/${friendId}`);
-  const data = await res.json();
+  const res = await fetch(`/getUserStatus/${friendId}`)
   const statusEl = document.getElementById("profileModalStatus");
 
   // Update avatar in modal
@@ -737,6 +736,7 @@ const recordingIndicator = document.getElementById("recordingIndicator");
 let mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
+let recordingStream;
 
 const micBtn = document.getElementById("micBtn");
 
@@ -787,13 +787,13 @@ async function startRecording() {
   if (!currentFriendId || isRecording) return;
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     // 🎧 AUDIO ANALYSER (real waveform feel)
     const audioContext = new (
       window.AudioContext || window.webkitAudioContext
     )();
     const analyser = audioContext.createAnalyser();
-    const source = audioContext.createMediaStreamSource(stream);
+    const source = audioContext.createMediaStreamSource(recordingStream);
 
     source.connect(analyser);
 
@@ -817,7 +817,7 @@ async function startRecording() {
     }
 
     animateWave();
-    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder = new MediaRecorder(recordingStream);
     audioChunks = [];
 
     mediaRecorder.ondataavailable = (e) => {
@@ -848,6 +848,11 @@ function stopRecording() {
 
   mediaRecorder.stop();
   isRecording = false;
+
+  if (recordingStream) {
+    recordingStream.getTracks().forEach((track) => track.stop());
+    recordingStream = null;
+  }
 
   micBtn.classList.remove("recording");
   recordingIndicator.style.display = "none";
@@ -1790,6 +1795,8 @@ function updateFriendList() {
   items.forEach((item) => {
     const friendId = parseInt(item.dataset.friendId);
     const unread = unreadCounts[friendId];
+    const streak = parseInt(item.dataset.streak) || 0;
+    const streakHtml = streak > 0 ? `🔥 ${streak}` : "💬";
 
     const msgEl = item.querySelector(".chat-msg");
     const days = item.querySelector(".chat-days");
@@ -1802,7 +1809,7 @@ function updateFriendList() {
       days.innerHTML = `<span class="unread-badge">${unread.count}</span>`;
     } else {
       msgEl.textContent = "Click to chat";
-      days.innerHTML = "💬";
+      days.innerHTML = streakHtml;
     }
   });
 }
@@ -1829,6 +1836,9 @@ async function loadFriends() {
 
     item.className = "chat-item";
     item.dataset.friendId = friend.id;
+    item.dataset.streak = friend.streak || 0;
+
+    const fireHtml = friend.streak > 0 ? `🔥 ${friend.streak}` : "💬";
 
     item.innerHTML = `
       <img src="${getAvatarSrc(friend)}">
@@ -1836,7 +1846,7 @@ async function loadFriends() {
         <div class="chat-name">${friend.name}</div>
         <div class="chat-msg">${friend.lastMessage || "Click to chat"}</div>
       </div>
-      <div class="chat-days">💬</div>
+      <div class="chat-days">${fireHtml}</div>
     `;
 
     item.onclick = () => openChat(friend.id, friend.name, friend.avatar);
@@ -2003,9 +2013,8 @@ async function updateChatStatus(friendId) {
   const statusEl = document.getElementById("chatStatus");
   if (!statusEl || currentFriendId != friendId) return;
 
-  const res = await fetch(`/getUserStatus/${friendId}`);
+  const res = await fetch(`/getUserStatus/${friendId}?requesterId=${userId}`);
   const data = await res.json();
-
   // ✅ Update Avatar in Header to ensure it matches server data
   const chatAvatar = document.querySelector("#chatName img");
   if (chatAvatar && data.avatar) {
@@ -2028,10 +2037,10 @@ socket.on("userOnline", (id) => {
   if (currentFriendId == id) {
     const statusEl = document.getElementById("chatStatus");
     if (statusEl) {
-      statusEl.textContent = "Online";
-      statusEl.style.color = "#00ff55";
-    }
+      // IGNORE GLOBAL ONLINE STATUS
+      // User wants
   }
+}
 });
 
 socket.on("userOffline", (id) => {
@@ -2049,12 +2058,26 @@ socket.on("userOffline", (id) => {
 socket.on("friendEnteredChat", ({ friendId }) => {
   if (currentFriendId == friendId) {
     document.getElementById("hangingCharacter")?.classList.add("show");
+    
+    // Show Online when they enter the chat
+    const statusEl = document.getElementById("chatStatus");
+    if (statusEl) {
+      statusEl.textContent = "Online";
+      statusEl.style.color = "#00ff55";
+    }
   }
 });
 
 socket.on("friendLeftChat", ({ friendId }) => {
   if (currentFriendId == friendId) {
     document.getElementById("hangingCharacter")?.classList.remove("show");
+
+    // Show Last Seen when they leave the chat
+    const statusEl = document.getElementById("chatStatus");
+    if (statusEl) {
+      statusEl.textContent = "Last seen just now";
+      statusEl.style.color = "#aaa";
+    }
   }
 });
 

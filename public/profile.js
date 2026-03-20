@@ -1,3 +1,5 @@
+
+
 async function setupMyProfile() {
   const userId = localStorage.getItem("userId");
   if (!userId) return;
@@ -166,7 +168,7 @@ async function setupMyProfile() {
         </div>
     </div>
   `;
-  document.body.insertAdjacentHTML("beforeend", modalHTML);
+ app.insertAdjacentHTML("beforeend", modalHTML);
 
   const loadMyProfile = async (showModal = false) => {
     try {
