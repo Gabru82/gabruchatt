@@ -641,87 +641,111 @@ io.on("connection", (socket) => {
     activeChats.delete(userId);
   });
 
+  // ================= MESSAGE HANDLER HELPER =================
+  const uploadChunks = new Map(); // Store partial uploads
+
+  const handleMessage = (socket, data, callback) => {
+    const sender = String(socket.userId);
+    const receiver = String(data.to);
+    const msgType = data.type || "text";
+    const message = data.message;
+    const caption = data.caption;
+    const replyTo = data.replyTo;
+
+    if (!message) return;
+
+    db.run(
+      `INSERT INTO messages(sender, receiver, message, unread_count, status, type, caption, reply_to)
+       VALUES(?,?,?,?,?,?,?,?)`,
+      [
+        sender,
+        receiver,
+        message,
+        1,
+        "sent",
+        msgType,
+        caption || null,
+        replyTo || null,
+      ],
+      function (err) {
+        if (err) {
+          console.error(err);
+          return callback?.({ success: false });
+        }
+
+        const finalMsgId = this.lastID;
+        const timestamp = new Date().toISOString();
+
+        const payload = {
+          from: sender,
+          to: receiver,
+          message,
+          msgId: finalMsgId,
+          status: "sent",
+          type: msgType,
+          caption: caption,
+          timestamp: timestamp,
+          replyTo: replyTo || null,
+        };
+
+        io.to(`user_${receiver}`).to(`user_${sender}`).emit("newMessage", payload);
+
+        const isInChat = activeChats.get(receiver) === sender;
+
+        if (isInChat) {
+          const now = new Date().toISOString();
+          db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [now, finalMsgId]);
+          io.to(`user_${sender}`).emit("messageSeen", { msgId: finalMsgId, seenAt: now });
+        } else {
+          db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [finalMsgId]);
+          io.to(`user_${sender}`).emit("messageDelivered", { msgId: finalMsgId });
+        }
+
+        callback?.({ success: true, data: payload });
+      }
+    );
+  };
+
   // ================= SEND MESSAGE =================
 
   socket.on(
     "sendMessage",
     ({ to, message, type, caption, replyTo }, callback) => {
-      const sender = String(socket.userId);
-      const receiver = String(to);
-      const msgType = type || "text";
-
-      if (!message) return;
-
-      const room = `chat_${Math.min(sender, receiver)}_${Math.max(sender, receiver)}`;
-
-      db.run(
-        `INSERT INTO messages(sender, receiver, message, unread_count, status, type, caption, reply_to)
-   VALUES(?,?,?,?,?,?,?,?)`,
-        [
-          sender,
-          receiver,
-          message,
-          1,
-          "sent",
-          msgType,
-          caption || null,
-          replyTo || null,
-        ],
-        function (err) {
-          if (err) {
-            console.error(err);
-            return callback?.({ success: false });
-          }
-
-          const finalMsgId = this.lastID;
-          const timestamp = new Date().toISOString();
-
-          const payload = {
-            from: sender,
-            to: receiver,
-            message,
-            msgId: finalMsgId,
-            status: "sent",
-            type: msgType,
-            caption: caption,
-            timestamp: timestamp,
-            replyTo: replyTo || null, // 👈 ADD
-          };
-
-          // ✅ SEND TO SPECIFIC USERS (Works even if chat is not open)
-          io.to(`user_${receiver}`)
-            .to(`user_${sender}`)
-            .emit("newMessage", payload);
-
-          const isInChat = activeChats.get(receiver) === sender;
-
-          if (isInChat) {
-            const now = new Date().toISOString();
-
-            db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [
-              now,
-              finalMsgId,
-            ]);
-
-            io.to(`user_${sender}`).emit("messageSeen", {
-              msgId: finalMsgId,
-              seenAt: now,
-            });
-          } else {
-            db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [
-              finalMsgId,
-            ]);
-
-            io.to(`user_${sender}`).emit("messageDelivered", {
-              msgId: finalMsgId,
-            });
-          }
-
-          callback?.({ success: true, data: payload });
-        },
-      );
+      handleMessage(socket, { to, message, type, caption, replyTo }, callback);
     },
   );
+
+  socket.on("uploadChunk", ({ uploadId, chunk, index, totalChunks, meta }, callback) => {
+    if (!uploadChunks.has(uploadId)) {
+      uploadChunks.set(uploadId, {
+        chunks: new Array(totalChunks),
+        receivedCount: 0,
+        totalChunks,
+        meta,
+      });
+    }
+    const currentUpload = uploadChunks.get(uploadId);
+    currentUpload.chunks[index] = chunk;
+    currentUpload.receivedCount++;
+
+    if (currentUpload.receivedCount === totalChunks) {
+      const fullMessage = currentUpload.chunks.join("");
+      handleMessage(
+        socket,
+        {
+          to: currentUpload.meta.to,
+          message: fullMessage,
+          type: currentUpload.meta.type,
+          caption: currentUpload.meta.caption,
+          replyTo: currentUpload.meta.replyTo,
+        },
+        callback
+      );
+      uploadChunks.delete(uploadId);
+    } else {
+      callback?.({ success: true });
+    }
+  });
 
   socket.on("themeChange", ({ to, themeType, themeValue }) => {
     const sender = String(socket.userId);

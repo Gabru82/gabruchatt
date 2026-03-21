@@ -58,6 +58,82 @@ function showPopup(message) {
 
 setupCustomPopup();
 
+// ================= FULL SCREEN IMAGE MODAL =================
+function setupFullScreenImageModal() {
+  const imageModalHTML = `
+    <div id="fullScreenImageModal" class="fullscreen-modal" onclick="closeFullScreenImage()">
+        <span class="close-fs-btn" onclick="closeFullScreenImage()">&times;</span>
+        <img class="fullscreen-image" id="fullScreenImage" onclick="event.stopPropagation()">
+    </div>
+  `;
+  app.insertAdjacentHTML("beforeend", imageModalHTML);
+
+  const fsImageStyle = document.createElement("style");
+  fsImageStyle.textContent = `
+    .fullscreen-modal {
+        display: none; 
+        position: fixed; 
+        z-index: 10000; 
+        left: 0;
+        top: 0;
+        width: 100%; 
+        height: 100%; 
+        background-color: rgba(0,0,0,0.95);
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(5px);
+        animation: fadeIn 0.2s ease-out;
+    }
+    .fullscreen-image {
+        max-width: 95%;
+        max-height: 95%;
+        object-fit: contain;
+        border-radius: 4px;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+    }
+    .close-fs-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        color: white;
+        font-size: 30px;
+        font-weight: bold;
+        cursor: pointer;
+        background: rgba(0,0,0,0.5);
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: 0.2s;
+    }
+    .close-fs-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+  `;
+  document.head.appendChild(fsImageStyle);
+}
+
+setupFullScreenImageModal();
+
+window.openFullScreenImage = function (src) {
+  const modal = document.getElementById("fullScreenImageModal");
+  const img = document.getElementById("fullScreenImage");
+  if (modal && img) {
+    img.src = src;
+    modal.style.display = "flex";
+  }
+};
+
+window.closeFullScreenImage = function () {
+  const modal = document.getElementById("fullScreenImageModal");
+  if (modal) {
+    modal.style.display = "none";
+    document.getElementById("fullScreenImage").src = "";
+  }
+};
+
 // ================= LOGOUT =================
 
 document.getElementById("logout").onclick = () => {
@@ -378,6 +454,18 @@ const userProfileModalHTML = `
 `;
 app.insertAdjacentHTML("beforeend", userProfileModalHTML);
 
+const sharedMediaOptionsHTML = `
+<div id="sharedMediaOptionsModal" class="theme-popup" style="z-index: 2100;">
+    <div class="theme-popup-content">
+        <h3>Options</h3>
+        <div class="theme-option" id="smShowInChat">Show in Chat</div>
+        <div class="theme-option" id="smDelete">Delete</div>
+        <div class="theme-option" id="smCancel" style="color: #ff7b7b;">Cancel</div>
+    </div>
+</div>
+`;
+app.insertAdjacentHTML("beforeend", sharedMediaOptionsHTML);
+
 function openUserProfile() {
   if (!currentFriendId) return;
 
@@ -400,7 +488,8 @@ function openUserProfile() {
 }
 
 async function updateProfileStatus(friendId) {
-  const res = await fetch(`/getUserStatus/${friendId}`)
+  const res = await fetch(`/getUserStatus/${friendId}`);
+  const data = await res.json();
   const statusEl = document.getElementById("profileModalStatus");
 
   // Update avatar in modal
@@ -470,24 +559,41 @@ async function loadSharedInfo(friendId) {
     const showDeleteOption = () => {
       isLongPress = true;
       selectedMsgId = msg.id;
+      selectedMsgSender = msg.sender;
 
-      const modal = document.getElementById("deleteModal");
-      modal.style.display = "flex";
-      modal.style.justifyContent = "center";
-      modal.style.alignItems = "center";
-      modal.style.position = "absolute";
-      modal.style.top = "0";
-      modal.style.left = "0";
-      modal.style.zIndex = "10000";
-      modal.style.width = "100%";
-      modal.style.height = "100%";
-      modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+      const optionsModal = document.getElementById("sharedMediaOptionsModal");
+      optionsModal.style.display = "flex";
 
-      if (String(msg.sender) !== String(userId)) {
-        document.getElementById("deleteEveryone").style.display = "none";
-      } else {
-        document.getElementById("deleteEveryone").style.display = "block";
-      }
+      document.getElementById("smShowInChat").onclick = () => {
+        optionsModal.style.display = "none";
+        document.getElementById("userProfileModal").style.display = "none";
+        scrollToMessage(msg.id);
+      };
+
+      document.getElementById("smDelete").onclick = () => {
+        optionsModal.style.display = "none";
+        const modal = document.getElementById("deleteModal");
+        modal.style.display = "flex";
+        modal.style.justifyContent = "center";
+        modal.style.alignItems = "center";
+        modal.style.position = "absolute";
+        modal.style.top = "0";
+        modal.style.left = "0";
+        modal.style.zIndex = "10000";
+        modal.style.width = "100%";
+        modal.style.height = "100%";
+        modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+
+        if (String(msg.sender) !== String(userId)) {
+          document.getElementById("deleteEveryone").style.display = "none";
+        } else {
+          document.getElementById("deleteEveryone").style.display = "block";
+        }
+      };
+
+      document.getElementById("smCancel").onclick = () => {
+        optionsModal.style.display = "none";
+      };
     };
 
     item.addEventListener("touchstart", () => {
@@ -501,7 +607,24 @@ async function loadSharedInfo(friendId) {
       showDeleteOption();
     });
     item.onclick = () => {
-      if (!isLongPress) window.open(msg.message);
+      if (!isLongPress) {
+        if (msg.type === "image") {
+          openFullScreenImage(msg.message);
+        } else if (msg.type === "audio") {
+          item.innerHTML = "";
+          const audio = document.createElement("audio");
+          audio.src = msg.message;
+          audio.controls = true;
+          audio.autoplay = true;
+          audio.style.width = "100%";
+          item.style.display = "flex";
+          item.style.alignItems = "center";
+          item.appendChild(audio);
+          item.onclick = null;
+        } else {
+          window.open(msg.message);
+        }
+      }
     };
 
     grid.appendChild(item);
@@ -671,6 +794,14 @@ if (messageMenu && !messageMenu.querySelector('[data-action="copy"]')) {
   copyBtn.innerText = "Copy";
   messageMenu.appendChild(copyBtn);
 }
+// Inject Save Option into Menu
+if (messageMenu && !messageMenu.querySelector('[data-action="save"]')) {
+  const saveBtn = document.createElement("div");
+  saveBtn.className = "menu-item";
+  saveBtn.dataset.action = "save";
+  saveBtn.innerHTML = "Save";
+  messageMenu.appendChild(saveBtn);
+}
 
 let currentFriendName = null;
 let unreadCounts = {};
@@ -787,7 +918,9 @@ async function startRecording() {
   if (!currentFriendId || isRecording) return;
 
   try {
-    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordingStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
     // 🎧 AUDIO ANALYSER (real waveform feel)
     const audioContext = new (
       window.AudioContext || window.webkitAudioContext
@@ -1133,7 +1266,7 @@ function appendMessage(
     if (type === "image") {
       contentHtml = `
         <div class="media-wrapper">
-          <img src="${message}" class="chat-media" onclick="window.open(this.src)">
+          <img src="${message}" class="chat-media" onclick="openFullScreenImage(this.src)">
           ${captionHtml}
         </div>
       `;
@@ -1308,6 +1441,34 @@ document.querySelectorAll(".menu-item").forEach((item) => {
 
       if (textToCopy) {
         navigator.clipboard.writeText(textToCopy);
+      }
+    }
+    if (action === "save") {
+      if (!selectedMessageEl) return;
+      const mediaEl = selectedMessageEl.querySelector(
+        ".chat-media, .chat-sticker",
+      );
+
+      if (mediaEl) {
+        const src = mediaEl.src || mediaEl.querySelector("source")?.src;
+        if (src) {
+          const a = document.createElement("a");
+          a.href = src;
+
+          let extension = "";
+          if (mediaEl.tagName === "AUDIO") {
+            extension = ".mp3";
+          } else if (mediaEl.tagName === "VIDEO") {
+            extension = ".mp4";
+          } else if (mediaEl.tagName === "IMG") {
+            extension = src.includes("image/jpeg") ? ".jpg" : ".png";
+          }
+
+          a.download = `media_${Date.now()}${extension}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
       }
     }
     if (action === "react") {
@@ -1564,32 +1725,52 @@ function showMessageMenu(e, messageEl) {
 
   const editBtn = messageMenu.querySelector('[data-action="edit"]');
   if (editBtn) {
-    editBtn.style.display = messageEl.classList.contains("call-log")
-      ? "none"
-      : "";
+    const isTextMessage = messageEl.querySelector(".message-text");
+    editBtn.style.display = isTextMessage ? "" : "none";
+  }
+
+  const saveBtn = messageMenu.querySelector('[data-action="save"]');
+  if (saveBtn) {
+    const hasMedia = messageEl.querySelector(".chat-media, .chat-sticker");
+    saveBtn.style.display = hasMedia ? "" : "none";
   }
 
   messageMenu.style.display = "flex";
+  messageMenu.style.visibility = "hidden"; // Hide during calculation to prevent flicker
   messageMenu.style.position = "absolute";
   messageMenu.style.zIndex = "1000";
 
-  const rect = messageEl.getBoundingClientRect();
+  const msgRect = messageEl.getBoundingClientRect();
+  const appRect = app.getBoundingClientRect();
+
   const menuWidth = messageMenu.offsetWidth;
   const menuHeight = messageMenu.offsetHeight;
 
-  let left = rect.left + rect.width / 2 - menuWidth / 2;
-  let top = rect.top - menuHeight - 10; // Position above the message
-
-  // Prevent horizontal overflow
+  // Calculate Position Relative to App Container
+  let left = (msgRect.left - appRect.left) + (msgRect.width / 2) - (menuWidth / 2);
+  
+  // Clamp Horizontal (Keep inside App width)
   if (left < 10) left = 10;
-  if (left + menuWidth > window.innerWidth - 10)
-    left = window.innerWidth - menuWidth - 10;
+  if (left + menuWidth > appRect.width - 10) {
+    left = appRect.width - menuWidth - 10;
+  }
 
-  // If menu goes off-top, flip to bottom
-  if (top < 10) top = rect.bottom + 10;
+  // Calculate Vertical (Try Above first)
+  let top = (msgRect.top - appRect.top) - menuHeight - 10;
+
+  // If it goes off-top, try below
+  if (top < 10) {
+    top = (msgRect.bottom - appRect.top) + 10;
+  }
+
+  // If it goes off-bottom (even when placed below), force it to stay inside
+  if (top + menuHeight > appRect.height - 10) {
+    top = appRect.height - menuHeight - 10;
+  }
 
   messageMenu.style.left = left + "px";
   messageMenu.style.top = top + "px";
+  messageMenu.style.visibility = "visible";
 }
 document.addEventListener("click", (e) => {
   if (!messageMenu.contains(e.target)) {
@@ -2039,8 +2220,8 @@ socket.on("userOnline", (id) => {
     if (statusEl) {
       // IGNORE GLOBAL ONLINE STATUS
       // User wants
+    }
   }
-}
 });
 
 socket.on("userOffline", (id) => {
@@ -2058,7 +2239,7 @@ socket.on("userOffline", (id) => {
 socket.on("friendEnteredChat", ({ friendId }) => {
   if (currentFriendId == friendId) {
     document.getElementById("hangingCharacter")?.classList.add("show");
-    
+
     // Show Online when they enter the chat
     const statusEl = document.getElementById("chatStatus");
     if (statusEl) {
