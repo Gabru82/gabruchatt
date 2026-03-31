@@ -537,7 +537,7 @@ async function openForwardModal() {
             });
         });
 
-        showPopup(`Forwarded ${ids.length} messages`);
+        // showPopup(`Forwarded ${ids.length} messages`);
         closeForwardModal();
         toggleSelectionMode(false);
     };
@@ -1439,8 +1439,8 @@ function appendMessage(
   div.className = isMe ? "message sent" : "message received";
 
   // ✅ HANDLE CALL LOGS
-  if (type === "call_log") {
-    div.classList.add("call-log");
+  if (type === "call_log" || type === "screenshot_log") {
+    div.className = `message ${type === "call_log" ? "call-log" : "screenshot-log"}`;
     const timeStr = timestamp
       ? new Date(timestamp).toLocaleTimeString([], {
           hour: "2-digit",
@@ -1448,12 +1448,15 @@ function appendMessage(
         })
       : "";
     let text = message;
+    let icon = type === "call_log" ? "📞" : "📸";
 
-    // If I sent "Missed call", it means I called and they didn't answer -> "No Answer"
-    if (isMe && message === "Missed call") text = "No answer";
-    else if (!isMe && message === "Missed call") text = "Missed call";
+    if (type === "call_log") {
+        // If I sent "Missed call", it means I called and they didn't answer -> "No Answer"
+        if (isMe && message === "Missed call") text = "No answer";
+        else if (!isMe && message === "Missed call") text = "Missed call";
+    }
 
-    div.innerHTML = `📞 ${text} <span class="call-log-time">${timeStr}</span>`;
+    div.innerHTML = `${icon} ${text} <span class="call-log-time">${timeStr}</span>`;
   } else {
     // Standard message
     let tickHtml = "";
@@ -1777,7 +1780,7 @@ document.getElementById("deleteMe").onclick = () => {
         to: currentFriendId,
       });
     });
-    showPopup("Messages deleted");
+    // showPopup("Messages deleted");
     toggleSelectionMode(false);
   } else {
     socket.emit("deleteMessage", {
@@ -1799,7 +1802,7 @@ document.getElementById("deleteEveryone").onclick = () => {
         to: currentFriendId,
       });
     });
-    showPopup("Messages deleted for everyone");
+    // showPopup("Messages deleted for everyone");
     toggleSelectionMode(false);
   } else {
     socket.emit("deleteMessage", {
@@ -1953,6 +1956,20 @@ function cancelEdit() {
 }
 function showMessageMenu(e, messageEl) {
   selectedMessageEl = messageEl;
+
+  const isLog = messageEl.classList.contains("call-log") || messageEl.classList.contains("screenshot-log");
+
+  if (isLog) {
+    // Only show delete for log messages
+    messageMenu.querySelectorAll(".menu-item").forEach(item => {
+      item.style.display = item.dataset.action === "delete" ? "flex" : "none";
+    });
+  } else {
+    // Reset visibility for normal messages
+    messageMenu.querySelectorAll(".menu-item").forEach(item => {
+      item.style.display = "flex";
+    });
+  }
 
   const editBtn = messageMenu.querySelector('[data-action="edit"]');
   if (editBtn) {
@@ -3511,6 +3528,30 @@ document.getElementById("messages").onclick = () => {
 };
 
 loadFriends();
+
+// ================= SCREENSHOT DETECTION =================
+// Note: Real-time screenshot detection is limited to keyboard shortcuts on Desktop.
+// Browsers do not support detection on Mobile for security/privacy reasons.
+window.addEventListener('keyup', (e) => {
+  // Detect the Print Screen key (Key code 44)
+  if (e.key === 'PrintScreen' || e.keyCode === 44) {
+    sendScreenshotNotification();
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  // Detect common shortcuts: Win+Shift+S (Windows), Cmd+Shift+4 or Cmd+Shift+3 (Mac)
+  const isScreenshotKeys = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S' || e.key === '4' || e.key === '3');
+  if (isScreenshotKeys) {
+    sendScreenshotNotification();
+  }
+});
+
+function sendScreenshotNotification() {
+  if (!currentFriendId) return;
+  
+  socket.emit("screenshotTaken", { to: currentFriendId });
+}
 
 // ================= LOAD PROFILE SCRIPT =================
 const profileScript = document.createElement("script");

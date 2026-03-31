@@ -617,12 +617,15 @@ CHAT SCREEN
 /* CALL LOG MESSAGES */
 .message.call-log,
 .message.screenshot-log {
-  background: #333;
+  background: rgba(50, 50, 50, 0.6);
   color: #bbb;
-  font-size: 13px;
+  font-size: 12px;
   font-style: italic;
   border-radius: 20px;
   padding: 4px 12px;
+  align-self: center !important;
+  margin: 10px auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .call-log-time {
