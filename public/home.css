@@ -578,6 +578,12 @@ CHAT SCREEN
   background: #222;
 }
 
+.message.selected-msg {
+  background-color: rgba(79, 172, 254, 0.3) !important;
+  border: 1px solid #4facfe;
+  transition: background-color 0.2s;
+}
+
 .message-sender {
   font-size: 12px;
   font-weight: bold;
@@ -609,7 +615,8 @@ CHAT SCREEN
 }
 
 /* CALL LOG MESSAGES */
-.message.call-log {
+.message.call-log,
+.message.screenshot-log {
   background: #333;
   color: #bbb;
   font-size: 13px;

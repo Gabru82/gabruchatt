@@ -9,21 +9,6 @@ if (!app) {
   throw new Error("App container not found!");
 }
 
-// ================= AUTO FULL SCREEN =================
-function enableFullScreen() {
-  const elem = document.documentElement;
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen().catch((err) => console.log(err));
-  } else if (elem.webkitRequestFullscreen) {
-    elem.webkitRequestFullscreen();
-  } else if (elem.msRequestFullscreen) {
-    elem.msRequestFullscreen();
-  }
-}
-enableFullScreen();
-document.addEventListener("click", enableFullScreen, { once: true });
-document.addEventListener("touchstart", enableFullScreen, { once: true });
-
 // ================= CUSTOM POPUP =================
 function setupCustomPopup() {
   const popupHTML = `
@@ -227,6 +212,10 @@ replyMessageStyles.textContent = `
 `;
 document.head.appendChild(replyMessageStyles);
 
+// Selection Mode Variables
+let isSelectionMode = false;
+let selectedMessages = new Set();
+
 // Convert Input to Textarea for multiline support
 let msgInput = document.getElementById("msgInput");
 if (msgInput && msgInput.tagName === "INPUT") {
@@ -288,6 +277,45 @@ function setupThemeUI() {
   app.insertAdjacentHTML("beforeend", themeModalHTML);
 
   const themeStyles = `
+        /* Forward Modal Styles */
+        .forward-friend-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 5px;
+        }
+        .forward-friend-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .forward-friend-item.selected {
+            background: rgba(79, 172, 254, 0.2);
+            border: 1px solid rgba(79, 172, 254, 0.4);
+        }
+        .forward-friend-item img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .forward-friend-info {
+            flex: 1;
+        }
+        .forward-friend-name {
+            font-size: 15px;
+            font-weight: 500;
+        }
+        .selection-check {
+            color: #4facfe;
+            display: none;
+        }
+        .forward-friend-item.selected .selection-check {
+            display: block;
+        }
+
         /* Popups */
         @keyframes fadeInScaleUp {
             from {
@@ -423,6 +451,99 @@ function setupThemeUI() {
   styleSheet.innerText = themeStyles;
   document.head.appendChild(styleSheet);
 }
+
+let selectedForwardFriendId = null;
+
+function setupForwardModal() {
+    const forwardModalHTML = `
+        <div id="forwardModal" class="theme-popup">
+            <div class="theme-popup-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+                <button class="close-btn" onclick="closeForwardModal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                <h3 style="margin-bottom: 10px;">Forward to...</h3>
+                <div id="forwardFriendList" style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
+                    <!-- Friends will be injected here -->
+                </div>
+                <div style="display: flex; justify-content: center; padding-top: 10px;">
+                    <button id="confirmForwardBtn" class="save-btn" style="width: auto; padding: 12px 60px; display: none;">Send</button>
+                </div>
+            </div>
+        </div>
+    `;
+    app.insertAdjacentHTML("beforeend", forwardModalHTML);
+
+    // Close on background click
+    document.getElementById("forwardModal").onclick = (e) => {
+        if (e.target.id === "forwardModal") closeForwardModal();
+    };
+}
+
+window.closeForwardModal = function() {
+    document.getElementById("forwardModal").style.display = "none";
+    selectedForwardFriendId = null;
+    document.getElementById("confirmForwardBtn").style.display = "none";
+};
+
+async function openForwardModal() {
+    const modal = document.getElementById("forwardModal");
+    const list = document.getElementById("forwardFriendList");
+    const confirmBtn = document.getElementById("confirmForwardBtn");
+    
+    list.innerHTML = '<p style="text-align:center; color:#888;">Loading friends...</p>';
+    modal.style.display = "flex";
+    confirmBtn.style.display = "none";
+
+    const res = await fetch(`/getFriends/${userId}`);
+    const data = await res.json();
+    list.innerHTML = "";
+
+    data.friends.forEach(friend => {
+        const item = document.createElement("div");
+        item.className = "forward-friend-item";
+        item.onclick = () => {
+            document.querySelectorAll(".forward-friend-item").forEach(i => i.classList.remove("selected"));
+            item.classList.add("selected");
+            selectedForwardFriendId = friend.id;
+            confirmBtn.style.display = "block";
+        };
+
+        item.innerHTML = `
+            <img src="${getAvatarSrc(friend)}">
+            <div class="forward-friend-info">
+                <div class="forward-friend-name">${friend.name}</div>
+            </div>
+            <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
+        `;
+        list.appendChild(item);
+    });
+
+    confirmBtn.onclick = async () => {
+        if (!selectedForwardFriendId || selectedMessages.size === 0) return;
+        
+        const ids = Array.from(selectedMessages).map(id => parseInt(id));
+        const msgRes = await fetch("/api/getMessagesByIds", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids })
+        });
+        const msgData = await msgRes.json();
+
+        // Send each message to the target friend
+        msgData.messages.forEach(m => {
+            socket.emit("sendMessage", {
+                to: selectedForwardFriendId,
+                message: m.message,
+                type: m.type,
+                caption: m.caption
+            });
+        });
+
+        showPopup(`Forwarded ${ids.length} messages`);
+        closeForwardModal();
+        toggleSelectionMode(false);
+    };
+}
+
+setupForwardModal();
 
 // ================= USER PROFILE & MEDIA MODAL =================
 const userProfileModalHTML = `
@@ -784,6 +905,8 @@ let selectedMessageEl = null;
 let selectedMsgId = null;
 let selectedMsgSender = null;
 const messageMenu = document.getElementById("messageMenu");
+const deleteModal = document.getElementById("deleteModal");
+
 let currentFriendId = null;
 
 // Inject Copy Option into Menu
@@ -1210,6 +1333,88 @@ function scrollToMessage(msgId) {
   }
 }
 
+window.selectAllMessages = function() {
+  const allMsgs = document.querySelectorAll(".message[data-id]");
+  allMsgs.forEach(el => {
+    const msgId = el.getAttribute("data-id");
+    if (msgId) {
+      selectedMessages.add(msgId);
+      el.classList.add("selected-msg");
+    }
+  });
+};
+
+function toggleSelectionMode(enabled, initialMsgEl = null) {
+  isSelectionMode = enabled;
+  const chatActions = document.querySelector(".chat-actions");
+  if (!chatActions) return;
+
+  if (enabled) {
+    selectedMessages.clear();
+    // Change header to Forward and Delete icons
+    chatActions.innerHTML = `
+      <button class="chat-action-btn" onclick="selectAllMessages()" title="Select All">
+        <i class="fa-solid fa-list-check"></i>
+      </button>
+      <button class="chat-action-btn" onclick="forwardSelectedMessages()">
+        <i class="fa-solid fa-share"></i>
+      </button>
+      <button class="chat-action-btn" onclick="deleteSelectedMessages()">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+      <button class="chat-action-btn" onclick="toggleSelectionMode(false)" style="color: #ff7b7b;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    `;
+    if (initialMsgEl) toggleMessageSelection(initialMsgEl);
+  } else {
+    // Revert to Call icons
+    selectedMessages.clear();
+    document.querySelectorAll(".message.selected-msg").forEach(el => el.classList.remove("selected-msg"));
+    openChat(currentFriendId, currentFriendName); // Refresh header and state
+  }
+}
+
+function toggleMessageSelection(el) {
+  const msgId = el.getAttribute("data-id");
+  if (!msgId) return;
+
+  if (selectedMessages.has(msgId)) {
+    selectedMessages.delete(msgId);
+    el.classList.remove("selected-msg");
+  } else {
+    selectedMessages.add(msgId);
+    el.classList.add("selected-msg");
+  }
+
+  if (selectedMessages.size === 0) {
+    toggleSelectionMode(false);
+  }
+}
+
+window.forwardSelectedMessages = function() {
+  openForwardModal();
+};
+
+window.deleteSelectedMessages = function() {
+  if (selectedMessages.size === 0) return;
+
+  const modal = document.getElementById("deleteModal");
+  modal.style.display = "flex";
+  modal.style.justifyContent = "center";
+  modal.style.alignItems = "center";
+  modal.style.position = "absolute";
+  modal.style.top = "0";
+  modal.style.left = "0";
+  modal.style.width = "100%";
+  modal.style.height = "100%";
+  modal.style.backgroundColor = "rgba(0,0,0,0.5)";
+  modal.style.zIndex = "10000";
+  
+  // Enable "Delete for everyone" for bulk actions as well
+  document.getElementById("deleteEveryone").style.display = "block";
+};
+
 function appendMessage(
   senderId,
   message,
@@ -1359,6 +1564,10 @@ function appendMessage(
 
   // 🖱️ LEFT CLICK (desktop/big screens)
   div.addEventListener("click", (e) => {
+    if (isSelectionMode) {
+      toggleMessageSelection(div);
+      return;
+    }
     if (["IMG", "VIDEO", "AUDIO", "A"].includes(e.target.tagName)) return;
     showMessageMenu(e, div);
   });
@@ -1395,13 +1604,9 @@ document.querySelectorAll(".menu-item").forEach((item) => {
       modal.style.height = "100%";
       modal.style.backgroundColor = "rgba(0,0,0,0.5)";
       modal.style.zIndex = "10000";
-
-      // hide "delete for everyone" if not my msg
-      if (parseInt(selectedMsgSender) !== parseInt(userId)) {
-        document.getElementById("deleteEveryone").style.display = "none";
-      } else {
-        document.getElementById("deleteEveryone").style.display = "block";
-      }
+      
+      // Always show "Delete for everyone" regardless of who sent it
+      document.getElementById("deleteEveryone").style.display = "block";
     }
     if (action === "edit") {
       if (!selectedMessageEl) return;
@@ -1489,6 +1694,9 @@ document.querySelectorAll(".menu-item").forEach((item) => {
 
       showReplyPreview();
     }
+    if (action === "select") {
+      toggleSelectionMode(true, selectedMessageEl);
+    }
     messageMenu.style.display = "none";
   };
 });
@@ -1554,7 +1762,6 @@ function cancelReply() {
   replyingMsg = null;
   document.getElementById("replyBox")?.remove();
 }
-const deleteModal = document.getElementById("deleteModal");
 window.addEventListener("click", (e) => {
   if (e.target === deleteModal) {
     deleteModal.style.display = "none";
@@ -1562,21 +1769,45 @@ window.addEventListener("click", (e) => {
 });
 
 document.getElementById("deleteMe").onclick = () => {
-  socket.emit("deleteMessage", {
-    msgId: selectedMsgId,
-    type: "me",
-    to: currentFriendId,
-  });
+  if (isSelectionMode) {
+    selectedMessages.forEach(msgId => {
+      socket.emit("deleteMessage", {
+        msgId: parseInt(msgId),
+        type: "me",
+        to: currentFriendId,
+      });
+    });
+    showPopup("Messages deleted");
+    toggleSelectionMode(false);
+  } else {
+    socket.emit("deleteMessage", {
+      msgId: selectedMsgId,
+      type: "me",
+      to: currentFriendId,
+    });
+  }
 
   deleteModal.style.display = "none";
 };
 
 document.getElementById("deleteEveryone").onclick = () => {
-  socket.emit("deleteMessage", {
-    msgId: selectedMsgId,
-    type: "everyone",
-    to: currentFriendId,
-  });
+  if (isSelectionMode) {
+    selectedMessages.forEach(msgId => {
+      socket.emit("deleteMessage", {
+        msgId: parseInt(msgId),
+        type: "everyone",
+        to: currentFriendId,
+      });
+    });
+    showPopup("Messages deleted for everyone");
+    toggleSelectionMode(false);
+  } else {
+    socket.emit("deleteMessage", {
+      msgId: selectedMsgId,
+      type: "everyone",
+      to: currentFriendId,
+    });
+  }
 
   deleteModal.style.display = "none";
 };
@@ -3258,19 +3489,19 @@ emojis.forEach((emoji) => {
 // });
 
 // ================= AUTO FULL SCREEN =================
-function enableFullScreen() {
-  const elem = document.documentElement;
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen().catch((err) => console.log(err));
-  } else if (elem.webkitRequestFullscreen) {
-    elem.webkitRequestFullscreen();
-  } else if (elem.msRequestFullscreen) {
-    elem.msRequestFullscreen();
-  }
-}
-// enableFullScreen();
-document.addEventListener("click", enableFullScreen, { once: true });
-document.addEventListener("touchstart", enableFullScreen, { once: true });
+// function enableFullScreen() {
+//   const elem = document.documentElement;
+//   if (elem.requestFullscreen) {
+//     elem.requestFullscreen().catch((err) => console.log(err));
+//   } else if (elem.webkitRequestFullscreen) {
+//     elem.webkitRequestFullscreen();
+//   } else if (elem.msRequestFullscreen) {
+//     elem.msRequestFullscreen();
+//   }
+// }
+// // enableFullScreen();
+// document.addEventListener("click", enableFullScreen, { once: true });
+// document.addEventListener("touchstart", enableFullScreen, { once: true });
 
 // Close pickers when clicking elsewhere (optional simple implementation)
 document.getElementById("messages").onclick = () => {

@@ -149,6 +149,15 @@ app.post("/login", (req, res) => {
     },
   );
 });
+app.post("/api/getMessagesByIds", (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) return res.json({ messages: [] });
+  const placeholders = ids.map(() => "?").join(",");
+  db.all(`SELECT * FROM messages WHERE id IN (${placeholders})`, ids, (err, rows) => {
+    if (err) return res.status(500).json({ messages: [] });
+    res.json({ messages: rows });
+  });
+});
 
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
@@ -847,6 +856,39 @@ io.on("connection", (socket) => {
     );
   });
 
+  // ================= SCREENSHOT NOTIFICATION =================
+
+  socket.on("screenshotTaken", ({ to }) => {
+    const sender = String(socket.userId);
+    const receiver = String(to);
+    const messageText = "Took a screenshot";
+
+    db.run(
+      `INSERT INTO messages(sender, receiver, message, unread_count, status, type)
+       VALUES(?,?,?,?,?,?)`,
+      [sender, receiver, messageText, 1, "sent", "screenshot_log"],
+      function (err) {
+        if (err) return console.error(err);
+
+        const payload = {
+          from: sender,
+          to: receiver,
+          message: messageText,
+          msgId: this.lastID,
+          status: "sent",
+          type: "screenshot_log",
+          timestamp: new Date().toISOString(),
+        };
+
+        io.to(`user_${receiver}`).to(`user_${sender}`).emit("newMessage", payload);
+
+        io.to(`user_${sender}`).emit("messageDelivered", {
+          msgId: this.lastID,
+        });
+      }
+    );
+  });
+
   // ================= WEBRTC CALLING =================
 
   socket.on("callUser", ({ userToCall, signalData, from, callType }) => {
@@ -977,9 +1019,11 @@ io.on("connection", (socket) => {
     const userId = String(socket.userId);
 
     if (type === "everyone") {
-      // only sender can delete for everyone
-      db.get(`SELECT sender FROM messages WHERE id=?`, [msgId], (err, row) => {
-        if (!row || String(row.sender) !== userId) return;
+      // Allow deletion if the user is either the sender or the receiver
+      db.get(`SELECT sender, receiver FROM messages WHERE id=?`, [msgId], (err, row) => {
+        if (!row) return;
+        const isParticipant = String(row.sender) === userId || String(row.receiver) === userId;
+        if (!isParticipant) return;
 
         db.run(`DELETE FROM messages WHERE id=?`, [msgId]);
 
