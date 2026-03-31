@@ -1,272 +1,445 @@
-
-
 async function setupMyProfile() {
   const userId = localStorage.getItem("userId");
   if (!userId) return;
 
-  // 1. Inject Styles for Profile Modal
   const style = document.createElement("style");
-  style.textContent = `
-    .user-profile-modal {
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(8px);
-    }
-    .user-profile-content {
-        background: linear-gradient(145deg, #1e1e24, #2a2a30);
-        border: 1px solid rgba(255,255,255,0.1);
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-    }
-    .my-profile-inputs {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin-top: 20px;
-        text-align: left;
-    }
-    .my-profile-inputs label {
-        color: #aaa;
-        font-size: 14px;
-        margin-bottom: 5px;
-        display: block;
-    }
-    .my-profile-inputs input {
-        width: 95%;
-        padding: 12px;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 8px;
-        color: white;
-        font-size: 16px;
-        box-sizing: border-box;
-    }
-    .my-profile-footer {
-        margin-top: 30px;
-        padding-top: 15px;
-        border-top: 1px solid #444;
-    }
-    .save-btn {
-        background: linear-gradient(45deg, #4facfe, #00f2fe);
-        border: none;
-        padding: 12px;
-        border-radius: 8px;
-        color: white;
-        font-weight: 600;
-        font-size: 16px;
-        cursor: pointer;
-        width: 100%;
-        margin-top: 20px;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .save-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px -5px rgba(79, 172, 254, 0.4);
-    }
-    .logout-btn {
-        background: linear-gradient(45deg, #ff416c, #ff4b2b);
-        color: white;
-        border: none;
-        padding: 12px;
-        width: 100%;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: bold;
-        font-size: 16px;
-    }
-    /* Avatar Upload Styles */
-    .avatar-upload {
-        position: relative;
-        max-width: 150px;
-        margin: 10px auto 20px;
-    }
-    .avatar-edit {
-        position: absolute;
-        right: 12px;
-        z-index: 1;
-        bottom: 12px;
-    }
-    .avatar-edit input {
-        display: none;
-    }
-    .avatar-edit label {
-        display: inline-block;
-        width: 34px;
-        height: 34px;
-        margin-bottom: 0;
-        border-radius: 100%;
-        background: #FFFFFF;
-        border: 1px solid transparent;
-        box-shadow: 0px 2px 4px 0px rgba(0,0,0,0.12);
-        cursor: pointer;
-        font-weight: normal;
-        transition: all .2s ease-in-out;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'%3E%3C/path%3E%3Ccircle cx='12' cy='13' r='4'%3E%3C/circle%3E%3C/svg%3E");
-        background-size: 20px;
-        background-repeat: no-repeat;
-        background-position: center;
-    }
-    .avatar-preview {
-        width: 140px;
-        height: 140px;
-        position: relative;
-        border-radius: 100%;
-        border: 4px solid rgba(255,255,255,0.1);
-        box-shadow: 0px 2px 4px 0px rgba(0,0,0,0.1);
-        overflow: hidden;
-    }
-    .avatar-preview > div {
-        width: 100%;
-        height: 100%;
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-position: center;
-    }
-  `;
+
   document.head.appendChild(style);
 
-  // 2. Inject Modal HTML
   const modalHTML = `
     <div id="myProfileModal" class="user-profile-modal" style="display: none;">
         <div class="user-profile-content">
             <div class="user-profile-header">
-                <h2>Edit Profile</h2>
-                <button class="close-profile-btn" id="closeMyProfileBtn">
+                <button class="close-profile-btn" id="closeMyProfileBtn" style="position:absolute; right:2; top:15px; z-index:100; background:rgba(0,0,0,0.5);">
                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
             
-            <div class="my-profile-inputs">
-                <div class="avatar-upload">
-                    <div class="avatar-edit">
-                        <input type='file' id="imageUpload" accept=".png, .jpg, .jpeg" />
-                        <label for="imageUpload"></label>
-                    </div>
-                    <div class="avatar-preview">
-                        <div id="imagePreview" style="background-image: url('https://i.pravatar.cc/150');">
-                        </div>
-                    </div>
+            <div class="profile-header-visual">
+                <div class="cover-photo-container" onclick="document.getElementById('coverUpload').click()">
+                    <img id="coverPreview" src="https://images.unsplash.com/photo-1557683316-973673baf926?w=800">
+                    <input type="file" id="coverUpload" hidden accept="image/*">
                 </div>
-
-                <div>
-                    <label>Name</label>
-                    <input type="text" id="myProfileName" placeholder="Your Name">
+                <div class="profile-avatar-wrapper">
+                    <img id="myAvatarPreview" src="https://i.pravatar.cc/150" onclick="document.getElementById('avatarUpload').click()">
+                    <div class="status-indicator"></div>
+                    <input type="file" id="avatarUpload" hidden accept="image/*">
                 </div>
-                <div>
-                    <label>Email</label>
-                    <input type="email" id="myProfileEmail" placeholder="Your Email">
-                </div>
-                <div>
-                    <label>Password</label>
-                    <input type="text" id="myProfilePassword" placeholder="New Password">
-                </div>
-                
-                <button id="saveProfileBtn" class="save-btn">Save Changes</button>
             </div>
 
-            <div class="my-profile-footer">
-                <button id="myProfileLogoutBtn" class="logout-btn">Logout</button>
+            <div class="profile-main-info">
+                <div class="profile-name-row">
+                    <div>
+                        <h2 id="dispName" style="font-size: 22px;">Loading...</h2>
+                        <span id="dispHandle" style="color: #888; font-size: 14px;">@user</span>
+                    </div>
+                    <button class="action-btn-outline" onclick="openEditProfile()">Edit Profile</button>
+                </div>
+           
+
+                <div class="profile-bio" id="dispBio">Tell the world about yourself...</div>
+                <div class="profile-city" id="dispCity" style="font-size: 13px; color: #aaa; margin-bottom: 10px;"><i class="fa-solid fa-location-dot"></i> <span id="dispCityText">Add city</span></div>
+                <div class="profile-links"><i class="fa-solid fa-link"></i> <span id="dispLink">Add website</span></div>
+            </div>
+
+      <div class="profile-stats-bar">
+
+    <div class="stat-box">
+        <span class="stat-value" id="statFriends">0</span>
+        <span class="stat-label">Friends</span>
+    </div>
+
+    <div class="stat-box">
+        <span class="stat-value" id="statScore">0</span>
+        <span class="stat-label">Score</span>
+    </div>
+
+    <div class="stat-box">
+        <span class="stat-value" id="statPosts">0</span>
+        <span class="stat-label">Posts</span>
+    </div>
+
+    <div class="stat-box">
+        <span class="stat-value" id="statLevel">1</span>
+        <span class="stat-label">Level</span>
+    </div>
+
+    <!-- 📅 Personal Info -->
+    <div class="stat-box info">
+        <span class="stat-value" id="statBirthday">--</span>
+        <span class="stat-label">Birthday</span>
+    </div>
+
+</div>
+
+            <div style="padding: 10px 20px; width:100%;">
+                <h3 style="margin-bottom: 10px; font-size: 16px; border-left: 3px solid var(--profile-accent); padding-left: 10px;">Settings</h3>
+              <div class="settings-group">
+
+  <!-- 🔐 Privacy Controls -->
+  <div class="settings-title">Privacy</div>
+ 
+  <div class="settings-item">
+    <span>Activity Status</span>
+    <input type="checkbox" id="activityStatus">
+  </div>
+  <div class="settings-item">
+    <span>Read Receipts</span>
+    <input type="checkbox" id="readReceipts">
+  </div>
+  <div class="settings-item">
+    <span>Who can message me</span>
+    <select id="messagePermission">
+      <option value="everyone">Everyone</option>
+      <option value="friends">Friends Only</option>
+      <option value="noone">No One</option>
+    </select>
+  </div>
+
+  <!-- 🔔 Notifications -->
+  <div class="settings-title">Notifications</div>
+  <div class="settings-item">
+    <span>Push Notifications</span>
+    <input type="checkbox" id="pushNotifications">
+  </div>
+  <div class="settings-item">
+    <span>Email Notifications</span>
+    <input type="checkbox" id="emailNotifications">
+  </div>
+  <div class="settings-item">
+    <span>Message Alerts</span>
+    <input type="checkbox" id="messageAlerts">
+  </div>
+
+  <!-- 🛡️ Security -->
+  <div class="settings-title">Security</div>
+  <div class="settings-item">
+    <span>Change Password</span>
+    <button onclick="openChangePassword()">Update</button>
+  </div>
+  <div class="settings-item">
+    <span>Two-Factor Authentication</span>
+    <input type="checkbox" id="twoFactorAuth">
+  </div>
+  <div class="settings-item">
+    <span>Login Activity</span>
+    <button onclick="viewLoginActivity()">View</button>
+  </div>
+
+  <!-- 🎨 Appearance -->
+  <div class="settings-title">Appearance</div>
+  <div class="settings-item">
+    <span>Dark Mode</span>
+    <input type="checkbox" id="darkModeToggle">
+  </div>
+  <div class="settings-item">
+    <span>Language</span>
+    <select id="languageSelect">
+      <option>English</option>
+      <option>Hindi</option>
+    </select>
+  </div>
+
+  <!-- ⚙️ Account -->
+  <div class="settings-title">Account</div>
+
+  <div class="settings-item">
+    <span>Blocked Users</span>
+    <button onclick="viewBlockedUsers()">Manage</button>
+  </div>
+  <div class="settings-item danger">
+    <span>Delete Account</span>
+    <button onclick="deleteAccount()">Delete</button>
+  </div>
+
+</div>
+
+                <h3 style="margin: 20px 0 10px; font-size: 16px; border-left: 3px solid var(--profile-accent); padding-left: 10px;">Friends</h3>
+                <div id="profileFriendsList" class="friends-list-mini"></div>
+
+                <button onclick="logoutFromProfile()" class="logout-btn" style="background:#ff416c; width:100%; border:none; padding:15px; border-radius:12px; color:white; font-weight:bold;">Logout</button>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="fullEditModal" class="theme-popup" style="z-index: 4000;">
+        <div class="theme-popup-content" style="text-align:left; width:90%; max-width:400px;">
+            <h3>Edit Profile</h3>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Full Name</label>
+                <input id="editInpName" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Bio</label>
+                <textarea id="editInpBio" style="width:100%; height:80px; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px; resize:none;"></textarea>
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">City</label>
+                <input id="editInpCity" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Birthday</label>
+                <input type="date" id="editInpBirthday" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Website</label>
+                <input id="editInpLink" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="saveAdvancedProfile()" class="save-btn" style="flex:2;">Save Changes</button>
+                <button onclick="document.getElementById('fullEditModal').style.display='none'" class="action-btn-outline" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crop Modal for Zoom/Adjust -->
+    <div id="cropModal" class="theme-popup" style="z-index: 5000; display: none;">
+        <div class="theme-popup-content" style="width: 90%; max-width: 480px; padding: 20px;">
+            <h3>Adjust Photo</h3>
+            <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">Drag to reposition and use slider to zoom</p>
+            <div id="cropViewport" style="width: 100%; height: 320px; background: #000; overflow: hidden; position: relative; margin: 0; touch-action: none; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                <img id="cropImage" style="position: absolute; cursor: move; user-select: none; max-width: none;">
+                <div id="cropOverlay" style="position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); pointer-events: none; z-index: 5;"></div>
+            </div>
+            <div style="margin: 20px 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #eee; margin-bottom: 8px;">
+                    <span>Zoom Level</span>
+                    <span id="zoomLabel">100%</span>
+                </div>
+                <input type="range" id="cropZoom" min="0.1" max="4" step="0.01" value="1" style="width: 100%;">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="applyCropBtn" class="save-btn" style="flex: 2;">Save Photo</button>
+                <button onclick="document.getElementById('cropModal').style.display='none'" class="action-btn-outline" style="flex: 1;">Cancel</button>
             </div>
         </div>
     </div>
   `;
- app.insertAdjacentHTML("beforeend", modalHTML);
+  app.insertAdjacentHTML("beforeend", modalHTML);
+
+  // Setup Crop Tool Logic
+  let cropState = { type: 'avatar', x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
+
+  const openCropTool = (src, type) => {
+    cropState.type = type;
+    const modal = document.getElementById('cropModal');
+    const img = document.getElementById('cropImage');
+    const overlay = document.getElementById('cropOverlay');
+    const zoomInp = document.getElementById('cropZoom');
+    
+    img.src = src;
+    modal.style.display = 'flex';
+    
+    cropState.x = 0; cropState.y = 0; cropState.zoom = 1;
+    zoomInp.value = 1;
+    document.getElementById('zoomLabel').textContent = '100%';
+
+    img.onload = () => {
+        img.style.transform = `translate(0px, 0px) scale(1)`;
+        if (type === 'avatar') {
+            overlay.style.width = '240px'; overlay.style.height = '240px'; overlay.style.borderRadius = '50%';
+        } else {
+            overlay.style.width = '90%'; overlay.style.height = '150px'; overlay.style.borderRadius = '8px';
+        }
+    };
+  };
+
+  const updateImgView = () => {
+    document.getElementById('cropImage').style.transform = `translate(${cropState.x}px, ${cropState.y}px) scale(${cropState.zoom})`;
+  };
+
+  const viewport = document.getElementById('cropViewport');
+  const startPos = (e) => {
+    cropState.isDragging = true;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    cropState.startX = clientX - cropState.x;
+    cropState.startY = clientY - cropState.y;
+  };
+  const movePos = (e) => {
+    if (!cropState.isDragging) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    cropState.x = clientX - cropState.startX;
+    cropState.y = clientY - cropState.startY;
+    updateImgView();
+  };
+  const endPos = () => cropState.isDragging = false;
+
+  viewport.addEventListener('mousedown', startPos);
+  window.addEventListener('mousemove', movePos);
+  window.addEventListener('mouseup', endPos);
+  viewport.addEventListener('touchstart', startPos);
+  window.addEventListener('touchmove', movePos);
+  window.addEventListener('touchend', endPos);
+
+  document.getElementById('cropZoom').oninput = (e) => {
+    cropState.zoom = parseFloat(e.target.value);
+    document.getElementById('zoomLabel').textContent = Math.round(cropState.zoom * 100) + '%';
+    updateImgView();
+  };
+
+  document.getElementById('applyCropBtn').onclick = () => {
+    const img = document.getElementById('cropImage');
+    const overlay = document.getElementById('cropOverlay');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    const outW = cropState.type === 'avatar' ? 512 : 1200;
+    const outH = cropState.type === 'avatar' ? 512 : 450;
+    canvas.width = outW; canvas.height = outH;
+
+    const oRect = overlay.getBoundingClientRect();
+    const iRect = img.getBoundingClientRect();
+    const s = outW / oRect.width; // Scale Factor
+
+    ctx.drawImage(img, 
+        (iRect.left - oRect.left) * s, 
+        (iRect.top - oRect.top) * s, 
+        iRect.width * s, 
+        iRect.height * s
+    );
+    
+    const result = canvas.toDataURL('image/jpeg', 0.85);
+    document.getElementById(cropState.type === 'avatar' ? 'myAvatarPreview' : 'coverPreview').src = result;
+    document.getElementById('cropModal').style.display = 'none';
+    saveAdvancedProfile(); // Auto-save the adjusted result
+  };
+
+  window.openEditProfile = () => {
+    document.getElementById("fullEditModal").style.display = "flex";
+  };
+
+  window.logoutFromProfile = () => {
+    if (confirm("Logout of your account?")) {
+      localStorage.clear();
+      window.location.href = "/index.html";
+    }
+  };
 
   const loadMyProfile = async (showModal = false) => {
     try {
       const res = await fetch(`/api/getMyProfile/${userId}`);
       const data = await res.json();
       if (data.success && data.user) {
-        if (data.user.avatar) {
-          const avatarUrl = data.user.avatar;
-          document.getElementById("imagePreview").style.backgroundImage = `url(${avatarUrl})`;
-          const profileBtn = document.getElementById("profileBtn");
-          if (profileBtn) profileBtn.src = avatarUrl;
+        const u = data.user;
+        document.getElementById("dispName").textContent = u.name;
+        document.getElementById("dispHandle").textContent =
+          "@" + (u.email ? u.email.split("@")[0] : "user");
+        document.getElementById("dispBio").textContent = u.bio || "No bio yet.";
+        document.getElementById("dispCityText").textContent = u.city || "Add city";
+        document.getElementById("dispLink").textContent =
+          u.links || "No website";
+        if (u.birthday) {
+          const [y, m, d] = u.birthday.split("-");
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          document.getElementById("statBirthday").textContent = `${parseInt(d)} ${months[parseInt(m) - 1]}`;
+        } else {
+          document.getElementById("statBirthday").textContent = "--";
         }
+        document.getElementById("statFriends").textContent = u.friendsCount || 0;
+        document.getElementById("statPosts").textContent = u.postsCount || 0;
+        document.getElementById("statScore").textContent = u.score || 0;
+        document.getElementById("statLevel").textContent = u.level || 1;
+
+        if (u.avatar) {
+          document.getElementById("myAvatarPreview").src = u.avatar;
+          const pBtn = document.getElementById("profileBtn");
+          if (pBtn) pBtn.src = u.avatar;
+        }
+        if (u.cover) document.getElementById("coverPreview").src = u.cover;
+
         if (showModal) {
-          document.getElementById("myProfileName").value = data.user.name;
-          document.getElementById("myProfileEmail").value = data.user.email;
-          document.getElementById("myProfilePassword").value = data.user.password;
+          document.getElementById("editInpName").value = u.name;
+          document.getElementById("editInpBio").value = u.bio || "";
+          document.getElementById("editInpCity").value = u.city || "";
+          document.getElementById("editInpBirthday").value = u.birthday || "";
+          document.getElementById("editInpLink").value = u.links || "";
           document.getElementById("myProfileModal").style.display = "flex";
         }
+        loadProfileFriends();
       }
     } catch (e) {
       console.error(e);
     }
   };
 
-  // 3. Inject "My Profile" Button (Before Logout)
-  const logoutBtn = document.getElementById("logout");
-  if (logoutBtn && logoutBtn.parentNode) {
-    const profileBtn = document.createElement("button");
-    profileBtn.innerText = "My Profile";
-    profileBtn.id = "myProfileBtn";
-    // Reuse generic chat button styles if possible
-    profileBtn.style.cssText =
-      "width: 100%; margin-bottom: 10px; padding: 10px; border: none; border-radius: 8px; background: #4facfe; color: white; font-weight: bold; cursor: pointer;";
+  window.saveAdvancedProfile = async () => {
+    const name = document.getElementById("editInpName").value;
+    const bio = document.getElementById("editInpBio").value;
+    const city = document.getElementById("editInpCity").value;
+    const birthday = document.getElementById("editInpBirthday").value;
+    const links = document.getElementById("editInpLink").value;
+    const avatar = document.getElementById("myAvatarPreview").src;
+    const cover = document.getElementById("coverPreview").src;
 
-    logoutBtn.parentNode.insertBefore(profileBtn, logoutBtn);
+    const res = await fetch("/api/updateProfile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, name, bio, links, avatar, cover, city, birthday }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showPopup("Profile updated!");
+      document.getElementById("fullEditModal").style.display = "none";
+      loadMyProfile(false);
+    }
+  };
 
-    profileBtn.onclick = () => loadMyProfile(true);
+  async function loadProfileFriends() {
+    try {
+      const res = await fetch(`/getFriends/${userId}`);
+      const data = await res.json();
+      const list = document.getElementById("profileFriendsList");
+      list.innerHTML = "";
+      if (!data.friends || data.friends.length === 0) {
+        list.innerHTML =
+          '<p style="color:#666; text-align:center; padding:20px;">No friends yet</p>';
+        return;
+      }
+      data.friends.forEach((f) => {
+        const item = document.createElement("div");
+        item.className = "friend-item-mini";
+        item.innerHTML = `
+                <img src="${f.avatar || "https://i.pravatar.cc/150?img=" + f.id}">
+                <div style="flex:1;">
+                    <div style="font-weight:600;">${f.name}</div>
+                    <div style="font-size:12px; color:#888;">${f.streak > 0 ? "🔥 " + f.streak + " day streak" : "Friend"}</div>
+                </div>
+            `;
+        list.appendChild(item);
+      });
+    } catch (e) {
+      console.error(e);
+    }
   }
 
-  loadMyProfile(false); // Load avatar on page load
+  // Setup File Uploads
+  ["avatar", "cover"].forEach((type) => {
+    const input = document.getElementById(`${type}Upload`);
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          openCropTool(ev.target.result, type);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+  });
 
-  // Bind to external profileBtn if exists (e.g. avatar image)
+  document.getElementById("closeMyProfileBtn").onclick = () =>
+    (document.getElementById("myProfileModal").style.display = "none");
+
   const avatarBtn = document.getElementById("profileBtn");
   if (avatarBtn) {
     avatarBtn.onclick = () => loadMyProfile(true);
     avatarBtn.style.cursor = "pointer";
   }
 
-  // 4. Modal Logic
-  document.getElementById("closeMyProfileBtn").onclick = () =>
-    (document.getElementById("myProfileModal").style.display = "none");
-
-  // Handle Avatar Preview
-  const imageUpload = document.getElementById("imageUpload");
-  imageUpload.onchange = function () {
-    const file = this.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        document.getElementById("imagePreview").style.backgroundImage =
-          `url(${e.target.result})`;
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  document.getElementById("saveProfileBtn").onclick = async () => {
-    const name = document.getElementById("myProfileName").value;
-    const email = document.getElementById("myProfileEmail").value;
-    const password = document.getElementById("myProfilePassword").value;
-
-    // Get Avatar Base64 from preview background style (hacky but works if set by reader)
-    let avatar = document.getElementById("imagePreview").style.backgroundImage;
-    avatar = avatar.slice(5, -2); // remove url(" and ")
-    if (avatar.includes("pravatar.cc") && !imageUpload.files[0]) avatar = null; // Don't save default if not changed
-
-    const res = await fetch("/api/updateProfile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, name, email, password, avatar }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      alert("Profile updated!");
-      if (name) localStorage.setItem("username", name);
-      document.getElementById("myProfileModal").style.display = "none";
-      location.reload();
-    } else {
-      alert("Update failed.");
-    }
-  };
-
-  document.getElementById("myProfileLogoutBtn").onclick = () => {
-    if (confirm("Are you sure you want to logout?")) {
-      localStorage.clear();
-      window.location.href = "/index.html";
-    }
-  };
+  loadMyProfile(false);
 }
 
 setupMyProfile();

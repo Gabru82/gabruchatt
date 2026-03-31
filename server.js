@@ -42,10 +42,41 @@ db.serialize(() => {
       console.error("last_seen error:", err.message);
     }
   });
+  
+  db.run("ALTER TABLE users ADD COLUMN bio TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("bio error:", err.message);
+    }
+  });
+  db.run("ALTER TABLE users ADD COLUMN cover TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("cover error:", err.message);
+    }
+  });
+  db.run("ALTER TABLE users ADD COLUMN links TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("links error:", err.message);
+    }
+  });
+  db.run("ALTER TABLE users ADD COLUMN settings TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("settings error:", err.message);
+    }
+  });
 
   db.run("ALTER TABLE users ADD COLUMN avatar TEXT", (err) => {
     if (err && !err.message.includes("duplicate column")) {
       console.error("avatar error:", err.message);
+    }
+  });
+  db.run("ALTER TABLE users ADD COLUMN city TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("city error:", err.message);
+    }
+  });
+  db.run("ALTER TABLE users ADD COLUMN birthday TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("birthday error:", err.message);
     }
   });
 
@@ -162,20 +193,45 @@ app.post("/api/getMessagesByIds", (req, res) => {
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
-    "SELECT id, name, email, password, avatar FROM users WHERE id=?",
+    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday FROM users WHERE id=?",
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
-      res.json({ success: true, user: row });
+      
+      // Enrich with dynamic stats
+      db.get(
+        "SELECT COUNT(*) as count FROM (SELECT user2 FROM friends WHERE user1 = ? UNION SELECT user1 FROM friends WHERE user2 = ?)",
+        [userId, userId],
+        (err, fRow) => {
+        row.friendsCount = fRow ? fRow.count : 0;
+        db.get("SELECT COUNT(*) as count FROM messages WHERE sender=?", [userId], (err, mRow) => {
+          row.postsCount = mRow ? mRow.count : 0;
+          
+          // Calculate score based on unique chatting days per friend
+          const scoreQuery = `
+            SELECT COUNT(*) as total_score FROM (
+              SELECT DISTINCT 
+                CASE WHEN sender = ? THEN receiver ELSE sender END as friend_id, 
+                date(timestamp) as msg_date 
+              FROM messages 
+              WHERE sender = ? OR receiver = ?
+            )`;
+          db.get(scoreQuery, [userId, userId, userId], (err, sRow) => {
+            row.score = sRow ? sRow.total_score : 0;
+            row.level = Math.floor(row.score / 10) + 1; // Level up every 10 chatting days
+            res.json({ success: true, user: row });
+          });
+        });
+      });
     },
   );
 });
 
 app.post("/api/updateProfile", (req, res) => {
-  const { userId, name, email, password, avatar } = req.body;
+  const { userId, name, email, password, avatar, bio, cover, links, settings, city, birthday } = req.body;
   db.run(
-    "UPDATE users SET name=?, email=?, password=?, avatar=? WHERE id=?",
-    [name, email, password, avatar, userId],
+    "UPDATE users SET name=?, email=?, password=?, avatar=?, bio=?, cover=?, links=?, settings=?, city=?, birthday=? WHERE id=?",
+    [name, email, password, avatar, bio, cover, links, settings, city, birthday, userId],
     function (err) {
       if (err) return res.json({ success: false });
       res.json({ success: true });
