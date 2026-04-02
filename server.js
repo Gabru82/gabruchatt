@@ -79,6 +79,11 @@ db.serialize(() => {
       console.error("birthday error:", err.message);
     }
   });
+  db.run("ALTER TABLE users ADD COLUMN active_status INTEGER DEFAULT 1", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("active_status error:", err.message);
+    }
+  });
 
   // ================= FRIENDS =================
   db.run(`
@@ -193,7 +198,7 @@ app.post("/api/getMessagesByIds", (req, res) => {
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
-    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday FROM users WHERE id=?",
+    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status FROM users WHERE id=?",
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
@@ -228,12 +233,31 @@ app.get("/api/getMyProfile/:userId", (req, res) => {
 });
 
 app.post("/api/updateProfile", (req, res) => {
-  const { userId, name, email, password, avatar, bio, cover, links, settings, city, birthday } = req.body;
+  const { userId, ...updates } = req.body;
+
+  if (!userId) return res.json({ success: false, message: "User ID required" });
+
+  // Dynamically build the SET clause to only update fields present in the request body.
+  // This prevents fields like 'email' or 'password' from being cleared when they aren't sent.
+  const columns = Object.keys(updates).filter(key => updates[key] !== undefined);
+  
+  if (columns.length === 0) {
+    return res.json({ success: true, message: "No changes detected" });
+  }
+
+  const setClause = columns.map(col => `${col} = ?`).join(", ");
+  const values = [...columns.map(col => updates[col]), userId];
+
   db.run(
-    "UPDATE users SET name=?, email=?, password=?, avatar=?, bio=?, cover=?, links=?, settings=?, city=?, birthday=? WHERE id=?",
-    [name, email, password, avatar, bio, cover, links, settings, city, birthday, userId],
+    `UPDATE users SET ${setClause} WHERE id = ?`,
+    values,
     function (err) {
-      if (err) return res.json({ success: false });
+      if (err) {
+        if (err.message.includes("UNIQUE constraint failed")) {
+          return res.json({ success: false, message: "Email already in use" });
+        }
+        return res.json({ success: false, message: "Failed to update profile" });
+      }
       res.json({ success: true });
     },
   );
@@ -544,15 +568,17 @@ app.get("/getUserStatus/:userId", (req, res) => {
   const userId = req.params.userId;
   const requesterId = req.query.requesterId;
 
-  // Check if the user is explicitly in chat with the requester
-  const inChatWithRequester = activeChats.get(String(userId)) === String(requesterId);
-
-  db.get("SELECT last_seen, avatar FROM users WHERE id=?", [userId], (err, row) => {
+  db.get("SELECT last_seen, avatar, active_status FROM users WHERE id=?", [userId], (err, row) => {
     if (err) return res.json({ online: false, lastSeen: null });
+
+    const statusHidden = row && row.active_status === 0;
+    const inChatWithRequester = !statusHidden && activeChats.get(String(userId)) === String(requesterId);
+
     res.json({
       online: inChatWithRequester,
       avatar: row ? row.avatar : null,
-      lastSeen: row ? row.last_seen : null,
+      lastSeen: statusHidden ? null : (row ? row.last_seen : null),
+      statusHidden: statusHidden
     });
   });
 });

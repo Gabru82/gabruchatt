@@ -146,7 +146,7 @@ const reactionStyles = document.createElement("style");
 reactionStyles.textContent = `
   .message {
     position: relative;
-    margin-bottom: 24px !important; /* Extra space for reactions hanging at bottom */
+    margin-bottom: 10px !important; /* Extra space for reactions hanging at bottom */
   }
   .reactions {
     position: absolute;
@@ -455,7 +455,7 @@ function setupThemeUI() {
 let selectedForwardFriendId = null;
 
 function setupForwardModal() {
-    const forwardModalHTML = `
+  const forwardModalHTML = `
         <div id="forwardModal" class="theme-popup">
             <div class="theme-popup-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
                 <button class="close-btn" onclick="closeForwardModal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
@@ -469,78 +469,81 @@ function setupForwardModal() {
             </div>
         </div>
     `;
-    app.insertAdjacentHTML("beforeend", forwardModalHTML);
+  app.insertAdjacentHTML("beforeend", forwardModalHTML);
 
-    // Close on background click
-    document.getElementById("forwardModal").onclick = (e) => {
-        if (e.target.id === "forwardModal") closeForwardModal();
-    };
+  // Close on background click
+  document.getElementById("forwardModal").onclick = (e) => {
+    if (e.target.id === "forwardModal") closeForwardModal();
+  };
 }
 
-window.closeForwardModal = function() {
-    document.getElementById("forwardModal").style.display = "none";
-    selectedForwardFriendId = null;
-    document.getElementById("confirmForwardBtn").style.display = "none";
+window.closeForwardModal = function () {
+  document.getElementById("forwardModal").style.display = "none";
+  selectedForwardFriendId = null;
+  document.getElementById("confirmForwardBtn").style.display = "none";
 };
 
 async function openForwardModal() {
-    const modal = document.getElementById("forwardModal");
-    const list = document.getElementById("forwardFriendList");
-    const confirmBtn = document.getElementById("confirmForwardBtn");
-    
-    list.innerHTML = '<p style="text-align:center; color:#888;">Loading friends...</p>';
-    modal.style.display = "flex";
-    confirmBtn.style.display = "none";
+  const modal = document.getElementById("forwardModal");
+  const list = document.getElementById("forwardFriendList");
+  const confirmBtn = document.getElementById("confirmForwardBtn");
 
-    const res = await fetch(`/getFriends/${userId}`);
-    const data = await res.json();
-    list.innerHTML = "";
+  list.innerHTML =
+    '<p style="text-align:center; color:#888;">Loading friends...</p>';
+  modal.style.display = "flex";
+  confirmBtn.style.display = "none";
 
-    data.friends.forEach(friend => {
-        const item = document.createElement("div");
-        item.className = "forward-friend-item";
-        item.onclick = () => {
-            document.querySelectorAll(".forward-friend-item").forEach(i => i.classList.remove("selected"));
-            item.classList.add("selected");
-            selectedForwardFriendId = friend.id;
-            confirmBtn.style.display = "block";
-        };
+  const res = await fetch(`/getFriends/${userId}`);
+  const data = await res.json();
+  list.innerHTML = "";
 
-        item.innerHTML = `
+  data.friends.forEach((friend) => {
+    const item = document.createElement("div");
+    item.className = "forward-friend-item";
+    item.onclick = () => {
+      document
+        .querySelectorAll(".forward-friend-item")
+        .forEach((i) => i.classList.remove("selected"));
+      item.classList.add("selected");
+      selectedForwardFriendId = friend.id;
+      confirmBtn.style.display = "block";
+    };
+
+    item.innerHTML = `
             <img src="${getAvatarSrc(friend)}">
             <div class="forward-friend-info">
                 <div class="forward-friend-name">${friend.name}</div>
             </div>
             <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
         `;
-        list.appendChild(item);
+    list.appendChild(item);
+  });
+
+  confirmBtn.onclick = async () => {
+    if (!selectedForwardFriendId || selectedMessages.size === 0) return;
+
+    const ids = Array.from(selectedMessages).map((id) => parseInt(id));
+    const msgRes = await fetch("/api/getMessagesByIds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const msgData = await msgRes.json();
+
+    // Send each message to the target friend
+    msgData.messages.forEach((m) => {
+      socket.emit("sendMessage", {
+        to: selectedForwardFriendId,
+        message: m.message,
+        type: m.type,
+        caption: m.caption,
+      });
     });
 
-    confirmBtn.onclick = async () => {
-        if (!selectedForwardFriendId || selectedMessages.size === 0) return;
-        
-        const ids = Array.from(selectedMessages).map(id => parseInt(id));
-        const msgRes = await fetch("/api/getMessagesByIds", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids })
-        });
-        const msgData = await msgRes.json();
-
-        // Send each message to the target friend
-        msgData.messages.forEach(m => {
-            socket.emit("sendMessage", {
-                to: selectedForwardFriendId,
-                message: m.message,
-                type: m.type,
-                caption: m.caption
-            });
-        });
-
-        // showPopup(`Forwarded ${ids.length} messages`);
-        closeForwardModal();
-        toggleSelectionMode(false);
-    };
+    // showPopup(`Forwarded ${ids.length} messages`);
+    closeForwardModal();
+    toggleSelectionMode(false);
+  };
 }
 
 setupForwardModal();
@@ -617,6 +620,11 @@ async function updateProfileStatus(friendId) {
   const avatar = document.getElementById("profileModalAvatar");
   avatar.src =
     data.avatar || `https://i.pravatar.cc/150?img=${(friendId % 70) + 1}`;
+
+  if (data.statusHidden) {
+    statusEl.textContent = "";
+    return;
+  }
 
   if (data.online) {
     statusEl.textContent = "Online";
@@ -1333,9 +1341,9 @@ function scrollToMessage(msgId) {
   }
 }
 
-window.selectAllMessages = function() {
+window.selectAllMessages = function () {
   const allMsgs = document.querySelectorAll(".message[data-id]");
-  allMsgs.forEach(el => {
+  allMsgs.forEach((el) => {
     const msgId = el.getAttribute("data-id");
     if (msgId) {
       selectedMessages.add(msgId);
@@ -1370,7 +1378,9 @@ function toggleSelectionMode(enabled, initialMsgEl = null) {
   } else {
     // Revert to Call icons
     selectedMessages.clear();
-    document.querySelectorAll(".message.selected-msg").forEach(el => el.classList.remove("selected-msg"));
+    document
+      .querySelectorAll(".message.selected-msg")
+      .forEach((el) => el.classList.remove("selected-msg"));
     openChat(currentFriendId, currentFriendName); // Refresh header and state
   }
 }
@@ -1392,11 +1402,11 @@ function toggleMessageSelection(el) {
   }
 }
 
-window.forwardSelectedMessages = function() {
+window.forwardSelectedMessages = function () {
   openForwardModal();
 };
 
-window.deleteSelectedMessages = function() {
+window.deleteSelectedMessages = function () {
   if (selectedMessages.size === 0) return;
 
   const modal = document.getElementById("deleteModal");
@@ -1410,7 +1420,7 @@ window.deleteSelectedMessages = function() {
   modal.style.height = "100%";
   modal.style.backgroundColor = "rgba(0,0,0,0.5)";
   modal.style.zIndex = "10000";
-  
+
   // Enable "Delete for everyone" for bulk actions as well
   document.getElementById("deleteEveryone").style.display = "block";
 };
@@ -1438,6 +1448,16 @@ function appendMessage(
   div.setAttribute("data-sender", senderId);
   div.className = isMe ? "message sent" : "message received";
 
+  // Helper to download files
+  window.downloadFile = function (dataUrl, fileName) {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   // ✅ HANDLE CALL LOGS
   if (type === "call_log" || type === "screenshot_log") {
     div.className = `message ${type === "call_log" ? "call-log" : "screenshot-log"}`;
@@ -1451,9 +1471,9 @@ function appendMessage(
     let icon = type === "call_log" ? "📞" : "📸";
 
     if (type === "call_log") {
-        // If I sent "Missed call", it means I called and they didn't answer -> "No Answer"
-        if (isMe && message === "Missed call") text = "No answer";
-        else if (!isMe && message === "Missed call") text = "Missed call";
+      // If I sent "Missed call", it means I called and they didn't answer -> "No Answer"
+      if (isMe && message === "Missed call") text = "No answer";
+      else if (!isMe && message === "Missed call") text = "Missed call";
     }
 
     div.innerHTML = `${icon} ${text} <span class="call-log-time">${timeStr}</span>`;
@@ -1468,7 +1488,7 @@ function appendMessage(
       ? caption.replace(/</g, "&lt;").replace(/>/g, "&gt;")
       : null;
     const captionHtml = sanitizedCaption
-      ? `<div class="media-caption">${sanitizedCaption}</div>`
+      ? `<div class="media-caption"></div>`
       : "";
 
     if (type === "image") {
@@ -1491,6 +1511,18 @@ function appendMessage(
       contentHtml = `
         <div class="media-wrapper">
           <video src="${message}" class="chat-media" controls></video>
+          ${captionHtml}
+        </div>
+      `;
+    } else if (type === "document") {
+      const fileName = caption || "File";
+      contentHtml = `
+        <div class="media-wrapper document-msg" onclick="downloadFile('${message}', '${fileName}')" style="cursor: pointer; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+            <i class="fa-solid fa-file-arrow-down" style="font-size: 24px; color: #ffcc00;"></i>
+            <div style="display: flex; flex-direction: column; overflow: hidden; text-align: left;">
+                <span style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff;">${fileName}</span>
+                <span style="font-size: 10px; color: #aaa;">Click to download</span>
+            </div>
           ${captionHtml}
         </div>
       `;
@@ -1607,7 +1639,7 @@ document.querySelectorAll(".menu-item").forEach((item) => {
       modal.style.height = "100%";
       modal.style.backgroundColor = "rgba(0,0,0,0.5)";
       modal.style.zIndex = "10000";
-      
+
       // Always show "Delete for everyone" regardless of who sent it
       document.getElementById("deleteEveryone").style.display = "block";
     }
@@ -1773,7 +1805,7 @@ window.addEventListener("click", (e) => {
 
 document.getElementById("deleteMe").onclick = () => {
   if (isSelectionMode) {
-    selectedMessages.forEach(msgId => {
+    selectedMessages.forEach((msgId) => {
       socket.emit("deleteMessage", {
         msgId: parseInt(msgId),
         type: "me",
@@ -1795,7 +1827,7 @@ document.getElementById("deleteMe").onclick = () => {
 
 document.getElementById("deleteEveryone").onclick = () => {
   if (isSelectionMode) {
-    selectedMessages.forEach(msgId => {
+    selectedMessages.forEach((msgId) => {
       socket.emit("deleteMessage", {
         msgId: parseInt(msgId),
         type: "everyone",
@@ -1957,16 +1989,18 @@ function cancelEdit() {
 function showMessageMenu(e, messageEl) {
   selectedMessageEl = messageEl;
 
-  const isLog = messageEl.classList.contains("call-log") || messageEl.classList.contains("screenshot-log");
+  const isLog =
+    messageEl.classList.contains("call-log") ||
+    messageEl.classList.contains("screenshot-log");
 
   if (isLog) {
     // Only show delete for log messages
-    messageMenu.querySelectorAll(".menu-item").forEach(item => {
+    messageMenu.querySelectorAll(".menu-item").forEach((item) => {
       item.style.display = item.dataset.action === "delete" ? "flex" : "none";
     });
   } else {
     // Reset visibility for normal messages
-    messageMenu.querySelectorAll(".menu-item").forEach(item => {
+    messageMenu.querySelectorAll(".menu-item").forEach((item) => {
       item.style.display = "flex";
     });
   }
@@ -1995,8 +2029,8 @@ function showMessageMenu(e, messageEl) {
   const menuHeight = messageMenu.offsetHeight;
 
   // Calculate Position Relative to App Container
-  let left = (msgRect.left - appRect.left) + (msgRect.width / 2) - (menuWidth / 2);
-  
+  let left = msgRect.left - appRect.left + msgRect.width / 2 - menuWidth / 2;
+
   // Clamp Horizontal (Keep inside App width)
   if (left < 10) left = 10;
   if (left + menuWidth > appRect.width - 10) {
@@ -2004,11 +2038,11 @@ function showMessageMenu(e, messageEl) {
   }
 
   // Calculate Vertical (Try Above first)
-  let top = (msgRect.top - appRect.top) - menuHeight - 10;
+  let top = msgRect.top - appRect.top - menuHeight - 10;
 
   // If it goes off-top, try below
   if (top < 10) {
-    top = (msgRect.bottom - appRect.top) + 10;
+    top = msgRect.bottom - appRect.top + 10;
   }
 
   // If it goes off-bottom (even when placed below), force it to stay inside
@@ -2058,8 +2092,9 @@ sendBtn.onclick = () => {
         {
           to: currentFriendId,
           message: base64Media,
-          type: capturedMedia.type, // 'image' or 'video'
-          caption: text, // Send the raw text as caption
+          type: capturedMedia.type,
+          // For documents, we store the original filename in the caption if no user text is provided
+          caption: capturedMedia.type === "document" ? (text || capturedMedia.name) : text,
           replyTo: replyingMsg ? replyingMsg.id : null,
         },
         (res) => {
@@ -2450,6 +2485,12 @@ async function updateChatStatus(friendId) {
     chatAvatar.src = data.avatar;
   }
 
+  if (data.statusHidden) {
+    statusEl.textContent = "";
+    document.getElementById("hangingCharacter")?.classList.remove("show");
+    return;
+  }
+
   if (data.online) {
     statusEl.textContent = "Online";
     statusEl.style.color = "#00ff55";
@@ -2488,12 +2529,7 @@ socket.on("friendEnteredChat", ({ friendId }) => {
   if (currentFriendId == friendId) {
     document.getElementById("hangingCharacter")?.classList.add("show");
 
-    // Show Online when they enter the chat
-    const statusEl = document.getElementById("chatStatus");
-    if (statusEl) {
-      statusEl.textContent = "Online";
-      statusEl.style.color = "#00ff55";
-    }
+    updateChatStatus(friendId);
   }
 });
 
@@ -2501,12 +2537,7 @@ socket.on("friendLeftChat", ({ friendId }) => {
   if (currentFriendId == friendId) {
     document.getElementById("hangingCharacter")?.classList.remove("show");
 
-    // Show Last Seen when they leave the chat
-    const statusEl = document.getElementById("chatStatus");
-    if (statusEl) {
-      statusEl.textContent = "Last seen just now";
-      statusEl.style.color = "#aaa";
-    }
+    updateChatStatus(friendId);
   }
 });
 
@@ -2514,6 +2545,7 @@ socket.on("friendStatusInChat", ({ isHere }) => {
   if (isHere) {
     document.getElementById("hangingCharacter")?.classList.add("show");
   }
+  if (currentFriendId) updateChatStatus(currentFriendId);
 });
 
 // ================= CLOSE MODALS =================
@@ -3130,6 +3162,7 @@ let cameraStream = null;
 let capturedMedia = {
   blob: null,
   type: null, // 'image' or 'video'
+  name: null,
 };
 let cameraMediaRecorder;
 let cameraRecordedChunks = [];
@@ -3248,6 +3281,11 @@ function showMediaPreview(blob, type) {
     previewHtml = `<video src="${url}" style="max-height: 50px; border-radius: 5px;" autoplay muted loop controls></video>`;
   } else if (type === "audio") {
     previewHtml = `<audio src="${url}" controls style="height: 40px; width: 220px;"></audio>`;
+  } else if (type === "document") {
+    previewHtml = `<div style="padding: 10px; background: #444; border-radius: 5px; font-size: 12px; color: white; display: flex; align-items: center; gap: 8px;">
+                     <i class="fa-solid fa-file"></i>
+                     <span style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${capturedMedia.name}</span>
+                   </div>`;
   }
 
   mediaToSendPreview.innerHTML = `
@@ -3370,15 +3408,22 @@ plusBtn.onclick = () => {
 const chatFileInput = document.getElementById("chatFileInput");
 const mediaBtns = document.querySelectorAll(".mediaBtn");
 
+// Document Button
+document.getElementById("documentbtn").onclick = () => {
+  chatFileInput.accept = "*/*"; // Allow any file
+  chatFileInput.click();
+  mediaMenu.classList.remove("show");
+};
+
 // Image Button
-mediaBtns[0].onclick = () => {
+mediaBtns[1].onclick = () => {
   chatFileInput.accept = "image/*";
   chatFileInput.click();
   mediaMenu.classList.remove("show");
 };
 
 // Video Button
-mediaBtns[1].onclick = () => {
+mediaBtns[2].onclick = () => {
   chatFileInput.accept = "video/*";
   chatFileInput.click();
   mediaMenu.classList.remove("show");
@@ -3395,10 +3440,18 @@ chatFileInput.onchange = (e) => {
     return;
   }
 
-  // Instead of sending, set up for preview
-  const type = file.type.startsWith("video") ? "video" : "image";
+  const isDocumentMode = chatFileInput.accept === "*/*";
+  let type;
+
+  if (isDocumentMode) {
+    type = "document";
+  } else {
+    type = file.type.startsWith("video") ? "video" : "image";
+  }
+
   capturedMedia.blob = file;
   capturedMedia.type = type;
+  capturedMedia.name = file.name;
   showMediaPreview(file, type);
 
   // Clear file input so the same file can be selected again
@@ -3532,16 +3585,19 @@ loadFriends();
 // ================= SCREENSHOT DETECTION =================
 // Note: Real-time screenshot detection is limited to keyboard shortcuts on Desktop.
 // Browsers do not support detection on Mobile for security/privacy reasons.
-window.addEventListener('keyup', (e) => {
+window.addEventListener("keyup", (e) => {
   // Detect the Print Screen key (Key code 44)
-  if (e.key === 'PrintScreen' || e.keyCode === 44) {
+  if (e.key === "PrintScreen" || e.keyCode === 44) {
     sendScreenshotNotification();
   }
 });
 
-window.addEventListener('keydown', (e) => {
+window.addEventListener("keydown", (e) => {
   // Detect common shortcuts: Win+Shift+S (Windows), Cmd+Shift+4 or Cmd+Shift+3 (Mac)
-  const isScreenshotKeys = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S' || e.key === '4' || e.key === '3');
+  const isScreenshotKeys =
+    (e.ctrlKey || e.metaKey) &&
+    e.shiftKey &&
+    (e.key === "s" || e.key === "S" || e.key === "4" || e.key === "3");
   if (isScreenshotKeys) {
     sendScreenshotNotification();
   }
@@ -3549,7 +3605,7 @@ window.addEventListener('keydown', (e) => {
 
 function sendScreenshotNotification() {
   if (!currentFriendId) return;
-  
+
   socket.emit("screenshotTaken", { to: currentFriendId });
 }
 

@@ -609,6 +609,10 @@ CHAT SCREEN
   color: inherit;
   margin-top: 4px;
 }
+.document-msg:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transition: background 0.2s;
+}
 
 .message.audio-message {
   min-width: 280px;

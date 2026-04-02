@@ -80,8 +80,8 @@ async function setupMyProfile() {
   <div class="settings-title">Privacy</div>
  
   <div class="settings-item">
-    <span>Activity Status</span>
-    <input type="checkbox" id="activityStatus">
+    <span>Active Status</span>
+    <input type="checkbox" id="activeStatus">
   </div>
   <div class="settings-item">
     <span>Read Receipts</span>
@@ -115,7 +115,7 @@ async function setupMyProfile() {
   <div class="settings-title">Security</div>
   <div class="settings-item">
     <span>Change Password</span>
-    <button onclick="openChangePassword()">Update</button>
+    <button id="updatePasswordBtn" onclick="openChangePassword()">Update</button>
   </div>
   <div class="settings-item">
     <span>Two-Factor Authentication</span>
@@ -169,6 +169,10 @@ async function setupMyProfile() {
             <div style="margin:15px 0;">
                 <label style="font-size:12px; color:#aaa;">Full Name</label>
                 <input id="editInpName" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Email Address</label>
+                <input id="editInpEmail" type="email" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
             </div>
             <div style="margin:15px 0;">
                 <label style="font-size:12px; color:#aaa;">Bio</label>
@@ -307,6 +311,11 @@ async function setupMyProfile() {
     saveAdvancedProfile(); // Auto-save the adjusted result
   };
 
+  const activeStatusInp = document.getElementById("activeStatus");
+  if (activeStatusInp) {
+      activeStatusInp.onchange = () => saveAdvancedProfile();
+  }
+
   window.openEditProfile = () => {
     document.getElementById("fullEditModal").style.display = "flex";
   };
@@ -343,6 +352,10 @@ async function setupMyProfile() {
         document.getElementById("statScore").textContent = u.score || 0;
         document.getElementById("statLevel").textContent = u.level || 1;
 
+        if (document.getElementById("activeStatus")) {
+            document.getElementById("activeStatus").checked = u.active_status !== 0;
+        }
+
         if (u.avatar) {
           document.getElementById("myAvatarPreview").src = u.avatar;
           const pBtn = document.getElementById("profileBtn");
@@ -352,6 +365,7 @@ async function setupMyProfile() {
 
         if (showModal) {
           document.getElementById("editInpName").value = u.name;
+          document.getElementById("editInpEmail").value = u.email || "";
           document.getElementById("editInpBio").value = u.bio || "";
           document.getElementById("editInpCity").value = u.city || "";
           document.getElementById("editInpBirthday").value = u.birthday || "";
@@ -367,23 +381,39 @@ async function setupMyProfile() {
 
   window.saveAdvancedProfile = async () => {
     const name = document.getElementById("editInpName").value;
+    const email = document.getElementById("editInpEmail").value;
+
+    if (!name || name.trim() === "") {
+      showPopup("Name cannot be empty!");
+      return;
+    }
+    if (!email || !email.includes("@")) {
+      showPopup("Please enter a valid email address!");
+      return;
+    }
+
     const bio = document.getElementById("editInpBio").value;
     const city = document.getElementById("editInpCity").value;
     const birthday = document.getElementById("editInpBirthday").value;
     const links = document.getElementById("editInpLink").value;
     const avatar = document.getElementById("myAvatarPreview").src;
     const cover = document.getElementById("coverPreview").src;
+    const active_status = document.getElementById("activeStatus")?.checked ? 1 : 0;
 
     const res = await fetch("/api/updateProfile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, name, bio, links, avatar, cover, city, birthday }),
+      body: JSON.stringify({ userId, name, email, bio, links, avatar, cover, city, birthday, active_status }),
     });
     const data = await res.json();
-    if (data.success) {
-      showPopup("Profile updated!");
+    if (data.success) {      
+      // Update local storage so the chat header/sidebar updates the name
+      localStorage.setItem("username", name);
+
       document.getElementById("fullEditModal").style.display = "none";
       loadMyProfile(false);
+    } else {
+      showPopup(data.message || "Update failed");
     }
   };
 
