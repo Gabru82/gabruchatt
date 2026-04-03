@@ -14,16 +14,10 @@ body{
   height: 100vh;
 }
 
-canvas{
-  position:fixed;
-  top:0;
-  left:0;
-  z-index:1;
-}
 
 #authUI{
   position:absolute;
-  display:none;
+  display:flex;
   top: 0;
   left: 0;
   z-index:10;
@@ -95,4 +89,21 @@ canvas{
   color:#ffd447;
   cursor:pointer;
   font-weight:700;
+}
+.otp-row {
+  display: flex;
+  gap: 8px;
+}
+
+.otp-row input {
+  flex: 1;
+}
+
+.otp-row button {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: #ffd447;
+  font-weight: 600;
+  cursor: pointer;
 }

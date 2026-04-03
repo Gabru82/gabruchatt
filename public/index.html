@@ -1,32 +1,102 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Gabru</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #0f0f0f;
+      color: white;
+    }
+ 
+  </style>
 </head>
+
 <body>
-  <canvas id="canvas"></canvas>
 
   <div id="authUI">
+
+    <!-- 🔐 LOGIN -->
     <div id="loginForm" class="form active">
       <h2>Login</h2>
-      <input type="text" placeholder="Email" />
-      <input type="password" placeholder="Password" />
-      <button>Login</button>
+      <input id="loginEmail" type="email" placeholder="Email" />
+      <input id="loginPassword" type="password" placeholder="Password" />
+      <button id="loginBtn">Login</button>
+
+      <!-- 🔥 Forgot Password -->
+      <p>
+        <span id="showForgot">Forgot Password?</span>
+      </p>
+
       <p>No account? <span id="showRegister">Register</span></p>
     </div>
 
+    <!-- 📝 REGISTER -->
     <div id="registerForm" class="form">
       <h2>Register</h2>
-      <input type="text" placeholder="Name" />
-      <input type="email" placeholder="Email" />
-      <input type="password" placeholder="Password" />
-      <button>Create Account</button>
+
+      <input id="regName" type="text" placeholder="Name" />
+
+      <!-- 📧 Email + Send OTP -->
+      <div class="otp-row">
+        <input id="regEmail" type="email" placeholder="Email" />
+        <button id="sendRegOtpBtn" type="button">Send</button>
+      </div>
+
+      <!-- 🔢 OTP + Verify -->
+      <div class="otp-row">
+        <input id="regOtp" type="text" placeholder="Enter OTP" maxlength="6" />
+        <button id="verifyRegOtpBtn" type="button">Verify</button>
+      </div>
+
+      <!-- 🔑 Password -->
+      <input id="regPassword" type="password" placeholder="Password" style="display:none;" />
+
+      <!-- ✅ Register -->
+      <button id="registerBtn" style="display:none;">Create Account</button>
+
       <p>Have account? <span id="showLogin">Login</span></p>
     </div>
+
+    <!-- 📧 FORGOT PASSWORD (STEP 1: EMAIL) -->
+    <div id="forgotForm" class="form">
+      <h2>Forgot Password</h2>
+      <input id="forgotEmail" type="email" placeholder="Enter registered email" />
+      <button id="sendOtpBtn">Send OTP</button>
+
+      <p><span id="backToLogin1">Back to Login</span></p>
+    </div>
+
+    <!-- 🔢 OTP VERIFY (STEP 2) -->
+    <div id="otpForm" class="form">
+      <h2>Verify OTP</h2>
+      <input id="otpInput" type="text" placeholder="Enter OTP" />
+      <button id="verifyOtpBtn">Verify</button>
+
+      <p><span id="backToLogin2">Back to Login</span></p>
+    </div>
+
+    <!-- 🔑 RESET PASSWORD (STEP 3) -->
+    <div id="resetForm" class="form">
+      <h2>Reset Password</h2>
+      <input id="newPassword" type="password" placeholder="New Password" />
+      <input id="confirmPassword" type="password" placeholder="Confirm Password" />
+      <button id="savePasswordBtn">Save Password</button>
+
+      <p><span id="backToLogin3">Back to Login</span></p>
+    </div>
+
   </div>
 
   <script src="app.js"></script>
 </body>
+
 </html>

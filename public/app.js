@@ -1,19 +1,163 @@
 if (localStorage.getItem("userId")) {
   window.location.href = "/home.html";
 }
-
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-
 const authUI = document.getElementById("authUI");
 const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
-const showRegister = document.getElementById("showRegister");
-const showLogin = document.getElementById("showLogin");
+const forgotForm = document.getElementById("forgotForm");
+const otpForm = document.getElementById("otpForm");
+const resetForm = document.getElementById("resetForm");
 
-let isMobile = window.innerWidth < 768;
+function switchForm(targetForm) {
+  // Hide all forms
+  loginForm.classList.remove("active");
+  registerForm.classList.remove("active");
+  forgotForm.classList.remove("active");
+  otpForm.classList.remove("active");
+  resetForm.classList.remove("active");
 
+  // activate target
+  if (targetForm) targetForm.classList.add("active");
+}
+
+// Navigation Listeners
+document.getElementById("showForgot").onclick = () => switchForm(forgotForm);
+document.getElementById("showRegister").onclick = () => switchForm(registerForm);
+document.getElementById("showLogin").onclick = () => switchForm(loginForm);
+document.getElementById("backToLogin1").onclick = () => switchForm(loginForm);
+document.getElementById("backToLogin2").onclick = () => switchForm(loginForm);
+document.getElementById("backToLogin3").onclick = () => {
+  // Clear any temporary data when going back to login
+  window._resetEmail = null;
+  document.getElementById("forgotEmail").value = "";
+  document.getElementById("otpInput").value = "";
+  document.getElementById("newPassword").value = "";
+  document.getElementById("confirmPassword").value = "";
+  switchForm(loginForm);
+};
+
+// ================= FORGOT PASSWORD FLOW =================
+
+const forgotEmailInp = document.getElementById("forgotEmail");
+const sendForgotOtpBtn = document.getElementById("sendOtpBtn");
+const otpInputInp = document.getElementById("otpInput");
+const verifyForgotOtpBtn = document.getElementById("verifyOtpBtn");
+const newPasswordInp = document.getElementById("newPassword");
+const confirmPasswordInp = document.getElementById("confirmPassword");
+const savePasswordBtn = document.getElementById("savePasswordBtn");
+
+sendForgotOtpBtn.onclick = async () => {
+  const email = document.getElementById("forgotEmail").value;
+
+  if (!email) {
+    showPopup("Enter your email");
+    return;
+  }
+  
+  sendForgotOtpBtn.disabled = true;
+  sendForgotOtpBtn.innerText = "Sending...";
+
+  const res = await fetch("/api/sendForgotOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json();
+  showPopup(data.message);
+
+  if (data.success) {
+    window._resetEmail = email; // Store email only if OTP was successfully sent
+    let timeLeft = 60;
+    const timer = setInterval(() => {
+      timeLeft--;
+      sendForgotOtpBtn.innerText = `Resend (${timeLeft}s)`;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        sendForgotOtpBtn.disabled = false;
+        sendForgotOtpBtn.innerText = "Send OTP";
+      }
+    }, 1000);
+    switchForm(otpForm);
+  } else {
+    sendForgotOtpBtn.disabled = false;
+    sendForgotOtpBtn.innerText = "Send OTP";
+  }
+};
+
+verifyForgotOtpBtn.onclick = async () => {
+  const email = window._resetEmail;
+  const otp = document.getElementById("otpInput").value;
+
+  if (!email || !otp) {
+    showPopup("Please enter OTP and ensure email was sent.");
+    return;
+  }
+
+  verifyForgotOtpBtn.disabled = true;
+  verifyForgotOtpBtn.innerText = "Verifying...";
+
+  const res = await fetch("/api/verifyForgotOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await res.json();
+  showPopup(data.message);
+
+  if (data.success) {
+    switchForm(resetForm);
+  } else {
+    verifyForgotOtpBtn.disabled = false;
+    verifyForgotOtpBtn.innerText = "Verify";
+  }
+};
+
+savePasswordBtn.onclick = async () => {
+  const email = window._resetEmail;
+  const password = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("confirmPassword").value;
+
+  if (!email || !password || !confirm) {
+    showPopup("Fill all fields");
+    return;
+  }
+
+  if (password !== confirm) {
+    showPopup("Passwords do not match");
+    return;
+  }
+
+  savePasswordBtn.disabled = true;
+  savePasswordBtn.innerText = "Saving...";
+
+  const res = await fetch("/api/resetPassword", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      newPassword: password,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    showPopup(data.message);
+    window._resetEmail = null; // Clear temporary email
+    // Clear fields
+    document.getElementById("newPassword").value = "";
+    document.getElementById("confirmPassword").value = "";
+    
+    switchForm(loginForm);
+  } else {
+    showPopup(data.message || "Error updating password");
+  }
+};
 function setupCustomPopup() {
+  // Ensure the popup is always on top
+  const existingPopup = document.getElementById("customPopup");
   const popupHTML = `
         <div id="customPopup" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
             <div style="background:#222; padding:25px; border-radius:12px; text-align:center; color:white; border:1px solid #444; box-shadow:0 10px 30px rgba(0,0,0,0.5); min-width: 280px;">
@@ -21,7 +165,9 @@ function setupCustomPopup() {
             </div>
         </div>
     `;
-  document.body.insertAdjacentHTML("beforeend", popupHTML);
+  if (!existingPopup) {
+    document.body.insertAdjacentHTML("beforeend", popupHTML);
+  }
 }
 
 function showPopup(message) {
@@ -32,548 +178,92 @@ function showPopup(message) {
     popup.style.display = "flex";
     setTimeout(() => {
       popup.style.display = "none";
-    }, 2000);
+    }, 1000);
   }
 }
 
 setupCustomPopup();
 
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  isMobile = window.innerWidth < 768;
+const regEmailInp = document.getElementById("regEmail");
+const regNameInp = document.getElementById("regName");
+const regOtpInp = document.getElementById("regOtp");
+const regPasswordInp = document.getElementById("regPassword");
+const sendRegOtpBtn = document.getElementById("sendRegOtpBtn");
+const verifyRegOtpBtn = document.getElementById("verifyRegOtpBtn");
+const registerBtn = document.getElementById("registerBtn");
 
-  enterBtn.x = canvas.width / 2 - enterBtn.w / 2;
-  enterBtn.y = canvas.height / 2 - enterBtn.h / 2;
-}
-window.addEventListener("resize", resizeCanvas);
+const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-let state = "plane";
-let startTime = null;
-let animationPhase = "flyin"; // flyin → zoom → explode → build → form
-let planeScale = 2;
-const enterBtn = {
-  x: 0,
-  y: 0,
-  w: 180,
-  h: 64,
-  radius: 18,
-  morph: 0,
-};
+sendRegOtpBtn.onclick = async () => {
+  const email = regEmailInp.value;
+  const name = regNameInp.value;
 
-const plane = {
-  x: 0,
-  y: 0,
-  vx: 0,
-  vy: 0,
-  angle: 0,
-  trail: [],
-};
+  if (!name || !email) return showPopup("Name and Email are required");
+  if (!validateEmail(email)) return showPopup("Enter a valid email");
 
-let flyStart = null;
-let crashX = 0;
-let crashY = 0;
+  sendRegOtpBtn.disabled = true;
+  sendRegOtpBtn.innerText = "Sending...";
 
-let particles = [];
-let parachutes = [];
-let formReady = false;
+  const res = await fetch("/api/sendRegOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
 
-const FORM_W = 300;
-const FORM_H = 245;
+  const data = await res.json();
+  showPopup(data.message);
 
-class Particle {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 2 + Math.random() * 8;
-
-    this.vx = Math.cos(angle) * speed;
-    this.vy = Math.sin(angle) * speed;
-
-    this.size = 1.5 + Math.random() * 2.8;
-    this.tx = x;
-    this.ty = y;
-    this.mode = "explode";
-    this.alpha = 1;
-    this.wait = Math.random() * 5;
-  }
-
-  updateExplode() {
-    this.x += this.vx;
-    this.y += this.vy;
-    this.vx *= 0.965;
-    this.vy *= 0.965;
-  }
-
-  updateBuild() {
-    if (this.wait > 0) {
-      this.wait -= 1;
-      return;
-    }
-
-    this.x += (this.tx - this.x) * 0.20;
-    this.y += (this.ty - this.y) * 0.20;
-    this.vx *= 0.9;
-    this.vy *= 0.9;
-  }
-
-  draw() {
-    ctx.save();
-    ctx.globalAlpha = this.alpha;
-    ctx.fillStyle = "#ffd447";
-    if (!isMobile) {
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = "#ffd447";
-    }
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-class ParachuteGuy {
-  constructor(x, y) {
-    this.x = x + (Math.random() * 40 - 20);
-    this.y = y + (Math.random() * 20 - 10);
-
-    this.vx = (Math.random() * 4 - 2) * 1.2;
-    this.vy = -2 - Math.random() * 2.5;
-
-    this.parachuteOpen = false;
-    this.openTimer = 16 + Math.random() * 18;
-
-    this.sway = Math.random() * Math.PI * 2;
-    this.swaySpeed = 0.04 + Math.random() * 0.03;
-
-    this.bodyColor = ["#ffffff", "#ffd447", "#87ceeb", "#ff8fab"][
-      Math.floor(Math.random() * 4)
-    ];
-    this.dead = false;
-  }
-
-  update() {
-    if (!this.parachuteOpen) {
-      this.x += this.vx;
-      this.y += this.vy;
-      this.vy += 0.12;
-      this.openTimer -= 1;
-
-      if (this.openTimer <= 0) {
-        this.parachuteOpen = true;
-        this.vy = 1.2 + Math.random() * 0.8;
+  if (data.success) {
+    let timeLeft = 60;
+    const timer = setInterval(() => {
+      timeLeft--;
+      sendRegOtpBtn.innerText = `Resend (${timeLeft}s)`;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        sendRegOtpBtn.disabled = false;
+        sendRegOtpBtn.innerText = "Send";
       }
-    } else {
-      this.sway += this.swaySpeed;
-      this.x += Math.sin(this.sway) * 0.9 + this.vx * 0.15;
-      this.y += this.vy;
-      this.vy = Math.min(this.vy + 0.015, 1.8);
-
-      if (formReady) {
-        this.vy += 0.08;
-      }
-    }
-
-    if (this.y > canvas.height + 80) {
-      this.dead = true;
-    }
-  }
-
-  draw() {
-    ctx.save();
-
-    if (this.parachuteOpen) {
-      ctx.beginPath();
-      ctx.fillStyle = "#ff5e57";
-      ctx.arc(this.x, this.y - 16, 12, Math.PI, 0);
-      ctx.fill();
-
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(this.x - 12, this.y - 16);
-      ctx.lineTo(this.x - 4, this.y - 2);
-      ctx.moveTo(this.x + 12, this.y - 16);
-      ctx.lineTo(this.x + 4, this.y - 2);
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = this.bodyColor;
-    ctx.fillRect(this.x - 3, this.y - 2, 6, 10);
-
-    ctx.beginPath();
-    ctx.arc(this.x, this.y - 6, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
-  }
-}
-
-function initPlaneEntry() {
-  plane.x = -100; // start off-screen (left)
-  plane.y = canvas.height / 2;
-
-  plane.vx = 15;
-  plane.vy = 0;
-
-  plane.angle = 0;
-}
-
-function drawBackgroundDots() {
-  for (let i = 0; i < 30; i++) {
-    const x = (i * 173) % canvas.width;
-    const y = (i * 97) % canvas.height;
-    ctx.fillStyle = "rgba(255,255,255,0.03)";
-    ctx.beginPath();
-    ctx.arc(x, y, 1.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-function drawEnterButton() {
-  const morph = enterBtn.morph;
-
-  const w = enterBtn.w - morph * 70;
-  const h = enterBtn.h - morph * 28;
-  const r = enterBtn.radius + morph * 20;
-
-  ctx.save();
-  ctx.fillStyle = "#ffd447";
-  ctx.shadowBlur = 20;
-  ctx.shadowColor = "#ffd447";
-
-  roundRect(
-    ctx,
-    enterBtn.x + (enterBtn.w - w) / 2,
-    enterBtn.y + (enterBtn.h - h) / 2,
-    w,
-    h,
-    r,
-  );
-  ctx.fill();
-
-  if (morph < 0.92) {
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#111";
-    ctx.font = "bold 24px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("ENTER", canvas.width / 2, canvas.height / 2);
-  }
-
-  ctx.restore();
-}
-
-function drawPlane() {
-  plane.trail.push({ x: plane.x, y: plane.y, a: 0.22 + Math.random() * 0.2 });
-  if (plane.trail.length > 18) plane.trail.shift();
-
-  for (let i = 0; i < plane.trail.length; i++) {
-    const t = plane.trail[i];
-    ctx.save();
-    ctx.globalAlpha = ((i + 1) / plane.trail.length) * t.a;
-    ctx.fillStyle = "#ffd447";
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, 2 + i * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  ctx.save();
-  ctx.translate(plane.x, plane.y);
-  ctx.rotate(plane.angle);
-  ctx.scale(planeScale, planeScale);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.shadowBlur = 10;
-  ctx.shadowColor = "#ffffff";
-
-  ctx.beginPath();
-  ctx.moveTo(22, 0);
-  ctx.lineTo(-14, -8);
-  ctx.lineTo(-8, 0);
-  ctx.lineTo(-14, 8);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(-4, 0);
-  ctx.lineTo(-20, -14);
-  ctx.lineTo(-12, -2);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(-4, 0);
-  ctx.lineTo(-20, 14);
-  ctx.lineTo(-12, 2);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(-16, -2);
-  ctx.lineTo(-26, -10);
-  ctx.lineTo(-18, 0);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.restore();
-}
-
-function createExplosion(x, y, count = 300) {
-  particles = [];
-  const finalCount = isMobile ? Math.min(count, 250) : count;
-  for (let i = 0; i < finalCount; i++) {
-    particles.push(new Particle(x, y));
-  }
-}
-
-function spawnParachutes(x, y) {
-  parachutes = [];
-  for (let i = 0; i < 7; i++) {
-    parachutes.push(new ParachuteGuy(x, y));
-  }
-}
-
-function assignParticlesToFormTargets(centerX, centerY) {
-  const left = clamp(centerX - FORM_W / 2, 20, canvas.width - FORM_W - 20);
-  const top = clamp(centerY - FORM_H / 2, 20, canvas.height - FORM_H - 20);
-
-  const targets = [];
-
-  pushRectBorderTargets(targets, left, top, FORM_W, FORM_H, 9);
-  pushRectBorderTargets(targets, left + 22, top + 62, FORM_W - 44, 42, 8);
-  pushRectBorderTargets(targets, left + 22, top + 118, FORM_W - 44, 42, 8);
-  pushRectBorderTargets(targets, left + 22, top + 174, FORM_W - 44, 40, 8);
-
-  while (targets.length < particles.length) {
-    const tx = left + Math.random() * FORM_W;
-    const ty = top + Math.random() * FORM_H;
-    targets.push({ x: tx, y: ty });
-  }
-
-  for (let i = 0; i < particles.length; i++) {
-    particles[i].tx = targets[i].x;
-    particles[i].ty = targets[i].y;
-    particles[i].mode = "build";
-    particles[i].wait = Math.random() * 16;
-  }
-
-  // authUI.style.left = `${left}px`;
-  // authUI.style.top = `${top}px`;
-}
-
-function pushRectBorderTargets(arr, x, y, w, h, gap) {
-  for (let px = x; px <= x + w; px += gap) {
-    arr.push({ x: px, y: y });
-    arr.push({ x: px, y: y + h });
-  }
-  for (let py = y; py <= y + h; py += gap) {
-    arr.push({ x: x, y: py });
-    arr.push({ x: x + w, y: py });
-  }
-}
-
-function allParticlesSlowEnough() {
-  if (!particles.length) return false;
-  return particles.every((p) => Math.abs(p.vx) < 0.35 && Math.abs(p.vy) < 0.35);
-}
-
-function allParticlesBuilt() {
-  if (!particles.length) return false;
-  return particles.every(
-    (p) => Math.abs(p.x - p.tx) < 1.5 && Math.abs(p.y - p.ty) < 1.5,
-  );
-}
-
-function updateParticles() {
-  for (const p of particles) {
-    if (p.mode === "explode") p.updateExplode();
-    if (p.mode === "build") p.updateBuild();
-    p.draw();
-  }
-}
-
-function updateParachutes() {
-  for (const para of parachutes) {
-    para.update();
-    para.draw();
-  }
-  parachutes = parachutes.filter((p) => !p.dead);
-}
-
-function drawShockwave() {
-  ctx.save();
-  const radius = 22 + Math.sin(Date.now() * 0.03) * 2;
-  ctx.strokeStyle = "rgba(255,212,71,0.18)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(crashX, crashY, radius, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-function animate(time) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBackgroundDots();
-
-  if (!startTime) startTime = time;
-
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
-
-  // ================= ✈️ FLY + INSTANT BLAST =================
-  if (state === "plane") {
-    plane.x += plane.vx;
-
-    // 🔥 trigger blast EXACTLY when crossing center (no stop)
-    if (plane.x >= centerX) {
-      crashX = centerX;
-      crashY = centerY;
-
-      createExplosion(crashX, crashY, 1000);
-      spawnParachutes(crashX, crashY);
-
-      state = "explode";
-      // return; // stop drawing plane instantly
-    }
-
-    drawPlane();
-  }
-
-  // ================= 💥 EXPLOSION =================
-  else if (state === "explode") {
-    updateParticles();
-    updateParachutes();
-    drawShockwave();
-
-    // when particles slow → build form
-    if (allParticlesSlowEnough()) {
-      assignParticlesToFormTargets(crashX, crashY);
-      state = "build";
-    }
-  }
-
-  // ================= 🧱 BUILD FORM =================
-  else if (state === "build") {
-    updateParticles();
-    updateParachutes();
-
-    if (allParticlesBuilt()) {
-      if (!formReady) {
-        formReady = true;
-        authUI.style.display = "flex";
-      }
-      state = "form";
-    }
-  }
-
-  // ================= FINAL =================
-  else if (state === "form") {
-    updateParachutes();
-  }
-
-  requestAnimationFrame(animate);
-}
-
-function switchFormWithParticles(showRegisterForm) {
-  const currentLeft =
-    parseFloat(authUI.style.left) || (canvas.width - FORM_W) / 2;
-  const currentTop =
-    parseFloat(authUI.style.top) || (canvas.height - FORM_H) / 2;
-
-  const centerX = currentLeft + FORM_W / 2;
-  const centerY = currentTop + FORM_H / 2;
-
-  authUI.style.display = "none";
-  formReady = false;
-
-  if (showRegisterForm) {
-    loginForm.classList.remove("active");
-    registerForm.classList.add("active");
+    }, 1000);
   } else {
-    registerForm.classList.remove("active");
-    loginForm.classList.add("active");
+    sendRegOtpBtn.disabled = false;
+    sendRegOtpBtn.innerText = "Send";
   }
+};
 
-  for (const p of particles) {
-    p.mode = "explode";
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 1.5 + Math.random() * 3.5;
-    p.vx = Math.cos(angle) * speed;
-    p.vy = Math.sin(angle) * speed;
-    p.wait = Math.random() * 10;
+verifyRegOtpBtn.onclick = async () => {
+  const email = regEmailInp.value;
+  const otp = regOtpInp.value;
+
+  if (!otp) return showPopup("Enter the 6-digit OTP");
+
+  const res = await fetch("/api/verifyRegOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await res.json();
+  if (data.success) {
+    showPopup("Email Verified!");
+    verifyRegOtpBtn.innerText = "Verified";
+    verifyRegOtpBtn.style.backgroundColor = "#28a745";
+    verifyRegOtpBtn.style.color = "white";
+    verifyRegOtpBtn.disabled = true;
+    regOtpInp.disabled = true;
+    regEmailInp.disabled = true;
+
+    // Reveal password and create button
+    regPasswordInp.style.display = "block";
+    registerBtn.style.display = "block";
+  } else {
+    showPopup(data.message);
   }
+};
 
-  crashX = centerX;
-  crashY = centerY;
-
-  setTimeout(() => {
-    assignParticlesToFormTargets(centerX, centerY);
-    state = "build";
-  }, 280);
-}
-
-canvas.addEventListener("click", (e) => {
-  if (state !== "enter") return;
-
-  const x = e.clientX;
-  const y = e.clientY;
-
-  if (
-    x >= enterBtn.x &&
-    x <= enterBtn.x + enterBtn.w &&
-    y >= enterBtn.y &&
-    y <= enterBtn.y + enterBtn.h
-  ) {
-    state = "morph";
-  }
-});
-
-showRegister.addEventListener("click", () => {
-  if (state !== "form") return;
-  switchFormWithParticles(true);
-});
-
-showLogin.addEventListener("click", () => {
-  if (state !== "form") return;
-  switchFormWithParticles(false);
-});
-
-function roundRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-  ctx.lineTo(x + radius, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-resizeCanvas();
-initPlaneEntry();
-animate();
-
-document.querySelector("#registerForm button").onclick = async () => {
-  const name = document.querySelector(
-    "#registerForm input[placeholder='Name']",
-  ).value;
-  const email = document.querySelector(
-    "#registerForm input[placeholder='Email']",
-  ).value;
-  const password = document.querySelector(
-    "#registerForm input[placeholder='Password']",
-  ).value;
+registerBtn.onclick = async () => {
+  const name = regNameInp.value;
+  const email = regEmailInp.value;
+  const password = regPasswordInp.value;
 
   if (!name || !email || !password) {
     showPopup("Please fill the details");
@@ -597,7 +287,7 @@ document.querySelector("#registerForm button").onclick = async () => {
 
   if (data.success) {
     showPopup("Account created!");
-    switchFormWithParticles(false);
+    switchForm(loginForm);
   } else {
     showPopup(data.message);
   }

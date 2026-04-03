@@ -188,6 +188,146 @@ db.serialize(() => {
 });
 // ================= ROUTES =================
 
+// Temporary store for registration OTPs
+const regOtpStore = new Map();
+const forgotOtpStore = new Map();
+
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "rc82398266@gmail.com",
+    pass: "ntke okux hkas krva", // NOT your normal password
+  },
+});
+
+app.post("/api/sendRegOtp", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) return res.json({ success: false, message: "Email required" });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  regOtpStore.set(email, {
+    otp,
+    expires: Date.now() + 5 * 60 * 1000,
+    lastSent: Date.now(),
+  });
+
+  try {
+    await transporter.sendMail({
+      from: "your_email@gmail.com",
+      to: email,
+      subject: "Your OTP Code",
+      text: `Your OTP is: ${otp}`,
+    });
+
+    res.json({ success: true, message: "OTP sent to email" });
+  } catch (err) {
+    console.error(err);
+    res.json({ success: false, message: "Failed to send OTP" });
+  }
+});
+
+app.post("/api/verifyRegOtp", (req, res) => {
+  const { email, otp } = req.body;
+  const stored = regOtpStore.get(email);
+
+  if (!stored) return res.json({ success: false, message: "Please request a new OTP." });
+  if (Date.now() > stored.expires) {
+    regOtpStore.delete(email);
+    return res.json({ success: false, message: "OTP expired. Please request a new one." });
+  }
+  if (stored.otp !== otp) {
+    return res.json({ success: false, message: "Invalid OTP." });
+  }
+
+  res.json({ success: true });
+});
+
+app.post("/api/sendForgotOtp", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) return res.json({ success: false, message: "Email required" });
+
+  db.get("SELECT id FROM users WHERE email = ?", [email], async (err, row) => {
+    if (err) return res.json({ success: false, message: "Database error" });
+    if (!row) return res.json({ success: false, message: "Email not found" });
+
+    // Cooldown check: 60 seconds
+    const stored = forgotOtpStore.get(email);
+    if (stored && Date.now() - stored.lastSent < 60000) {
+      return res.json({ success: false, message: "Please wait 60s before resending." });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    forgotOtpStore.set(email, {
+      otp,
+      expires: Date.now() + 5 * 60 * 1000,
+      lastSent: Date.now(),
+      verified: false
+    });
+
+    try {
+      await transporter.sendMail({
+        from: '"Gabru Support" <rc82398266@gmail.com>',
+        to: email,
+        subject: "Password Reset OTP",
+        text: `Your OTP for password reset is: ${otp}. It will expire in 5 minutes.`,
+      });
+
+      res.json({ success: true, message: "OTP sent to your email" });
+    } catch (mailErr) {
+      console.error(mailErr);
+      res.json({ success: false, message: "Failed to send OTP" });
+    }
+  });
+});
+
+app.post("/api/verifyForgotOtp", (req, res) => {
+  const { email, otp } = req.body;
+  const stored = forgotOtpStore.get(email);
+
+  if (!stored) return res.json({ success: false, message: "Request a new OTP." });
+  
+  if (Date.now() > stored.expires) {
+    forgotOtpStore.delete(email);
+    return res.json({ success: false, message: "OTP expired." });
+  }
+  
+  if (stored.otp !== otp) {
+    return res.json({ success: false, message: "Invalid OTP." });
+  }
+
+  // Mark as verified so the reset password route can proceed
+  stored.verified = true;
+  forgotOtpStore.set(email, stored);
+
+  res.json({ success: true, message: "OTP verified" });
+});
+
+app.post("/api/resetPassword", (req, res) => {
+  const { email, newPassword } = req.body;
+  const stored = forgotOtpStore.get(email);
+
+  if (!stored || !stored.verified) {
+    return res.json({ success: false, message: "Session invalid or OTP not verified." });
+  }
+
+  db.run(
+    "UPDATE users SET password = ? WHERE email = ?",
+    [newPassword, email],
+    function (err) {
+      if (err) return res.json({ success: false, message: "Failed to update password." });
+      
+      forgotOtpStore.delete(email); // Cleanup session
+      res.json({ success: true, message: "Password updated successfully!" });
+    }
+  );
+});
+
 app.post("/register", (req, res) => {
   const { name, email, password } = req.body;
 
