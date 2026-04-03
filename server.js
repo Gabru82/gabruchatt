@@ -662,9 +662,12 @@ app.get("/getSharedInfo/:user1/:user2", (req, res) => {
 
       // 2. Get Shared Media
       db.all(
-        `SELECT id, sender, message, type, timestamp FROM messages 
+        `SELECT id, sender, message, type, caption, timestamp FROM messages 
          WHERE ((sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?))
-         AND type IN ('image', 'video', 'audio')
+         AND (
+           type IN ('image', 'video', 'audio', 'sticker', 'document')
+           OR (type = 'text' AND (message LIKE '%http://%' OR message LIKE '%https://%'))
+         )
          AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE ?)
          ORDER BY id DESC`,
         [user1, user2, user2, user1, `%,${user1},%`],

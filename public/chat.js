@@ -635,23 +635,34 @@ async function loadSharedInfo(friendId) {
 
   // 2. Render Media
   const grid = document.getElementById("sharedMediaGrid");
+  const linksList = document.getElementById("sharedLinksList");
+  const docsList = document.getElementById("sharedDocsList");
+
   grid.innerHTML = "";
+  linksList.innerHTML = "";
+  docsList.innerHTML = "";
 
   if (data.media.length === 0) {
-    grid.innerHTML =
-      "<p style='color:#777; width:100%; text-align:center;'>No shared media</p>";
+    const noDataHtml = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>Nothing shared yet</p>";
+    grid.innerHTML = noDataHtml;
+    linksList.innerHTML = noDataHtml;
+    docsList.innerHTML = noDataHtml;
     return;
   }
 
   data.media.forEach((msg) => {
-    const item = document.createElement("div");
-    item.className = "shared-media-item";
-    item.dataset.id = msg.id;
+    // --- CATEGORY: MEDIA ---
+    if (["image", "video", "audio", "sticker"].includes(msg.type)) {
+      const item = document.createElement("div");
+      item.className = "shared-media-item";
+      item.dataset.id = msg.id;
 
-    if (msg.type === "image") {
-      item.innerHTML = `<img src="${msg.message}" loading="lazy">`;
+      if (msg.type === "image") {
+        item.innerHTML = `<img src="${msg.message}" loading="lazy">`;
     } else if (msg.type === "video") {
       item.innerHTML = `<video src="${msg.message}"></video><div class="play-icon">▶</div>`;
+      } else if (msg.type === "sticker") {
+        item.innerHTML = `<img src="${msg.message}" loading="lazy" style="object-fit: contain; padding: 5px;">`;
     } else if (msg.type === "audio") {
       item.innerHTML = `<div class="audio-icon">🎤</div>`;
     }
@@ -661,12 +672,12 @@ async function loadSharedInfo(friendId) {
 
     const showDeleteOption = () => {
       isLongPress = true;
-      selectedMsgId = msg.id;
-      selectedMsgSender = msg.sender;
+        selectedMsgId = parseInt(msg.id);
+        selectedMsgSender = String(msg.sender);
 
       const optionsModal = document.getElementById("sharedMediaOptionsModal");
       optionsModal.style.display = "flex";
-
+        
       document.getElementById("smShowInChat").onclick = () => {
         optionsModal.style.display = "none";
         document.getElementById("userProfileModal").style.display = "none";
@@ -731,10 +742,90 @@ async function loadSharedInfo(friendId) {
     };
 
     grid.appendChild(item);
+    } 
+    // --- CATEGORY: LINKS ---
+    else if (msg.type === "text") {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urls = msg.message.match(urlRegex);
+      if (urls) {
+        urls.forEach(url => {
+          const item = document.createElement("div");
+          item.className = "link-item";
+          
+          // Simple icon based on common domains
+          let icon = "fa-link";
+          if (url.includes("youtube.com") || url.includes("youtu.be")) icon = "fa-youtube";
+          else if (url.includes("google.com")) icon = "fa-google";
+          else if (url.includes("github.com")) icon = "fa-github";
+
+          item.innerHTML = `
+            <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.05); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <i class="fa-solid ${icon}" style="color: #4facfe;"></i>
+            </div>
+            <div class="link-info">
+                <div class="link-title">${url}</div>
+                <div class="link-url">${url}</div>
+            </div>
+          `;
+          item.onclick = () => window.open(url, "_blank");
+          linksList.appendChild(item);
+        });
+      }
+    }
+    // --- CATEGORY: DOCUMENTS ---
+    else if (msg.type === "document") {
+      const item = document.createElement("div");
+      item.className = "doc-item";
+      const fileName = msg.caption || "Document";
+      
+      item.innerHTML = `
+        <div style="width: 40px; height: 40px; background: rgba(255,204,0,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+            <i class="fa-solid fa-file-pdf" style="color: #ffcc00;"></i>
+        </div>
+        <div class="doc-info">
+            <div class="doc-name">${fileName}</div>
+            <div class="doc-size">Shared via Gabru</div>
+        </div>
+        <i class="fa-solid fa-download" style="color: #888; margin-left: auto;"></i>
+      `;
+      item.onclick = () => {
+        const a = document.createElement("a");
+        a.href = msg.message;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+      docsList.appendChild(item);
+    }
   });
+
+  // Default fallback if a tab is empty after loop
+  if (!grid.innerHTML) grid.innerHTML = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No media</p>";
+  if (!linksList.innerHTML) linksList.innerHTML = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No links</p>";
+  if (!docsList.innerHTML) docsList.innerHTML = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No documents</p>";
 }
 
-// setupThemeUI();
+// Initialize Tab Switching Logic
+function setupProfileTabs() {
+  const tabs = document.querySelectorAll(".shared-tab");
+  const grid = document.getElementById("sharedMediaGrid");
+  const links = document.getElementById("sharedLinksList");
+  const docs = document.getElementById("sharedDocsList");
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      const target = tab.dataset.tab;
+      grid.style.display = target === "media" ? "grid" : "none";
+      links.style.display = target === "links" ? "flex" : "none";
+      docs.style.display = target === "docs" ? "flex" : "none";
+    });
+  });
+}
+setupProfileTabs();
 
 // ================= SOCKET =================
 // Helper for avatar
@@ -914,6 +1005,24 @@ let typingUsers = new Map();
 let typingTimers = new Map();
 const messagesContainer = document.getElementById("messages");
 const renderedMessages = new Set();
+let lastRenderedDate = null;
+
+function formatDateSeparator(date) {
+  const d = new Date(date);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (msgDate.getTime() === today.getTime()) return "Today";
+  if (msgDate.getTime() === yesterday.getTime()) return "Yesterday";
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
 
 // ================= SCROLL TO BOTTOM BUTTON =================
 const scrollToBottomBtn = document.createElement("div");
@@ -1419,6 +1528,18 @@ function appendMessage(
   replyTo = null,
 ) {
   if (msgId && renderedMessages.has(msgId)) return;
+
+  if (timestamp) {
+    const msgDateStr = new Date(timestamp).toDateString();
+    if (msgDateStr !== lastRenderedDate) {
+      const sep = document.createElement("div");
+      sep.className = "date-separator";
+      sep.innerHTML = `<span class="date-label">${formatDateSeparator(timestamp)}</span>`;
+      messagesContainer.appendChild(sep);
+      lastRenderedDate = msgDateStr;
+    }
+  }
+
   if (msgId) renderedMessages.add(msgId);
 
   const div = document.createElement("div");
@@ -2417,6 +2538,7 @@ async function openChat(friendId, friendName, friendAvatar = null) {
   const messagesEl = document.getElementById("messages");
   messagesEl.innerHTML = "";
   renderedMessages.clear();
+  lastRenderedDate = null;
 
   data.messages.forEach((msg) => {
     // 🔥 PASS seen_at
