@@ -134,10 +134,69 @@ async function setupMyProfile() {
     document.getElementById("fullEditModal").style.display = "flex";
   };
 
-  window.logoutFromProfile = () => {
-    if (confirm("Logout of your account?")) {
+  // 🔥 Open logout modal
+  window.logoutFromProfile = function () {
+    document.getElementById("logoutModal").style.display = "flex";
+  };
+
+  // 🔥 Close modal
+  window.closeLogoutModal = function () {
+    document.getElementById("logoutModal").style.display = "none";
+  };
+
+  // 🔥 Confirm logout
+  window.confirmLogout = function () {
+    localStorage.clear();
+    window.location.href = "/index.html";
+  };
+  // 🔥 Open password modal
+  window.deleteAccount = function () {
+    document.getElementById("passwordModal").style.display = "flex";
+  };
+
+  // 🔥 Close password modal (FIXED)
+  window.closePasswordModal = function () {
+    document.getElementById("passwordModal").style.display = "none";
+  };
+
+  // 🔥 Step 1: verify password input
+  window.verifyDeletePassword = function () {
+    const password = document.getElementById("deletePasswordInput").value;
+    if (!password) {
+      showPopup("Enter your password");
+      return;
+    }
+
+    // store temp password
+    window._deletePassword = password;
+
+    closePasswordModal();
+
+    // open confirm modal
+    document.getElementById("deleteConfirmModal").style.display = "flex";
+  };
+
+  // 🔥 Close confirm (FIXED)
+  window.closeDeleteConfirm = function () {
+    document.getElementById("deleteConfirmModal").style.display = "none";
+  };
+  // 🔥 Final confirm → API call
+  window.confirmDeleteAccount = async function () {
+    const password = window._deletePassword;
+
+    const res = await fetch("/api/deactivateAccount", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, password }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
       localStorage.clear();
       window.location.href = "/index.html";
+    } else {
+      showPopup(data.message || "Failed to deactivate account");
     }
   };
 
@@ -188,7 +247,8 @@ async function setupMyProfile() {
         }
 
         if (document.getElementById("readReceipts")) {
-          document.getElementById("readReceipts").checked = u.read_receipts !== 0;
+          document.getElementById("readReceipts").checked =
+            u.read_receipts !== 0;
           localStorage.setItem("readReceipts", u.read_receipts !== 0);
         }
 
@@ -242,13 +302,25 @@ async function setupMyProfile() {
     const cover = document.getElementById("coverPreview").src;
 
     const activeStatusEl = document.getElementById("activeStatus");
-    const active_status = activeStatusEl ? (activeStatusEl.checked ? 1 : 0) : undefined;
+    const active_status = activeStatusEl
+      ? activeStatusEl.checked
+        ? 1
+        : 0
+      : undefined;
 
     const readReceiptsEl = document.getElementById("readReceipts");
-    const read_receipts = readReceiptsEl ? (readReceiptsEl.checked ? 1 : 0) : undefined;
+    const read_receipts = readReceiptsEl
+      ? readReceiptsEl.checked
+        ? 1
+        : 0
+      : undefined;
 
     const notificationsEl = document.getElementById("pushNotifications");
-    const notifications_enabled = notificationsEl ? (notificationsEl.checked ? 1 : 0) : undefined;
+    const notifications_enabled = notificationsEl
+      ? notificationsEl.checked
+        ? 1
+        : 0
+      : undefined;
 
     const res = await fetch("/api/updateProfile", {
       method: "POST",
@@ -278,7 +350,10 @@ async function setupMyProfile() {
       }
 
       if (notifications_enabled !== undefined) {
-        localStorage.setItem("notificationsEnabled", notifications_enabled !== 0);
+        localStorage.setItem(
+          "notificationsEnabled",
+          notifications_enabled !== 0,
+        );
       }
 
       document.getElementById("fullEditModal").style.display = "none";
@@ -377,52 +452,48 @@ async function setupMyProfile() {
     }
   };
   function showConfirm(message, onYes) {
-  const modal = document.getElementById("confirmModal");
-  const text = document.getElementById("confirmText");
-  const yesBtn = document.getElementById("confirmYesBtn");
-  const noBtn = document.getElementById("confirmNoBtn");
+    const modal = document.getElementById("confirmModal");
+    const text = document.getElementById("confirmText");
+    const yesBtn = document.getElementById("confirmYesBtn");
+    const noBtn = document.getElementById("confirmNoBtn");
 
-  text.innerText = message;
-  modal.style.display = "flex";
+    text.innerText = message;
+    modal.style.display = "flex";
 
-  // remove old events
-  yesBtn.onclick = null;
-  noBtn.onclick = null;
+    // remove old events
+    yesBtn.onclick = null;
+    noBtn.onclick = null;
 
-  yesBtn.onclick = () => {
-    modal.style.display = "none";
-    onYes();
-  };
+    yesBtn.onclick = () => {
+      modal.style.display = "none";
+      onYes();
+    };
 
-  noBtn.onclick = () => {
-    modal.style.display = "none";
-  };
-}
-window.unblockUser = function (blockedId) {
+    noBtn.onclick = () => {
+      modal.style.display = "none";
+    };
+  }
+  window.unblockUser = function (blockedId) {
+    showConfirm("Unblock this user?", async () => {
+      const res = await fetch("/api/unblockUser", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          blockedId,
+        }),
+      });
 
-  showConfirm("Unblock this user?", async () => {
+      const data = await res.json();
 
-    const res = await fetch("/api/unblockUser", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        blockedId,
-      }),
+      if (data.success) {
+        showPopup("User unblocked");
+        viewBlockedUsers(); // refresh
+      } else {
+        showPopup("Failed to unblock");
+      }
     });
-
-    const data = await res.json();
-
-    if (data.success) {
-      showPopup("User unblocked");
-      viewBlockedUsers(); // refresh
-    } else {
-      showPopup("Failed to unblock");
-    }
-
-  });
-
-};
+  };
 }
 
 setupMyProfile();

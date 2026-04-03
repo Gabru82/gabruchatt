@@ -703,7 +703,8 @@
 
                     <div class="profile-bio" id="dispBio">Tell the world about yourself...</div>
                     <div class="profile-city" id="dispCity" style="font-size: 13px; color: #aaa; margin-bottom: 10px;">
-                        <i class="fa-solid fa-location-dot"></i> <span id="dispCityText">Add city</span></div>
+                        <i class="fa-solid fa-location-dot"></i> <span id="dispCityText">Add city</span>
+                    </div>
                     <div class="profile-links"><i class="fa-solid fa-link"></i> <span id="dispLink">Add website</span>
                     </div>
                 </div>
@@ -804,6 +805,44 @@
         </div>
     </div>
 
+    <!-- 🔐 Password Popup -->
+    <div id="passwordModal" class="center-modal">
+        <div class="center-box">
+            <h3>Confirm Password</h3>
+            <input type="password" id="deletePasswordInput" placeholder="Enter your password" />
+
+            <div class="center-actions">
+                <button onclick="closePasswordModal()">Cancel</button>
+                <button onclick="verifyDeletePassword()">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ⚠️ Final Confirm Popup -->
+    <div id="deleteConfirmModal" class="center-modal">
+        <div class="center-box">
+            <h3>Deactivate Account?</h3>
+            <p>You will be logged out and hidden from your friends.</p>
+
+            <div class="center-actions">
+                <button onclick="closeDeleteConfirm()">Cancel</button>
+                <button class="danger" onclick="confirmDeleteAccount()">Confirm</button>
+            </div>
+        </div>
+    </div>
+    <!-- 🔓 Logout Confirm Modal -->
+    <div id="logoutModal" class="center-modal">
+        <div class="center-box">
+            <h3>Logout?</h3>
+            <p>Are you sure you want to logout from your account?</p>
+
+            <div class="center-actions">
+                <button onclick="closeLogoutModal()">Cancel</button>
+                <button class="danger" onclick="confirmLogout()">Logout</button>
+            </div>
+        </div>
+    </div>
+    <!-- profile edit modal -->
     <div id="fullEditModal" class="theme-popup" style="z-index: 4000;">
         <div class="theme-popup-content" style="text-align:left; width:90%; max-width:400px;">
             <h3>Edit Profile</h3>

@@ -32,7 +32,7 @@ function showPopup(message) {
     popup.style.display = "flex";
     setTimeout(() => {
       popup.style.display = "none";
-    }, 1000);
+    }, 2000);
   }
 }
 
@@ -633,6 +633,6 @@ document.querySelector("#loginForm button").onclick = async () => {
       window.location.href = "/home.html";
     }, 1000);
   } else {
-    showPopup("Invalid login");
+    showPopup(data.message || "Invalid login");
   }
 };
