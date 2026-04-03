@@ -317,6 +317,7 @@ document.querySelector("#loginForm button").onclick = async () => {
   if (data.success) {
     localStorage.setItem("userId", data.id);
     localStorage.setItem("username", data.name);
+    localStorage.setItem("sessionToken", data.sessionToken);
 
     showPopup("Login Successful!");
     setTimeout(() => {

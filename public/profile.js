@@ -115,6 +115,150 @@ async function setupMyProfile() {
     saveAdvancedProfile(); // Auto-save the adjusted result
   };
 
+  // ================= UPDATE PASSWORD FLOW =================
+  let updateFlowMethod = 'id'; // 'id' for current pwd verification, 'email' for forgot flow
+  let updateFlowEmail = null;
+
+  const switchUpdateStep = (stepId) => {
+    ['updateStepVerify', 'updateStepEmail', 'updateStepOTP', 'updateStepNew'].forEach(id => {
+      document.getElementById(id).style.display = (id === stepId) ? 'block' : 'none';
+    });
+  };
+
+  window.openChangePassword = () => {
+    updateFlowMethod = 'id';
+    updateFlowEmail = null;
+    document.getElementById("currentPwdInp").value = "";
+    document.getElementById("updatePasswordModal").style.display = "flex";
+    switchUpdateStep('updateStepVerify');
+  };
+
+  window.closeUpdatePasswordModal = () => {
+    document.getElementById("updatePasswordModal").style.display = "none";
+  };
+
+  // Step 1: Verify Current Password
+  document.getElementById("verifyCurrentBtn").onclick = async (e) => {
+    const password = document.getElementById("currentPwdInp").value;
+    if (!password) return showPopup("Please enter your current password");
+
+    e.target.disabled = true;
+    const res = await fetch("/api/verifyCurrentPassword", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, password }),
+    });
+    const data = await res.json();
+    e.target.disabled = false;
+
+    if (data.success) {
+      updateFlowMethod = 'id';
+      switchUpdateStep('updateStepNew');
+    } else {
+      showPopup(data.message);
+    }
+  };
+
+  // Forgot Password Branch
+  document.getElementById("updateForgotBtn").onclick = () => {
+    switchUpdateStep('updateStepEmail');
+  };
+
+  document.getElementById("sendUpdateOtpBtn").onclick = async (e) => {
+    const email = document.getElementById("updateEmailInp").value;
+    if (!email || !email.includes("@")) return showPopup("Enter a valid registered email");
+
+    e.target.disabled = true;
+    const res = await fetch("/api/sendForgotOtp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    e.target.disabled = false;
+
+    if (data.success) {
+      updateFlowEmail = email;
+      showPopup("OTP sent to your email");
+      switchUpdateStep('updateStepOTP');
+    } else {
+      showPopup(data.message);
+    }
+  };
+
+  document.getElementById("verifyUpdateOtpBtn").onclick = async (e) => {
+    const otp = document.getElementById("updateOTPInp").value;
+    if (otp.length !== 6) return showPopup("Enter the 6-digit OTP");
+
+    e.target.disabled = true;
+    const res = await fetch("/api/verifyForgotOtp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: updateFlowEmail, otp }),
+    });
+    const data = await res.json();
+    e.target.disabled = false;
+
+    if (data.success) {
+      updateFlowMethod = 'email';
+      switchUpdateStep('updateStepNew');
+    } else {
+      showPopup(data.message);
+    }
+  };
+
+  // Step 2 (Final): Save New Password
+  document.getElementById("saveUpdateBtn").onclick = async (e) => {
+    const newPwd = document.getElementById("updateNewPwdInp").value;
+    const confirmPwd = document.getElementById("updateConfirmPwdInp").value;
+
+    if (newPwd.length < 6) return showPopup("Password must be at least 6 characters");
+    if (newPwd !== confirmPwd) return showPopup("Passwords do not match");
+
+    e.target.disabled = true;
+    e.target.innerText = "Saving...";
+
+    let success = false;
+    let message = "";
+
+    if (updateFlowMethod === 'id') {
+      // Use profile update route for logged-in user
+      const res = await fetch("/api/updateProfile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, password: newPwd }),
+      });
+      const data = await res.json();
+      success = data.success;
+      message = success ? "Password updated successfully" : (data.message || "Failed to update");
+    } else {
+      // Use reset password route for forgot flow
+      const res = await fetch("/api/resetPassword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: updateFlowEmail, newPassword: newPwd }),
+      });
+      const data = await res.json();
+      success = data.success;
+      message = data.message;
+    }
+
+    e.target.disabled = false;
+    e.target.innerText = "Save Password";
+
+    if (success) {
+      showPopup(message);
+      closeUpdatePasswordModal();
+      // Clear inputs for next time
+      document.getElementById("updateNewPwdInp").value = "";
+      document.getElementById("updateConfirmPwdInp").value = "";
+      document.getElementById("updateEmailInp").value = "";
+      document.getElementById("updateOTPInp").value = "";
+    } else {
+      showPopup(message);
+    }
+  };
+
   const activeStatusInp = document.getElementById("activeStatus");
   if (activeStatusInp) {
     activeStatusInp.onchange = () => saveAdvancedProfile();
@@ -416,6 +560,59 @@ async function setupMyProfile() {
   }
 
   loadMyProfile(false);
+
+  window.viewLoginActivity = async function () {
+    const modal = document.getElementById("loginActivityModal");
+    const list = document.getElementById("sessionsList");
+    const currentToken = localStorage.getItem("sessionToken");
+
+    modal.style.display = "flex";
+    list.innerHTML = "<p style='text-align:center; color:#888;'>Loading sessions...</p>";
+
+    try {
+      const res = await fetch(`/api/getLoginSessions/${userId}`);
+      const data = await res.json();
+
+      if (!data.success || !data.sessions.length) {
+        list.innerHTML = "<p style='color:#888; text-align:center;'>No active sessions found</p>";
+        return;
+      }
+
+      list.innerHTML = "";
+      data.sessions.forEach(sess => {
+        const isCurrent = sess.session_token === currentToken;
+        const div = document.createElement("div");
+        div.className = "session-item";
+        div.style.cssText = "background:rgba(30,30,30,0.9); padding:15px; border-radius:12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(255,255,255,0.05);";
+        
+        div.innerHTML = `
+          <div class="session-info" style="text-align:left;">
+            <div style="font-weight:bold; font-size:14px; color:#fff;">
+              ${sess.user_agent.split(')')[0].split('(')[1] || 'Unknown Device'} 
+              ${isCurrent ? '<span style="color:#00ff55; font-size:11px; margin-left:8px;">THIS DEVICE</span>' : ''}
+            </div>
+            <div style="font-size:12px; color:#aaa; margin-top:4px;">IP: ${sess.ip_address}</div>
+            <div style="font-size:11px; color:#666; margin-top:2px;">Logged in: ${new Date(sess.login_time).toLocaleString()}</div>
+          </div>
+          ${!isCurrent ? `<button onclick="terminateSession('${sess.session_token}')" style="background:#ff4d4d; color:white; border:none; padding:8px 15px; border-radius:8px; font-size:12px; cursor:pointer;">Logout</button>` : ''}
+        `;
+        list.appendChild(div);
+      });
+    } catch (e) {
+      list.innerHTML = "<p style='color:#ff4d4d;'>Error loading sessions</p>";
+    }
+  };
+
+  window.terminateSession = async function (token) {
+    const res = await fetch("/api/terminateSession", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, sessionToken: token }),
+    });
+    const data = await res.json();
+    if (data.success) viewLoginActivity(); // Refresh list
+  };
+
   window.viewBlockedUsers = async function () {
     const modal = document.getElementById("blockedUsersModal");
     const list = document.getElementById("blockedUsersList");

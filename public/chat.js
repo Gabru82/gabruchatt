@@ -455,6 +455,147 @@ window.requestFromShare = async function (targetId, msgId) {
 
 setupShareModal();
 
+// ================= NOTIFICATIONS LOGIC =================
+
+let isNotificationPanelOpen = false;
+
+window.toggleNotificationPanel = async function() {
+    const panel = document.getElementById("notificationPanel");
+    isNotificationPanelOpen = !isNotificationPanelOpen;
+    
+    if (isNotificationPanelOpen) {
+        panel.classList.add("active");
+        await loadNotifications();
+        markNotificationsRead();
+    } else {
+        panel.classList.remove("active");
+    }
+};
+
+async function loadNotifications() {
+    const res = await fetch(`/api/getNotifications/${userId}`);
+    const data = await res.json();
+    const list = document.getElementById("notificationList");
+    
+    if (!data.success || data.notifications.length === 0) {
+        list.innerHTML = `
+            <div style="text-align:center; padding:50px 20px; color:#666;">
+                <i class="fa-regular fa-bell" style="font-size:40px; margin-bottom:15px; opacity:0.3;"></i>
+                <p>No notifications yet</p>
+            </div>`;
+        updateNotificationBadge(0);
+        return;
+    }
+
+    list.innerHTML = "";
+    let unreadCount = 0;
+
+    data.notifications.forEach(n => {
+        if (n.status === 'unread') unreadCount++;
+        
+        const card = document.createElement("div");
+        card.className = "notification-card";
+        
+        let actionButtons = "";
+        let actionText = "";
+
+        if (n.type === 'friend_request') {
+            actionText = "sent you a friend request";
+            actionButtons = `
+                <div style="display:flex; gap:8px; margin-top:10px;">
+                    <button class="save-btn" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'accept', ${n.id})">Accept</button>
+                    <button class="action-btn-outline" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'reject', ${n.id})">Reject</button>
+                </div>`;
+        } else if (n.type === 'request_accepted') {
+            actionText = "accepted your friend request";
+            actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
+        }
+
+        card.innerHTML = `
+            <img src="${getAvatarSrc(n.avatar || n.sender_id)}">
+            <div style="flex:1;">
+                <div style="font-size:13px;">
+                    <strong style="color:#fff;">${n.name}</strong> 
+                    <span style="color:#aaa;">${actionText}</span>
+                </div>
+                <div style="font-size:10px; color:#666; margin-top:4px;">${timeAgo(n.timestamp)}</div>
+                ${actionButtons}
+            </div>
+        `;
+        list.appendChild(card);
+    });
+
+    updateNotificationBadge(unreadCount);
+}
+
+async function handleNotificationAction(senderId, action, notifId) {
+    let endpoint = action === 'accept' ? '/acceptRequest' : '/api/rejectRequest';
+    
+    // If accepting, we need the request ID. For simplicity, the notification system here assumes 
+    // we handle via senderId/receiverId pairs for direct rejection or fetching the request ID
+    let body = action === 'accept' 
+        ? { id: await getRequestId(senderId), userId: userId, senderId: senderId }
+        : { senderId: senderId, receiverId: userId };
+
+    const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+        loadNotifications();
+        loadFriends();
+        if (action === 'accept') socket.emit("friendRequestAccepted", { friendId: senderId });
+    }
+}
+
+async function getRequestId(senderId) {
+    const res = await fetch(`/getRequests/${userId}`);
+    const data = await res.json();
+    const req = data.requests.find(r => r.senderId == senderId);
+    return req ? req.id : null;
+}
+
+async function markNotificationsRead() {
+    await fetch("/api/markNotificationsRead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+    });
+    setTimeout(() => updateNotificationBadge(0), 2000);
+}
+
+window.clearAllNotifications = async function() {
+    if (!confirm("Clear all notifications?")) return;
+    const res = await fetch("/api/clearNotifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+    });
+    if (res.ok) loadNotifications();
+};
+
+function updateNotificationBadge(count) {
+    const badge = document.getElementById("notificationBadge");
+    if (count > 0) {
+        badge.innerText = count > 9 ? "9+" : count;
+        badge.style.display = "block";
+    } else {
+        badge.style.display = "none";
+    }
+}
+
+// Initialize badge on load
+setTimeout(async () => {
+    const res = await fetch(`/api/getNotifications/${userId}`);
+    const data = await res.json();
+    if (data.success) {
+        const unread = data.notifications.filter(n => n.status === 'unread').length;
+        updateNotificationBadge(unread);
+    }
+}, 1000);
+
 // ================= USER PROFILE & MEDIA MODAL =================
 
 function openProfileMenu(e) {
@@ -956,11 +1097,27 @@ function removeFriendFromUI(targetId) {
 
 const socket = io();
 socket.on("connect", () => {
-  socket.emit("register", userId);
+  socket.emit("register", { 
+    userId, 
+    sessionToken: localStorage.getItem("sessionToken") 
+  });
+});
+
+socket.on("forcedLogout", () => {
+  localStorage.clear();
+  window.location.href = "/index.html?reason=session_terminated";
+});
+
+socket.on("newNotification", () => {
+    if (canPlaySounds()) messageSound.play().catch(() => {});
+    if (isNotificationPanelOpen) loadNotifications();
+    else {
+        // Fetch unread count to update badge
+        loadNotifications(); 
+    }
 });
 
 socket.on("newFriendRequest", () => {
-  showPopup("You have a new friend request!");
   const requestModal = document.getElementById("requestModal");
   if (requestModal && requestModal.style.display === "flex") {
     loadRequests();
@@ -1068,7 +1225,6 @@ async function cancelRequest(id) {
   });
 
   if (res.ok) {
-    showPopup("Request canceled");
     socket.emit("cancelFriendRequest", { receiver: id });
     // Instantly refresh search view to show "Send Request" button
     document.getElementById("searchBtn")?.click();

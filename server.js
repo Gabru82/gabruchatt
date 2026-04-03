@@ -13,6 +13,7 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (err) => {
   console.error("🔥 UNHANDLED REJECTION:", err);
 });
+const sessionTokens = new Map(); // Map socket.id -> sessionToken
 const server = http.createServer(app);
 const io = require("socket.io")(server, {
   maxHttpBufferSize: 1e8,
@@ -193,6 +194,31 @@ db.serialize(() => {
       UNIQUE(blocker, blocked)
     )
   `);
+
+  // ================= NOTIFICATIONS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notifications(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      sender_id INTEGER,
+      type TEXT,
+      status TEXT DEFAULT 'unread',
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // ================= SESSIONS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sessions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      session_token TEXT UNIQUE,
+      user_agent TEXT,
+      ip_address TEXT,
+      login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      status INTEGER DEFAULT 1
+    )
+  `);
 });
 // ================= ROUTES =================
 
@@ -353,6 +379,8 @@ app.post("/register", (req, res) => {
 
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
+  const userAgent = req.headers["user-agent"] || "Unknown Device";
+  const ip = req.ip || req.connection.remoteAddress;
 
   db.get(
     "SELECT id, name, account_status FROM users WHERE email=? AND password=?",
@@ -364,11 +392,23 @@ app.post("/login", (req, res) => {
         if (row.account_status === 0) {
           return res.json({ success: false, message: "Account is deactivated" });
         }
-        res.json({
-          success: true,
-          id: row.id,
-          name: row.name,
-        });
+
+        // Generate a simple session token
+        const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        
+        db.run(
+          "INSERT INTO sessions(user_id, session_token, user_agent, ip_address) VALUES(?,?,?,?)",
+          [row.id, sessionToken, userAgent, ip],
+          (sessErr) => {
+            if (sessErr) return res.status(500).json({ success: false });
+            res.json({
+              success: true,
+              id: row.id,
+              name: row.name,
+              sessionToken: sessionToken
+            });
+          }
+        );
       } else {
         res.json({ success: false, message: "Invalid email or password" });
       }
@@ -386,6 +426,85 @@ app.post("/api/deactivateAccount", (req, res) => {
       if (err) return res.json({ success: false });
       res.json({ success: true });
     });
+  });
+});
+
+app.post("/api/verifyCurrentPassword", (req, res) => {
+  const { userId, password } = req.body;
+  if (!userId || !password) return res.json({ success: false, message: "Missing credentials" });
+  db.get("SELECT password FROM users WHERE id=?", [userId], (err, row) => {
+    if (err || !row || row.password !== password) {
+      return res.json({ success: false, message: "Incorrect current password" });
+    }
+    res.json({ success: true });
+  });
+});
+
+// ================= NOTIFICATION ROUTES =================
+
+app.get("/api/getNotifications/:userId", (req, res) => {
+  const { userId } = req.params;
+  db.all(
+    `SELECT n.*, u.name, u.avatar 
+     FROM notifications n 
+     JOIN users u ON n.sender_id = u.id 
+     WHERE n.user_id = ? 
+     ORDER BY n.timestamp DESC`,
+    [userId],
+    (err, rows) => {
+      if (err) return res.json({ success: false });
+      res.json({ success: true, notifications: rows || [] });
+    }
+  );
+});
+
+app.post("/api/markNotificationsRead", (req, res) => {
+  const { userId } = req.body;
+  db.run("UPDATE notifications SET status = 'read' WHERE user_id = ?", [userId], (err) => {
+    res.json({ success: !err });
+  });
+});
+
+app.post("/api/clearNotifications", (req, res) => {
+  const { userId } = req.body;
+  db.run("DELETE FROM notifications WHERE user_id = ?", [userId], (err) => {
+    res.json({ success: !err });
+  });
+});
+
+app.post("/api/rejectRequest", (req, res) => {
+  const { senderId, receiverId } = req.body;
+  db.run(
+    "DELETE FROM friend_requests WHERE sender = ? AND receiver = ? AND status = 'pending'",
+    [senderId, receiverId],
+    function(err) {
+      if (err) return res.json({ success: false });
+      // Remove associated notification
+      db.run("DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'", [receiverId, senderId]);
+      res.json({ success: true });
+    }
+  );
+});
+
+app.get("/api/getLoginSessions/:userId", (req, res) => {
+  const { userId } = req.params;
+  db.all("SELECT * FROM sessions WHERE user_id = ? AND status = 1 ORDER BY login_time DESC", [userId], (err, rows) => {
+    if (err) return res.json({ success: false });
+    res.json({ success: true, sessions: rows });
+  });
+});
+
+app.post("/api/terminateSession", (req, res) => {
+  const { userId, sessionToken } = req.body;
+  db.run("UPDATE sessions SET status = 0 WHERE user_id = ? AND session_token = ?", [userId, sessionToken], function(err) {
+    if (err) return res.json({ success: false });
+    for (const [socketId, token] of sessionTokens.entries()) {
+      if (token === sessionToken) {
+        io.to(socketId).emit("forcedLogout");
+        break;
+      }
+    }
+    res.json({ success: true });
   });
 });
 
@@ -600,6 +719,8 @@ app.post("/sendRequest", (req, res) => {
         [sender, receiver, "pending"],
         function (err) {
           if (err) return res.json({ success: false });
+          // Trigger notification
+          db.run("INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)", [receiver, sender, 'friend_request']);
           res.json({ success: true });
         },
       );
@@ -617,6 +738,8 @@ app.post("/api/cancelRequest", (req, res) => {
     [sender, receiver],
     function (err) {
       if (err) return res.status(500).json({ success: false });
+      // Remove notification if sender cancels
+      db.run("DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'", [receiver, sender]);
       res.json({ success: true });
     }
   );
@@ -656,6 +779,11 @@ app.post("/acceptRequest", (req, res) => {
               console.error("UPDATE REQUEST ERROR:", err);
               return res.json({ success: false });
             }
+            
+            // Notify original sender that their request was accepted
+            db.run("INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)", [row.sender, userId, 'request_accepted']);
+            // Mark original request notification as resolved by deleting it
+            db.run("DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'", [userId, row.sender]);
 
             res.json({ success: true });
           },
@@ -1057,10 +1185,13 @@ function getSessionByUserId(userId) {
 io.on("connection", (socket) => {
   console.log("User connected");
 
-  socket.on("register", (userId) => {
-    const id = String(userId);
+  socket.on("register", (data) => {
+    const id = String(data.userId);
+    const token = data.sessionToken;
     onlineUsers.set(id, socket.id);
+    if (token) sessionTokens.set(socket.id, token);
     socket.userId = id;
+    socket.sessionToken = token;
     socket.join(`user_${id}`);
     io.emit("userOnline", id);
 
@@ -1083,6 +1214,7 @@ io.on("connection", (socket) => {
 
       onlineUsers.delete(socket.userId);
       activeChats.delete(socket.userId);
+      sessionTokens.delete(socket.id);
       const now = new Date().toISOString();
       db.run("UPDATE users SET last_seen=? WHERE id=?", [now, socket.userId]);
       io.emit("userOffline", socket.userId);
@@ -1797,10 +1929,12 @@ io.on("connection", (socket) => {
 
   socket.on("friendRequestSent", ({ receiver }) => {
     io.to(`user_${String(receiver)}`).emit("newFriendRequest");
+    io.to(`user_${String(receiver)}`).emit("newNotification");
   });
 
   socket.on("cancelFriendRequest", ({ receiver }) => {
     io.to(`user_${String(receiver)}`).emit("requestCanceled");
+    io.to(`user_${String(receiver)}`).emit("newNotification");
   });
 
   socket.on("friendRequestAccepted", ({ friendId }) => {
@@ -1810,6 +1944,7 @@ io.on("connection", (socket) => {
     // Notify both users to refresh their lists
     io.to(`user_${receiverId}`).emit("friendAdded");
     io.to(`user_${senderId}`).emit("friendAdded");
+    io.to(`user_${receiverId}`).emit("newNotification");
   });
 
   socket.on("toggleCamera", ({ to, isVideo }) => {
