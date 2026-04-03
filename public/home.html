@@ -449,6 +449,196 @@
             <button id="closeCameraBtn"
                 style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: white; background: transparent; border: none; cursor: pointer;">&times;</button>
         </div>
+        <!-- // theam and wallpaper // -->
+        <div id="themeOptionsPopup" class="theme-popup">
+            <div class="theme-popup-content">
+                <div class="theme-option" id="setWallpaperBtn">Set Wallpaper</div>
+                <div class="theme-option" id="setThemeBtn">Set Theme</div>
+                <div class="theme-option" id="cancelThemeBtn">Cancel</div>
+            </div>
+        </div>
+
+        <div id="themeSelectionModal" class="theme-popup">
+            <div class="theme-popup-content">
+                <h3>Choose a Theme</h3>
+                <div class="theme-previews">
+                    <div class="theme-preview" data-theme="theme-1">
+                        <div class="bg"></div>
+                        <div class="msg-box"></div>
+                        <span>Default</span>
+                    </div>
+                    <div class="theme-preview" data-theme="theme-2">
+                        <div class="bg"></div>
+                        <div class="msg-box"></div>
+                        <span>Forest</span>
+                    </div>
+                    <div class="theme-preview" data-theme="theme-3">
+                        <div class="bg"></div>
+                        <div class="msg-box"></div>
+                        <span>Dusk</span>
+                    </div>
+                    <div class="theme-preview" data-theme="theme-4">
+                        <div class="bg"></div>
+                        <div class="msg-box"></div>
+                        <span>Ocean</span>
+                    </div>
+                    <div class="theme-preview" data-theme="theme-5">
+                        <div class="bg"></div>
+                        <div class="msg-box"></div>
+                        <span>Pastel</span>
+                    </div>
+                    <div class="theme-preview" data-theme="theme-6">
+                        <div class="bg"></div>
+                        <div class="msg-box"></div>
+                        <span>gabru</span>
+                    </div>
+                </div>
+                <div class="theme-option" id="cancelThemeSelectionBtn">Cancel</div>
+            </div>
+        </div>
+        <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" />
+
+
+        <!-- // friend profile model // -->
+        <div id="userProfileModal" class="user-profile-modal">
+            <div class="user-profile-content">
+
+                <!-- COVER + HEADER -->
+                <div class="profile-cover-section">
+                    <img id="profileCoverImg" class="profile-cover-img" />
+
+                    <button class="close-profile-btn"
+                        onclick="document.getElementById('userProfileModal').style.display='none'">
+                        ✕
+                    </button>
+
+
+                </div>
+                <div class="profile-overlay-info">
+                    <img id="profileModalAvatar" class="profile-modal-avatar">
+
+                    <div class="profile-text">
+                        <h2 id="profileModalName">User Name</h2>
+                        <p id="profileUsername">@username</p>
+
+                        <!-- ✅ STATUS BACK -->
+                        <p id="profileModalStatus" class="profile-status"></p>
+                        <span id="profileCityBottom"></span>
+
+                    </div>
+                </div>
+                <!-- FRIENDSHIP -->
+                <div class="friendship-days">
+                    <span id="friendshipDaysCount">0</span> Days of Friendship
+                </div>
+
+                <!-- EXTRA INFO -->
+                <div class="extra-profile-info">
+                    <p id="profileBioBottom">No bio available</p>
+
+                    <div class="profile-extra-row">
+                        <span id="profileEmail"></span>
+                    </div>
+
+                    <div class="profile-stats-bar">
+                        <div class="stat-box">
+                            <span id="statBirthday">--</span>
+                            <span class="stat-label">Birthday</span>
+                        </div>
+                        <div class="stat-box">
+                            <span id="statScore">0</span>
+                            <span class="stat-label">Score</span>
+                        </div>
+                        <div class="stat-box">
+                            <span id="statLevel">1</span>
+                            <span class="stat-label">Level</span>
+                        </div>
+                        <div class="stat-box">
+                            <span id="statPosts">0</span>
+                            <span class="stat-label">Posts</span>
+                        </div>
+                        <div class="profile-menu-wrapper">
+                            <div class="profile-menu-btn" onclick="openProfileMenu(event)">
+                                ⋮
+                            </div>
+
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- SHARED MEDIA -->
+                <div class="shared-media-section">
+                    <h3>Shared Media</h3>
+                    <div id="sharedMediaGrid" class="media-grid"></div>
+                </div>
+
+            </div>
+        </div>
+
+
+
+
+
+
+        <div id="profileActionSheet" class="action-sheet">
+
+            <div class="action-sheet-overlay" onclick="closeProfileMenu()"></div>
+
+            <div class="action-sheet-content">
+
+                <div class="sheet-handle"></div>
+
+                <!-- TOGGLES -->
+                <div class="sheet-toggle-item">
+                    <div class="left">
+                        <i class="fa-solid fa-bell-slash"></i>
+                        <span>Mute Chat</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="muteChatToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="sheet-toggle-item">
+                    <div class="left">
+                        <i class="fa-solid fa-phone-slash"></i>
+                        <span>Mute Calls</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="muteCallToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <!-- NORMAL ACTIONS -->
+                <div class="sheet-item" onclick="setChatTimer()">
+                    <i class="fa-solid fa-clock"></i> Chat Delete Timer
+                </div>
+
+                <div class="sheet-item" onclick="shareProfile()">
+                    <i class="fa-solid fa-share-nodes"></i> Share Profile
+                </div>
+
+                <div class="sheet-item danger" onclick="removeFriend()">
+                    <i class="fa-solid fa-user-minus"></i> Remove Friend
+                </div>
+
+                <div class="sheet-item danger" onclick="blockUser()">
+                    <i class="fa-solid fa-ban"></i> Block User
+                </div>
+
+                <div class="sheet-cancel" onclick="closeProfileMenu()">Cancel</div>
+
+            </div>
+        </div>
+
+
+
+
+        
     </div>
 
 

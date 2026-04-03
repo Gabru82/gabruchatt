@@ -42,7 +42,7 @@ db.serialize(() => {
       console.error("last_seen error:", err.message);
     }
   });
-  
+
   db.run("ALTER TABLE users ADD COLUMN bio TEXT", (err) => {
     if (err && !err.message.includes("duplicate column")) {
       console.error("bio error:", err.message);
@@ -79,11 +79,14 @@ db.serialize(() => {
       console.error("birthday error:", err.message);
     }
   });
-  db.run("ALTER TABLE users ADD COLUMN active_status INTEGER DEFAULT 1", (err) => {
-    if (err && !err.message.includes("duplicate column")) {
-      console.error("active_status error:", err.message);
-    }
-  });
+  db.run(
+    "ALTER TABLE users ADD COLUMN active_status INTEGER DEFAULT 1",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("active_status error:", err.message);
+      }
+    },
+  );
 
   // ================= FRIENDS =================
   db.run(`
@@ -146,6 +149,16 @@ db.serialize(() => {
       UNIQUE(user1_id, user2_id)
     )
   `);
+
+  // ================= BLOCKS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blocks(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blocker INTEGER,
+      blocked INTEGER,
+      UNIQUE(blocker, blocked)
+    )
+  `);
 });
 // ================= ROUTES =================
 
@@ -189,10 +202,14 @@ app.post("/api/getMessagesByIds", (req, res) => {
   const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) return res.json({ messages: [] });
   const placeholders = ids.map(() => "?").join(",");
-  db.all(`SELECT * FROM messages WHERE id IN (${placeholders})`, ids, (err, rows) => {
-    if (err) return res.status(500).json({ messages: [] });
-    res.json({ messages: rows });
-  });
+  db.all(
+    `SELECT * FROM messages WHERE id IN (${placeholders})`,
+    ids,
+    (err, rows) => {
+      if (err) return res.status(500).json({ messages: [] });
+      res.json({ messages: rows });
+    },
+  );
 });
 
 app.get("/api/getMyProfile/:userId", (req, res) => {
@@ -202,18 +219,21 @@ app.get("/api/getMyProfile/:userId", (req, res) => {
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
-      
+
       // Enrich with dynamic stats
       db.get(
         "SELECT COUNT(*) as count FROM (SELECT user2 FROM friends WHERE user1 = ? UNION SELECT user1 FROM friends WHERE user2 = ?)",
         [userId, userId],
         (err, fRow) => {
-        row.friendsCount = fRow ? fRow.count : 0;
-        db.get("SELECT COUNT(*) as count FROM messages WHERE sender=?", [userId], (err, mRow) => {
-          row.postsCount = mRow ? mRow.count : 0;
-          
-          // Calculate score based on unique chatting days per friend
-          const scoreQuery = `
+          row.friendsCount = fRow ? fRow.count : 0;
+          db.get(
+            "SELECT COUNT(*) as count FROM messages WHERE sender=?",
+            [userId],
+            (err, mRow) => {
+              row.postsCount = mRow ? mRow.count : 0;
+
+              // Calculate score based on unique chatting days per friend
+              const scoreQuery = `
             SELECT COUNT(*) as total_score FROM (
               SELECT DISTINCT 
                 CASE WHEN sender = ? THEN receiver ELSE sender END as friend_id, 
@@ -221,13 +241,15 @@ app.get("/api/getMyProfile/:userId", (req, res) => {
               FROM messages 
               WHERE sender = ? OR receiver = ?
             )`;
-          db.get(scoreQuery, [userId, userId, userId], (err, sRow) => {
-            row.score = sRow ? sRow.total_score : 0;
-            row.level = Math.floor(row.score / 10) + 1; // Level up every 10 chatting days
-            res.json({ success: true, user: row });
-          });
-        });
-      });
+              db.get(scoreQuery, [userId, userId, userId], (err, sRow) => {
+                row.score = sRow ? sRow.total_score : 0;
+                row.level = Math.floor(row.score / 10) + 1; // Level up every 10 chatting days
+                res.json({ success: true, user: row });
+              });
+            },
+          );
+        },
+      );
     },
   );
 });
@@ -239,35 +261,37 @@ app.post("/api/updateProfile", (req, res) => {
 
   // Dynamically build the SET clause to only update fields present in the request body.
   // This prevents fields like 'email' or 'password' from being cleared when they aren't sent.
-  const columns = Object.keys(updates).filter(key => updates[key] !== undefined);
-  
+  const columns = Object.keys(updates).filter(
+    (key) => updates[key] !== undefined,
+  );
+
   if (columns.length === 0) {
     return res.json({ success: true, message: "No changes detected" });
   }
 
-  const setClause = columns.map(col => `${col} = ?`).join(", ");
-  const values = [...columns.map(col => updates[col]), userId];
+  const setClause = columns.map((col) => `${col} = ?`).join(", ");
+  const values = [...columns.map((col) => updates[col]), userId];
 
-  db.run(
-    `UPDATE users SET ${setClause} WHERE id = ?`,
-    values,
-    function (err) {
-      if (err) {
-        if (err.message.includes("UNIQUE constraint failed")) {
-          return res.json({ success: false, message: "Email already in use" });
-        }
-        return res.json({ success: false, message: "Failed to update profile" });
+  db.run(`UPDATE users SET ${setClause} WHERE id = ?`, values, function (err) {
+    if (err) {
+      if (err.message.includes("UNIQUE constraint failed")) {
+        return res.json({ success: false, message: "Email already in use" });
       }
-      res.json({ success: true });
-    },
-  );
+      return res.json({ success: false, message: "Failed to update profile" });
+    }
+    res.json({ success: true });
+  });
 });
 app.post("/searchUser", (req, res) => {
-  const { name } = req.body;
+  const { name, userId } = req.body;
 
   db.all(
-    "SELECT id, name, avatar FROM users WHERE name LIKE ?",
-    [`%${name}%`],
+    `SELECT id, name, avatar FROM users 
+     WHERE name LIKE ? 
+     AND id != ?
+     AND id NOT IN (SELECT blocked FROM blocks WHERE blocker = ?)
+     AND id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`,
+    [`%${name}%`, userId || 0, userId || 0, userId || 0],
     (err, rows) => {
       if (err) return res.status(500).json({ users: [] });
       res.json({ users: rows });
@@ -275,6 +299,75 @@ app.post("/searchUser", (req, res) => {
   );
 });
 
+app.post("/api/removeFriend", (req, res) => {
+  const { userId, friendId } = req.body;
+  db.run(
+    "DELETE FROM friends WHERE (user1 = ? AND user2 = ?) OR (user1 = ? AND user2 = ?)",
+    [userId, friendId, friendId, userId],
+    function (err) {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true });
+    },
+  );
+});
+
+app.post("/api/blockUser", (req, res) => {
+  const { userId, friendId } = req.body;
+
+  db.serialize(() => {
+    // 1. Remove friendship
+    db.run(
+      "DELETE FROM friends WHERE (user1 = ? AND user2 = ?) OR (user1 = ? AND user2 = ?)",
+      [userId, friendId, friendId, userId],
+    );
+    // 2. Remove any pending requests
+    db.run(
+      "DELETE FROM friend_requests WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)",
+      [userId, friendId, friendId, userId],
+    );
+    // 3. Add to blocks table
+    db.run(
+      "INSERT OR IGNORE INTO blocks(blocker, blocked) VALUES(?, ?)",
+      [userId, friendId],
+      function (err) {
+        if (err) return res.status(500).json({ success: false });
+        res.json({ success: true });
+      },
+    );
+  });
+});
+app.get("/api/getBlockedUsers/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  db.all(
+    `SELECT u.id, u.name, u.avatar 
+     FROM blocks b
+     JOIN users u ON b.blocked = u.id
+     WHERE b.blocker = ?`,
+    [userId],
+    (err, rows) => {
+      if (err) return res.json({ success: false });
+
+      res.json({
+        success: true,
+        users: rows || [],
+      });
+    },
+  );
+});
+app.post("/api/unblockUser", (req, res) => {
+  const { userId, blockedId } = req.body;
+
+  db.run(
+    `DELETE FROM blocks WHERE blocker=? AND blocked=?`,
+    [userId, blockedId],
+    (err) => {
+      if (err) return res.json({ success: false });
+
+      res.json({ success: true });
+    },
+  );
+});
 app.post("/sendRequest", (req, res) => {
   const { userId: sender, receiver } = req.body;
 
@@ -372,14 +465,17 @@ function getStreak(user1, user2) {
 
         const u1Days = new Set();
         const u2Days = new Set();
-        
+
         rows.forEach((r) => {
           if (String(r.sender) === String(user1)) u1Days.add(r.day);
           if (String(r.sender) === String(user2)) u2Days.add(r.day);
         });
 
         // Intersection (dates where both spoke)
-        const common = [...u1Days].filter((d) => u2Days.has(d)).sort().reverse();
+        const common = [...u1Days]
+          .filter((d) => u2Days.has(d))
+          .sort()
+          .reverse();
         if (common.length === 0) return resolve(0);
 
         const today = new Date().toISOString().split("T")[0];
@@ -399,7 +495,9 @@ function getStreak(user1, user2) {
           const curr = common[i];
           const d1 = new Date(prev);
           const d2 = new Date(curr);
-          const diffDays = Math.round(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24));
+          const diffDays = Math.round(
+            Math.abs(d1 - d2) / (1000 * 60 * 60 * 24),
+          );
 
           if (diffDays === 1) {
             streak++;
@@ -409,7 +507,7 @@ function getStreak(user1, user2) {
           }
         }
         resolve(streak);
-      }
+      },
     );
   });
 }
@@ -568,19 +666,25 @@ app.get("/getUserStatus/:userId", (req, res) => {
   const userId = req.params.userId;
   const requesterId = req.query.requesterId;
 
-  db.get("SELECT last_seen, avatar, active_status FROM users WHERE id=?", [userId], (err, row) => {
-    if (err) return res.json({ online: false, lastSeen: null });
+  db.get(
+    "SELECT last_seen, avatar, active_status FROM users WHERE id=?",
+    [userId],
+    (err, row) => {
+      if (err) return res.json({ online: false, lastSeen: null });
 
-    const statusHidden = row && row.active_status === 0;
-    const inChatWithRequester = !statusHidden && activeChats.get(String(userId)) === String(requesterId);
+      const statusHidden = row && row.active_status === 0;
+      const inChatWithRequester =
+        !statusHidden &&
+        activeChats.get(String(userId)) === String(requesterId);
 
-    res.json({
-      online: inChatWithRequester,
-      avatar: row ? row.avatar : null,
-      lastSeen: statusHidden ? null : (row ? row.last_seen : null),
-      statusHidden: statusHidden
-    });
-  });
+      res.json({
+        online: inChatWithRequester,
+        avatar: row ? row.avatar : null,
+        lastSeen: statusHidden ? null : row ? row.last_seen : null,
+        statusHidden: statusHidden,
+      });
+    },
+  );
 });
 app.get("/fixDeleted", (req, res) => {
   db.run(
@@ -779,21 +883,33 @@ io.on("connection", (socket) => {
           replyTo: replyTo || null,
         };
 
-        io.to(`user_${receiver}`).to(`user_${sender}`).emit("newMessage", payload);
+        io.to(`user_${receiver}`)
+          .to(`user_${sender}`)
+          .emit("newMessage", payload);
 
         const isInChat = activeChats.get(receiver) === sender;
 
         if (isInChat) {
           const now = new Date().toISOString();
-          db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [now, finalMsgId]);
-          io.to(`user_${sender}`).emit("messageSeen", { msgId: finalMsgId, seenAt: now });
+          db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [
+            now,
+            finalMsgId,
+          ]);
+          io.to(`user_${sender}`).emit("messageSeen", {
+            msgId: finalMsgId,
+            seenAt: now,
+          });
         } else {
-          db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [finalMsgId]);
-          io.to(`user_${sender}`).emit("messageDelivered", { msgId: finalMsgId });
+          db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [
+            finalMsgId,
+          ]);
+          io.to(`user_${sender}`).emit("messageDelivered", {
+            msgId: finalMsgId,
+          });
         }
 
         callback?.({ success: true, data: payload });
-      }
+      },
     );
   };
 
@@ -806,37 +922,40 @@ io.on("connection", (socket) => {
     },
   );
 
-  socket.on("uploadChunk", ({ uploadId, chunk, index, totalChunks, meta }, callback) => {
-    if (!uploadChunks.has(uploadId)) {
-      uploadChunks.set(uploadId, {
-        chunks: new Array(totalChunks),
-        receivedCount: 0,
-        totalChunks,
-        meta,
-      });
-    }
-    const currentUpload = uploadChunks.get(uploadId);
-    currentUpload.chunks[index] = chunk;
-    currentUpload.receivedCount++;
+  socket.on(
+    "uploadChunk",
+    ({ uploadId, chunk, index, totalChunks, meta }, callback) => {
+      if (!uploadChunks.has(uploadId)) {
+        uploadChunks.set(uploadId, {
+          chunks: new Array(totalChunks),
+          receivedCount: 0,
+          totalChunks,
+          meta,
+        });
+      }
+      const currentUpload = uploadChunks.get(uploadId);
+      currentUpload.chunks[index] = chunk;
+      currentUpload.receivedCount++;
 
-    if (currentUpload.receivedCount === totalChunks) {
-      const fullMessage = currentUpload.chunks.join("");
-      handleMessage(
-        socket,
-        {
-          to: currentUpload.meta.to,
-          message: fullMessage,
-          type: currentUpload.meta.type,
-          caption: currentUpload.meta.caption,
-          replyTo: currentUpload.meta.replyTo,
-        },
-        callback
-      );
-      uploadChunks.delete(uploadId);
-    } else {
-      callback?.({ success: true });
-    }
-  });
+      if (currentUpload.receivedCount === totalChunks) {
+        const fullMessage = currentUpload.chunks.join("");
+        handleMessage(
+          socket,
+          {
+            to: currentUpload.meta.to,
+            message: fullMessage,
+            type: currentUpload.meta.type,
+            caption: currentUpload.meta.caption,
+            replyTo: currentUpload.meta.replyTo,
+          },
+          callback,
+        );
+        uploadChunks.delete(uploadId);
+      } else {
+        callback?.({ success: true });
+      }
+    },
+  );
 
   socket.on("themeChange", ({ to, themeType, themeValue }) => {
     const sender = String(socket.userId);
@@ -962,12 +1081,14 @@ io.on("connection", (socket) => {
           timestamp: new Date().toISOString(),
         };
 
-        io.to(`user_${receiver}`).to(`user_${sender}`).emit("newMessage", payload);
+        io.to(`user_${receiver}`)
+          .to(`user_${sender}`)
+          .emit("newMessage", payload);
 
         io.to(`user_${sender}`).emit("messageDelivered", {
           msgId: this.lastID,
         });
-      }
+      },
     );
   });
 
@@ -1102,18 +1223,23 @@ io.on("connection", (socket) => {
 
     if (type === "everyone") {
       // Allow deletion if the user is either the sender or the receiver
-      db.get(`SELECT sender, receiver FROM messages WHERE id=?`, [msgId], (err, row) => {
-        if (!row) return;
-        const isParticipant = String(row.sender) === userId || String(row.receiver) === userId;
-        if (!isParticipant) return;
+      db.get(
+        `SELECT sender, receiver FROM messages WHERE id=?`,
+        [msgId],
+        (err, row) => {
+          if (!row) return;
+          const isParticipant =
+            String(row.sender) === userId || String(row.receiver) === userId;
+          if (!isParticipant) return;
 
-        db.run(`DELETE FROM messages WHERE id=?`, [msgId]);
+          db.run(`DELETE FROM messages WHERE id=?`, [msgId]);
 
-        io.to(`user_${userId}`).to(`user_${to}`).emit("messageDeleted", {
-          msgId,
-          type: "everyone",
-        });
-      });
+          io.to(`user_${userId}`).to(`user_${to}`).emit("messageDeleted", {
+            msgId,
+            type: "everyone",
+          });
+        },
+      );
     }
 
     if (type === "me") {
@@ -1279,6 +1405,48 @@ io.on("connection", (socket) => {
       );
     });
   });
+
+  socket.on("getUserProfile", ({ userId }, callback) => {
+    db.get(
+      `SELECT id, name, email, avatar, bio, cover, city, birthday 
+     FROM users WHERE id=?`,
+      [userId],
+      (err, user) => {
+        if (err || !user) {
+          return callback({ success: false });
+        }
+
+        // 👇 SAME LOGIC YOU ALREADY USE IN /api/getMyProfile
+        db.get(
+          `SELECT COUNT(*) as count FROM messages WHERE sender=?`,
+          [userId],
+          (err, mRow) => {
+            user.posts = mRow ? mRow.count : 0;
+
+            const scoreQuery = `
+            SELECT COUNT(*) as total_score FROM (
+              SELECT DISTINCT 
+                CASE WHEN sender = ? THEN receiver ELSE sender END as friend_id, 
+                date(timestamp) as msg_date 
+              FROM messages 
+              WHERE sender = ? OR receiver = ?
+            )`;
+
+            db.get(scoreQuery, [userId, userId, userId], (err, sRow) => {
+              user.score = sRow ? sRow.total_score : 0;
+              user.level = Math.floor(user.score / 10) + 1;
+
+              callback({
+                success: true,
+                data: user,
+              });
+            });
+          },
+        );
+      },
+    );
+  });
+
   socket.on("toggleCamera", ({ to, isVideo }) => {
     io.to(`user_${to}`).emit("cameraToggled", {
       from: socket.userId,

@@ -5,7 +5,6 @@
         --profile-text: #fff;
     }
     .user-profile-modal {
-        background: var(--profile-bg);
         z-index: 3000;
         overflow-x: hidden;
     }
@@ -145,6 +144,16 @@
         cursor: pointer;
         font-weight: 600;
     }
+    .save-btn {
+        border: 1px solid #444;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        background: transparent;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+    }
     .friends-list-mini {
         display: flex;
         flex-direction: column;
@@ -270,7 +279,36 @@
 .settings-item.danger button {
   background: linear-gradient(135deg, #ff4d4d, #ff1a1a);
 }
+.blocked-user-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #111;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
 
+.blocked-user-item img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.unblock-btn {
+  margin-left: auto;
+  background: #ffcc00;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#confirmModal .user-profile-content {
+  background: rgba(20,20,20,0.6);
+  backdrop-filter: blur(15px);
+  border-radius: 15px;
+}
 /* 🔹 Responsive */
 @media (max-width: 600px) {
   .settings-item {

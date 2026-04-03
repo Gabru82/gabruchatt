@@ -8,7 +8,21 @@ const app = document.getElementById("app");
 if (!app) {
   throw new Error("App container not found!");
 }
+const messageSound = new Audio("/sound/message.mp3");
+const callSound = new Audio("/sound/call.mp3");
 
+// improve playback
+messageSound.preload = "auto";
+callSound.preload = "auto";
+callSound.loop = true;
+let isChatOpen = false;
+document.addEventListener(
+  "click",
+  () => {
+    messageSound.play().then(() => messageSound.pause());
+  },
+  { once: true },
+);
 // ================= CUSTOM POPUP =================
 function setupCustomPopup() {
   const popupHTML = `
@@ -229,228 +243,6 @@ if (msgInput && msgInput.tagName === "INPUT") {
 }
 
 // ================= THEME/WALLPAPER SETUP =================
-function setupThemeUI() {
-  const themeModalHTML = `
-        <div id="themeOptionsPopup" class="theme-popup">
-            <div class="theme-popup-content">
-                <div class="theme-option" id="setWallpaperBtn">Set Wallpaper</div>
-                <div class="theme-option" id="setThemeBtn">Set Theme</div>
-                <div class="theme-option" id="cancelThemeBtn">Cancel</div>
-            </div>
-        </div>
-
-        <div id="themeSelectionModal" class="theme-popup">
-            <div class="theme-popup-content">
-                <h3>Choose a Theme</h3>
-                <div class="theme-previews">
-                    <div class="theme-preview" data-theme="theme-1">
-                        <div class="bg"></div>
-                        <div class="msg-box"></div>
-                        <span>Default</span>
-                    </div>
-                    <div class="theme-preview" data-theme="theme-2">
-                        <div class="bg"></div>
-                        <div class="msg-box"></div>
-                        <span>Forest</span>
-                    </div>
-                    <div class="theme-preview" data-theme="theme-3">
-                        <div class="bg"></div>
-                        <div class="msg-box"></div>
-                        <span>Dusk</span>
-                    </div>
-                    <div class="theme-preview" data-theme="theme-4">
-                        <div class="bg"></div>
-                        <div class="msg-box"></div>
-                        <span>Ocean</span>
-                    </div>
-                    <div class="theme-preview" data-theme="theme-5">
-                        <div class="bg"></div>
-                        <div class="msg-box"></div>
-                        <span>Pastel</span>
-                    </div>
-                </div>
-                 <div class="theme-option" id="cancelThemeSelectionBtn">Cancel</div>
-            </div>
-        </div>
-        <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" />
-    `;
-  app.insertAdjacentHTML("beforeend", themeModalHTML);
-
-  const themeStyles = `
-        /* Forward Modal Styles */
-        .forward-friend-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: background 0.2s;
-            margin-bottom: 5px;
-        }
-        .forward-friend-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-        .forward-friend-item.selected {
-            background: rgba(79, 172, 254, 0.2);
-            border: 1px solid rgba(79, 172, 254, 0.4);
-        }
-        .forward-friend-item img {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-        .forward-friend-info {
-            flex: 1;
-        }
-        .forward-friend-name {
-            font-size: 15px;
-            font-weight: 500;
-        }
-        .selection-check {
-            color: #4facfe;
-            display: none;
-        }
-        .forward-friend-item.selected .selection-check {
-            display: block;
-        }
-
-        /* Popups */
-        @keyframes fadeInScaleUp {
-            from {
-                opacity: 0;
-                transform: scale(0.95) translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
-
-        .theme-popup {
-            display: none;
-            position: absolute;
-            z-index: 1001;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            background-color: rgba(0,0,0,0.6);
-            justify-content: center;
-            align-items: center;
-        }
-        .theme-popup-content {
-            background-color: #2c2c2e;
-            background: rgba(35, 35, 38, 0.8);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3);
-            padding: 20px;
-            border-radius: 10px;
-            min-width: 250px;
-            border-radius: 18px;
-            min-width: 280px;
-            text-align: center;
-            color: white;
-            color: #f0f0f0;
-            animation: fadeInScaleUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-        }
-        .theme-option {
-            padding: 12px;
-            padding: 15px;
-            cursor: pointer;
-            border-bottom: 1px solid #444;
-            border-radius: 12px;
-            transition: background-color 0.2s ease;
-            font-weight: 500;
-            margin: 8px 0;
-            border-bottom: none;
-        }
-        .theme-option:last-child {
-            border-bottom: none;
-        }
-        .theme-option:hover {
-            background-color: #3a3a3c;
-            background-color: rgba(255, 255, 255, 0.07);
-        }
-        #cancelThemeBtn, #cancelThemeSelectionBtn {
-            color: #ff7b7b;
-            font-weight: 600;
-        }
-        #cancelThemeBtn:hover, #cancelThemeSelectionBtn:hover {
-            background-color: rgba(255, 123, 123, 0.1);
-        }
-
-        /* Theme Previews */
-        .theme-previews {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .theme-preview {
-            cursor: pointer;
-            width: 80px;
-        }
-        .theme-preview .bg {
-            width: 80px;
-            height: 120px;
-            border-radius: 8px;
-            border: 2px solid #555;
-            position: relative;
-            overflow: hidden;
-        }
-        .theme-preview .msg-box {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            width: 50px;
-            height: 20px;
-            border-radius: 5px;
-        }
-        .theme-preview span {
-            margin-top: 5px;
-            display: block;
-            font-size: 14px;
-        }
-
-        /* --- Theme Definitions --- */
-        #chatScreen.theme-1 { background-color: #1c1c1e; }
-        .theme-preview[data-theme="theme-1"] .bg { background-color: #1c1c1e; }
-
-        #chatScreen.theme-2 { background: linear-gradient(to bottom, #2a5a3e, #1e3c2c); }
-        #chatScreen.theme-2 .message.sent { background-color: #3d8c5a; }
-        #chatScreen.theme-2 .message.received { background-color: #2c6b45; }
-        .theme-preview[data-theme="theme-2"] .bg { background: linear-gradient(to bottom, #2a5a3e, #1e3c2c); }
-
-        #chatScreen.theme-3 { background: linear-gradient(to bottom, #4a3b6c, #2c2345); }
-        #chatScreen.theme-3 .message.sent { background-color: #6a5299; }
-        #chatScreen.theme-3 .message.received { background-color: #523f7d; }
-        .theme-preview[data-theme="theme-3"] .bg { background: linear-gradient(to bottom, #4a3b6c, #2c2345); }
-
-        #chatScreen.theme-4 { background: linear-gradient(to bottom, #3b5b8c, #233c61); }
-        #chatScreen.theme-4 .message.sent { background-color: #527ac2; }
-        #chatScreen.theme-4 .message.received { background-color: #4166a3; }
-        .theme-preview[data-theme="theme-4"] .bg { background: linear-gradient(to bottom, #3b5b8c, #233c61); }
-
-        #chatScreen.theme-5 { background: linear-gradient(to bottom, #f2d7d9, #e1b3b6); color: #5c3739; }
-        #chatScreen.theme-5 .message.sent { background-color: #ffffff; color: #5c3739; }
-        #chatScreen.theme-5 .message.received { background-color: #fce4e6; color: #5c3739; }
-        #chatScreen.theme-5 .message .message-sender { color: #8c5e60; }
-        #chatScreen.theme-5 #msgInput {  color: #ffffff; border-color: #e1b3b6; }
-        #chatScreen.theme-5 #msgInput::placeholder { color: #a08284; }
-        .theme-preview[data-theme="theme-5"] .bg { background: linear-gradient(to bottom, #f2d7d9, #e1b3b6); }
-    `;
-
-  const styleSheet = document.createElement("style");
-  styleSheet.type = "text/css";
-  styleSheet.innerText = themeStyles;
-  document.head.appendChild(styleSheet);
-}
 
 let selectedForwardFriendId = null;
 
@@ -549,34 +341,6 @@ async function openForwardModal() {
 setupForwardModal();
 
 // ================= USER PROFILE & MEDIA MODAL =================
-const userProfileModalHTML = `
-<div id="userProfileModal" class="user-profile-modal">
-    <div class="user-profile-content">
-        <div class="user-profile-header">
-            <button class="close-profile-btn" onclick="document.getElementById('userProfileModal').style.display='none'">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-        </div>
-        
-        <div class="user-info-section">
-            <img id="profileModalAvatar" src="" class="profile-modal-avatar">
-            <h2 id="profileModalName">User Name</h2>
-            <p id="profileModalStatus" class="profile-status">Offline</p>
-            <div class="friendship-days">
-               <span id="friendshipDaysCount">0</span> Days of Friendship
-            </div>
-        </div>
-
-        <div class="shared-media-section">
-            <h3>Shared Media</h3>
-            <div id="sharedMediaGrid" class="media-grid">
-                <!-- Media items will be injected here -->
-            </div>
-        </div>
-    </div>
-</div>
-`;
-app.insertAdjacentHTML("beforeend", userProfileModalHTML);
 
 const sharedMediaOptionsHTML = `
 <div id="sharedMediaOptionsModal" class="theme-popup" style="z-index: 2100;">
@@ -590,27 +354,199 @@ const sharedMediaOptionsHTML = `
 `;
 app.insertAdjacentHTML("beforeend", sharedMediaOptionsHTML);
 
+function openProfileMenu(e) {
+  e.stopPropagation();
+  loadMuteState();
+  const sheet = document.getElementById("profileActionSheet");
+  sheet.style.display = "block";
+
+  setTimeout(() => {
+    sheet.classList.add("active");
+  }, 10);
+}
+
+function closeProfileMenu() {
+  const sheet = document.getElementById("profileActionSheet");
+  sheet.classList.remove("active");
+
+  setTimeout(() => {
+    sheet.style.display = "none";
+  }, 300);
+}
+function muteChat() {
+  showPopup("Chat muted");
+  closeProfileMenu();
+}
+
+function muteCall() {
+  showPopup("Calls muted");
+  closeProfileMenu();
+}
+
+function setChatTimer() {
+  showPopup("Timer coming soon");
+  closeProfileMenu();
+}
+
+function shareProfile() {
+  navigator.clipboard.writeText("Profile link");
+  showPopup("Profile copied");
+  closeProfileMenu();
+}
+function loadMuteState() {
+  if (!currentFriendId) return;
+
+  const chatMuted =
+    localStorage.getItem(`muteChat_${currentFriendId}`) === "true";
+  const callMuted =
+    localStorage.getItem(`muteCall_${currentFriendId}`) === "true";
+
+  document.getElementById("muteChatToggle").checked = chatMuted;
+  document.getElementById("muteCallToggle").checked = callMuted;
+}
+const muteChatToggle = document.getElementById("muteChatToggle");
+const muteCallToggle = document.getElementById("muteCallToggle");
+
+muteChatToggle.addEventListener("change", (e) => {
+  if (!currentFriendId) return;
+
+  localStorage.setItem(`muteChat_${currentFriendId}`, e.target.checked);
+
+});
+
+muteCallToggle.addEventListener("change", (e) => {
+  if (!currentFriendId) return;
+
+  localStorage.setItem(`muteCall_${currentFriendId}`, e.target.checked);
+
+});
+// CLOSE ON OUTSIDE CLICK
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("profileMenuDropdown");
+  if (!menu) return;
+
+  if (!e.target.closest(".profile-menu-wrapper")) {
+    menu.style.display = "none";
+  }
+});
+
+window.removeFriend = async function () {
+  if (!currentFriendId) return;
+
+  const res = await fetch("/api/removeFriend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, friendId: currentFriendId }),
+  });
+
+  const data = await res.json();
+  console.log("REMOVE RESPONSE:", data); // 🔥 DEBUG
+
+  if (data.success) {
+    showPopup("Friend removed");
+    document.getElementById("userProfileModal").style.display = "none";
+    document.getElementById("chatScreen").style.display = "none";
+    socket.emit("leaveChat");
+    loadFriends();
+  } else {
+    showPopup("Failed to remove");
+  }
+};
+
+window.blockUser = async function () {
+  if (!currentFriendId) return;
+
+  const res = await fetch("/api/blockUser", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, friendId: currentFriendId }),
+  });
+
+  const data = await res.json();
+  console.log("BLOCK RESPONSE:", data); // 🔥 DEBUG
+
+  if (data.success) {
+    showPopup("User blocked");
+    document.getElementById("userProfileModal").style.display = "none";
+    document.getElementById("chatScreen").style.display = "none";
+    socket.emit("leaveChat");
+    loadFriends();
+  } else {
+    showPopup("Failed to block");
+  }
+};
+
 function openUserProfile() {
   if (!currentFriendId) return;
 
   const modal = document.getElementById("userProfileModal");
-  const avatar = document.getElementById("profileModalAvatar");
-  const name = document.getElementById("profileModalName");
-  const status = document.getElementById("profileModalStatus");
-  const daysCount = document.getElementById("friendshipDaysCount");
-  const grid = document.getElementById("sharedMediaGrid");
-
   modal.style.display = "flex";
-  name.textContent = currentFriendName;
 
-  // Get live status from existing chat header or fetch fresh
-  // Note: updateProfileStatus will also now handle fetching the avatar if needed
+  // OLD SYSTEM (KEEP)
   updateProfileStatus(currentFriendId);
-
-  // Fetch shared info (Days + Media)
   loadSharedInfo(currentFriendId);
-}
 
+  // NEW DATA
+  socket.emit("getUserProfile", { userId: currentFriendId }, (res) => {
+    if (!res || !res.success) return;
+
+    const user = res.data;
+
+    // AVATAR
+    document.getElementById("profileModalAvatar").src =
+      user.avatar || getAvatarSrc(currentFriendId);
+
+    // COVER
+    const coverImg = document.getElementById("profileCoverImg");
+    coverImg.src = user.cover
+      ? user.cover
+      : "https://via.placeholder.com/600x200/222/fff?text=No+Cover";
+
+    // NAME
+    document.getElementById("profileModalName").innerText = user.name || "User";
+
+    document.getElementById("profileUsername").innerText =
+      "@" + (user.name || "user");
+
+    document.getElementById("profileBioBottom").innerText =
+      user.bio || "No bio available";
+
+    // CITY (TOP + BOTTOM)
+    document.getElementById("profileCityBottom").innerText =
+      "📍 " + user.city || "";
+
+    // EMAIL
+    document.getElementById("profileEmail").innerText = user.email || "";
+
+    // STATS
+    if (user.birthday) {
+      const [y, m, d] = user.birthday.split("-");
+      const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      document.getElementById("statBirthday").textContent =
+        `${parseInt(d)} ${months[parseInt(m) - 1]}`;
+    } else {
+      document.getElementById("statBirthday").textContent = "--";
+    }
+    document.getElementById("statScore").innerText = user.score || 0;
+
+    document.getElementById("statLevel").innerText = user.level || 1;
+
+    document.getElementById("statPosts").innerText = user.posts || 0;
+  });
+}
 async function updateProfileStatus(friendId) {
   const res = await fetch(`/getUserStatus/${friendId}`);
   const data = await res.json();
@@ -760,7 +696,7 @@ async function loadSharedInfo(friendId) {
   });
 }
 
-setupThemeUI();
+// setupThemeUI();
 
 // ================= SOCKET =================
 // Helper for avatar
@@ -801,7 +737,7 @@ document.getElementById("searchBtn").onclick = async () => {
   const res = await fetch("/searchUser", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, userId }),
   });
 
   const data = await res.json();
@@ -1227,9 +1163,18 @@ socket.on("themeChanged", (data) => {
 
 // ================= RECEIVE MESSAGE =================
 socket.on("newMessage", (data) => {
+  const fromId = data.from == userId ? data.to : data.from;
+
+  const isMuted = localStorage.getItem(`muteChat_${fromId}`) === "true";
+
   const isCurrentChat =
     currentFriendId &&
     (data.from == currentFriendId || data.to == currentFriendId);
+
+  if (!isMuted && (!isCurrentChat || !isChatOpen)) {
+    messageSound.currentTime = 0;
+    messageSound.play().catch(() => {});
+  }
 
   // ✅ delivered
   if (data.to == userId) {
@@ -1274,8 +1219,6 @@ socket.on("newMessage", (data) => {
     }
     return;
   }
-
-  const fromId = data.from == userId ? data.to : data.from;
 
   unreadCounts[fromId] = {
     count: (unreadCounts[fromId]?.count || 0) + 1,
@@ -1520,8 +1463,8 @@ function appendMessage(
         <div class="media-wrapper document-msg" onclick="downloadFile('${message}', '${fileName}')" style="cursor: pointer; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
             <i class="fa-solid fa-file-arrow-down" style="font-size: 24px; color: #ffcc00;"></i>
             <div style="display: flex; flex-direction: column; overflow: hidden; text-align: left;">
-                <span style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff;">${fileName}</span>
-                <span style="font-size: 10px; color: #aaa;">Click to download</span>
+                <span style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${fileName}</span>
+                <span style="font-size: 10px; ">Click to download</span>
             </div>
           ${captionHtml}
         </div>
@@ -1614,6 +1557,8 @@ function appendMessage(
   });
 }
 document.querySelectorAll(".menu-item").forEach((item) => {
+  // ✅ SKIP profile menu items
+  if (item.closest(".profile-menu-dropdown")) return;
   item.onclick = () => {
     const action = item.dataset.action;
 
@@ -2094,7 +2039,10 @@ sendBtn.onclick = () => {
           message: base64Media,
           type: capturedMedia.type,
           // For documents, we store the original filename in the caption if no user text is provided
-          caption: capturedMedia.type === "document" ? (text || capturedMedia.name) : text,
+          caption:
+            capturedMedia.type === "document"
+              ? text || capturedMedia.name
+              : text,
           replyTo: replyingMsg ? replyingMsg.id : null,
         },
         (res) => {
@@ -2328,6 +2276,8 @@ function closeAllModals() {
 }
 
 async function openChat(friendId, friendName, friendAvatar = null) {
+  isChatOpen = true;
+  loadMuteState();
   closeAllModals();
   scrollToBottomBtn.classList.remove("show"); // Ensure button is hidden on open
   currentFriendId = friendId;
@@ -2464,6 +2414,7 @@ function extractEditedText(editedStr, userId) {
 document.getElementById("backChat").onclick = () => {
   document.getElementById("chatScreen").style.display = "none";
   scrollToBottomBtn.classList.remove("show");
+  isChatOpen = false;
   activeChat = null; // ✅ ADD THIS
   currentFriendId = null;
   currentFriendName = null;
@@ -3020,6 +2971,12 @@ window.maximizeCall = function () {
 // Handle Incoming Call
 socket.on("callUser", ({ from, signal, callType }) => {
   incomingCallData = { from, signal, callType };
+  const isCallMuted = localStorage.getItem(`muteCall_${from}`) === "true";
+
+  if (!isCallMuted && !isChatOpen) {
+    callSound.currentTime = 0;
+    callSound.play().catch(() => {});
+  }
   callPartnerId = from;
   currentCallType = callType || "voice";
   isCaller = false;
@@ -3042,6 +2999,7 @@ async function acceptCall() {
   document.getElementById("incomingButtons").style.display = "none";
   document.getElementById("activeButtons").style.display = "flex";
   document.getElementById("callStatus").textContent = "Connecting...";
+  stopCallSound();
   callAnswered = true;
   callStartTime = Date.now();
   callState.isVideo = currentCallType === "video";
@@ -3077,12 +3035,16 @@ async function acceptCall() {
     endCall();
   }
 }
-
+function stopCallSound() {
+  callSound.pause();
+  callSound.currentTime = 0;
+}
 function rejectCall() {
   socket.emit("endCall", {
     to: incomingCallData.from,
     answered: false,
   });
+  stopCallSound();
   closeCallUI();
 }
 
@@ -3105,7 +3067,6 @@ function endCall() {
     duration,
     answered: callAnswered,
   });
-
   closeCallUI();
 }
 
@@ -3114,6 +3075,7 @@ function closeCallUI() {
     clearInterval(callTimerInterval);
     callTimerInterval = null;
   }
+  stopCallSound();
 
   document.getElementById("callModal").style.display = "none";
   document.getElementById("activeCallBanner").style.display = "none";

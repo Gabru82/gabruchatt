@@ -7,7 +7,7 @@ async function setupMyProfile() {
   document.head.appendChild(style);
 
   const modalHTML = `
-    <div id="myProfileModal" class="user-profile-modal" style="display: none;">
+    <div id="myProfileModal" class="user-profile-modal" style="display: none; background: black;" >
         <div class="user-profile-content">
             <div class="user-profile-header">
                 <button class="close-profile-btn" id="closeMyProfileBtn" style="position:absolute; right:2; top:15px; z-index:100; background:rgba(0,0,0,0.5);">
@@ -50,23 +50,23 @@ async function setupMyProfile() {
     </div>
 
     <div class="stat-box">
-        <span class="stat-value" id="statScore">0</span>
+        <span class="stat-value" id="statScore2">0</span>
         <span class="stat-label">Score</span>
     </div>
 
     <div class="stat-box">
-        <span class="stat-value" id="statPosts">0</span>
+        <span class="stat-value" id="statPosts2">0</span>
         <span class="stat-label">Posts</span>
     </div>
 
     <div class="stat-box">
-        <span class="stat-value" id="statLevel">1</span>
+        <span class="stat-value" id="statLevel2">1</span>
         <span class="stat-label">Level</span>
     </div>
 
     <!-- 📅 Personal Info -->
     <div class="stat-box info">
-        <span class="stat-value" id="statBirthday">--</span>
+        <span class="stat-value" id="statBirthday2">--</span>
         <span class="stat-label">Birthday</span>
     </div>
 
@@ -86,14 +86,6 @@ async function setupMyProfile() {
   <div class="settings-item">
     <span>Read Receipts</span>
     <input type="checkbox" id="readReceipts">
-  </div>
-  <div class="settings-item">
-    <span>Who can message me</span>
-    <select id="messagePermission">
-      <option value="everyone">Everyone</option>
-      <option value="friends">Friends Only</option>
-      <option value="noone">No One</option>
-    </select>
   </div>
 
   <!-- 🔔 Notifications -->
@@ -218,42 +210,86 @@ async function setupMyProfile() {
                 <button onclick="document.getElementById('cropModal').style.display='none'" class="action-btn-outline" style="flex: 1;">Cancel</button>
             </div>
         </div>
+       
     </div>
+     <div id="blockedUsersModal" class="user-profile-modal" style="display:none;">
+  <div class="user-profile-content">
+
+    <div class="user-profile-header">
+      <button class="close-profile-btn"
+        onclick="document.getElementById('blockedUsersModal').style.display='none'">
+        ✕
+      </button>
+    </div>
+
+    <h2 style="margin: 10px 0;">Blocked Users</h2>
+
+    <div id="blockedUsersList" style="width:100%; padding: 10px 20px;"></div>
+
+  </div>
+</div>
+<div id="confirmModal" class="user-profile-modal" style="display:none;">
+  <div class="user-profile-content" style="max-width:300px; text-align:center; padding:20px;">
+
+    <h3 id="confirmText" style="margin-bottom:20px;">Are you sure?</h3>
+
+    <div style="display:flex; gap:10px;">
+      <button id="confirmYesBtn" class="save-btn" style="flex:1;">Yes</button>
+      <button id="confirmNoBtn" class="action-btn-outline" style="flex:1;">Cancel</button>
+    </div>
+
+  </div>
+</div>
   `;
   app.insertAdjacentHTML("beforeend", modalHTML);
 
   // Setup Crop Tool Logic
-  let cropState = { type: 'avatar', x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
+  let cropState = {
+    type: "avatar",
+    x: 0,
+    y: 0,
+    zoom: 1,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+  };
 
   const openCropTool = (src, type) => {
     cropState.type = type;
-    const modal = document.getElementById('cropModal');
-    const img = document.getElementById('cropImage');
-    const overlay = document.getElementById('cropOverlay');
-    const zoomInp = document.getElementById('cropZoom');
-    
+    const modal = document.getElementById("cropModal");
+    const img = document.getElementById("cropImage");
+    const overlay = document.getElementById("cropOverlay");
+    const zoomInp = document.getElementById("cropZoom");
+
     img.src = src;
-    modal.style.display = 'flex';
-    
-    cropState.x = 0; cropState.y = 0; cropState.zoom = 1;
+    modal.style.display = "flex";
+
+    cropState.x = 0;
+    cropState.y = 0;
+    cropState.zoom = 1;
     zoomInp.value = 1;
-    document.getElementById('zoomLabel').textContent = '100%';
+    document.getElementById("zoomLabel").textContent = "100%";
 
     img.onload = () => {
-        img.style.transform = `translate(0px, 0px) scale(1)`;
-        if (type === 'avatar') {
-            overlay.style.width = '240px'; overlay.style.height = '240px'; overlay.style.borderRadius = '50%';
-        } else {
-            overlay.style.width = '90%'; overlay.style.height = '150px'; overlay.style.borderRadius = '8px';
-        }
+      img.style.transform = `translate(0px, 0px) scale(1)`;
+      if (type === "avatar") {
+        overlay.style.width = "240px";
+        overlay.style.height = "240px";
+        overlay.style.borderRadius = "50%";
+      } else {
+        overlay.style.width = "90%";
+        overlay.style.height = "150px";
+        overlay.style.borderRadius = "8px";
+      }
     };
   };
 
   const updateImgView = () => {
-    document.getElementById('cropImage').style.transform = `translate(${cropState.x}px, ${cropState.y}px) scale(${cropState.zoom})`;
+    document.getElementById("cropImage").style.transform =
+      `translate(${cropState.x}px, ${cropState.y}px) scale(${cropState.zoom})`;
   };
 
-  const viewport = document.getElementById('cropViewport');
+  const viewport = document.getElementById("cropViewport");
   const startPos = (e) => {
     cropState.isDragging = true;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -269,51 +305,56 @@ async function setupMyProfile() {
     cropState.y = clientY - cropState.startY;
     updateImgView();
   };
-  const endPos = () => cropState.isDragging = false;
+  const endPos = () => (cropState.isDragging = false);
 
-  viewport.addEventListener('mousedown', startPos);
-  window.addEventListener('mousemove', movePos);
-  window.addEventListener('mouseup', endPos);
-  viewport.addEventListener('touchstart', startPos);
-  window.addEventListener('touchmove', movePos);
-  window.addEventListener('touchend', endPos);
+  viewport.addEventListener("mousedown", startPos);
+  window.addEventListener("mousemove", movePos);
+  window.addEventListener("mouseup", endPos);
+  viewport.addEventListener("touchstart", startPos);
+  window.addEventListener("touchmove", movePos);
+  window.addEventListener("touchend", endPos);
 
-  document.getElementById('cropZoom').oninput = (e) => {
+  document.getElementById("cropZoom").oninput = (e) => {
     cropState.zoom = parseFloat(e.target.value);
-    document.getElementById('zoomLabel').textContent = Math.round(cropState.zoom * 100) + '%';
+    document.getElementById("zoomLabel").textContent =
+      Math.round(cropState.zoom * 100) + "%";
     updateImgView();
   };
 
-  document.getElementById('applyCropBtn').onclick = () => {
-    const img = document.getElementById('cropImage');
-    const overlay = document.getElementById('cropOverlay');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
-    const outW = cropState.type === 'avatar' ? 512 : 1200;
-    const outH = cropState.type === 'avatar' ? 512 : 450;
-    canvas.width = outW; canvas.height = outH;
+  document.getElementById("applyCropBtn").onclick = () => {
+    const img = document.getElementById("cropImage");
+    const overlay = document.getElementById("cropOverlay");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const outW = cropState.type === "avatar" ? 512 : 1200;
+    const outH = cropState.type === "avatar" ? 512 : 450;
+    canvas.width = outW;
+    canvas.height = outH;
 
     const oRect = overlay.getBoundingClientRect();
     const iRect = img.getBoundingClientRect();
     const s = outW / oRect.width; // Scale Factor
 
-    ctx.drawImage(img, 
-        (iRect.left - oRect.left) * s, 
-        (iRect.top - oRect.top) * s, 
-        iRect.width * s, 
-        iRect.height * s
+    ctx.drawImage(
+      img,
+      (iRect.left - oRect.left) * s,
+      (iRect.top - oRect.top) * s,
+      iRect.width * s,
+      iRect.height * s,
     );
-    
-    const result = canvas.toDataURL('image/jpeg', 0.85);
-    document.getElementById(cropState.type === 'avatar' ? 'myAvatarPreview' : 'coverPreview').src = result;
-    document.getElementById('cropModal').style.display = 'none';
+
+    const result = canvas.toDataURL("image/jpeg", 0.85);
+    document.getElementById(
+      cropState.type === "avatar" ? "myAvatarPreview" : "coverPreview",
+    ).src = result;
+    document.getElementById("cropModal").style.display = "none";
     saveAdvancedProfile(); // Auto-save the adjusted result
   };
 
   const activeStatusInp = document.getElementById("activeStatus");
   if (activeStatusInp) {
-      activeStatusInp.onchange = () => saveAdvancedProfile();
+    activeStatusInp.onchange = () => saveAdvancedProfile();
   }
 
   window.openEditProfile = () => {
@@ -337,23 +378,40 @@ async function setupMyProfile() {
         document.getElementById("dispHandle").textContent =
           "@" + (u.email ? u.email.split("@")[0] : "user");
         document.getElementById("dispBio").textContent = u.bio || "No bio yet.";
-        document.getElementById("dispCityText").textContent = u.city || "Add city";
+        document.getElementById("dispCityText").textContent =
+          u.city || "Add city";
         document.getElementById("dispLink").textContent =
           u.links || "No website";
         if (u.birthday) {
           const [y, m, d] = u.birthday.split("-");
-          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-          document.getElementById("statBirthday").textContent = `${parseInt(d)} ${months[parseInt(m) - 1]}`;
+          const months = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+          ];
+          document.getElementById("statBirthday2").textContent =
+            `${parseInt(d)} ${months[parseInt(m) - 1]}`;
         } else {
-          document.getElementById("statBirthday").textContent = "--";
+          document.getElementById("statBirthday2").textContent = "--";
         }
-        document.getElementById("statFriends").textContent = u.friendsCount || 0;
-        document.getElementById("statPosts").textContent = u.postsCount || 0;
-        document.getElementById("statScore").textContent = u.score || 0;
-        document.getElementById("statLevel").textContent = u.level || 1;
+        document.getElementById("statFriends").textContent =
+          u.friendsCount || 0;
+        document.getElementById("statPosts2").textContent = u.postsCount || 0;
+        document.getElementById("statScore2").textContent = u.score || 0;
+        document.getElementById("statLevel2").textContent = u.level || 1;
 
         if (document.getElementById("activeStatus")) {
-            document.getElementById("activeStatus").checked = u.active_status !== 0;
+          document.getElementById("activeStatus").checked =
+            u.active_status !== 0;
         }
 
         if (u.avatar) {
@@ -398,15 +456,28 @@ async function setupMyProfile() {
     const links = document.getElementById("editInpLink").value;
     const avatar = document.getElementById("myAvatarPreview").src;
     const cover = document.getElementById("coverPreview").src;
-    const active_status = document.getElementById("activeStatus")?.checked ? 1 : 0;
+    const active_status = document.getElementById("activeStatus")?.checked
+      ? 1
+      : 0;
 
     const res = await fetch("/api/updateProfile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, name, email, bio, links, avatar, cover, city, birthday, active_status }),
+      body: JSON.stringify({
+        userId,
+        name,
+        email,
+        bio,
+        links,
+        avatar,
+        cover,
+        city,
+        birthday,
+        active_status,
+      }),
     });
     const data = await res.json();
-    if (data.success) {      
+    if (data.success) {
       // Update local storage so the chat header/sidebar updates the name
       localStorage.setItem("username", name);
 
@@ -470,6 +541,88 @@ async function setupMyProfile() {
   }
 
   loadMyProfile(false);
+  window.viewBlockedUsers = async function () {
+    const modal = document.getElementById("blockedUsersModal");
+    const list = document.getElementById("blockedUsersList");
+
+    modal.style.display = "flex";
+    list.innerHTML = "Loading...";
+
+    try {
+      const res = await fetch(`/api/getBlockedUsers/${userId}`);
+      const data = await res.json();
+
+      if (!data.success || !data.users.length) {
+        list.innerHTML = "<p style='color:#888;'>No blocked users</p>";
+        return;
+      }
+
+      list.innerHTML = "";
+
+      data.users.forEach((u) => {
+        const div = document.createElement("div");
+        div.className = "blocked-user-item";
+
+        div.innerHTML = `
+        <img src="${u.avatar || "https://i.pravatar.cc/150?img=" + u.id}">
+        <span>${u.name}</span>
+        <button class="unblock-btn" onclick="unblockUser(${u.id})">Unblock</button>
+      `;
+
+        list.appendChild(div);
+      });
+    } catch (e) {
+      console.error(e);
+      list.innerHTML = "Error loading users";
+    }
+  };
+  function showConfirm(message, onYes) {
+  const modal = document.getElementById("confirmModal");
+  const text = document.getElementById("confirmText");
+  const yesBtn = document.getElementById("confirmYesBtn");
+  const noBtn = document.getElementById("confirmNoBtn");
+
+  text.innerText = message;
+  modal.style.display = "flex";
+
+  // remove old events
+  yesBtn.onclick = null;
+  noBtn.onclick = null;
+
+  yesBtn.onclick = () => {
+    modal.style.display = "none";
+    onYes();
+  };
+
+  noBtn.onclick = () => {
+    modal.style.display = "none";
+  };
+}
+window.unblockUser = function (blockedId) {
+
+  showConfirm("Unblock this user?", async () => {
+
+    const res = await fetch("/api/unblockUser", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        blockedId,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      showPopup("User unblocked");
+      viewBlockedUsers(); // refresh
+    } else {
+      showPopup("Failed to unblock");
+    }
+
+  });
+
+};
 }
 
 setupMyProfile();
