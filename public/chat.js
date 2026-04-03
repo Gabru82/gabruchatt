@@ -2760,9 +2760,11 @@ async function openChat(friendId, friendName, friendAvatar = null) {
     withUser: friendId,
   });
 
-  socket.emit("markAllSeen", {
-    withUser: friendId,
-  });
+  if (localStorage.getItem("readReceipts") !== "false") {
+    socket.emit("markAllSeen", {
+      withUser: friendId,
+    });
+  }
 
   document.getElementById("chatScreen").style.display = "flex";
   messagesEl.scrollTop = messagesEl.scrollHeight;

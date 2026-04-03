@@ -87,6 +87,14 @@ db.serialize(() => {
       }
     },
   );
+  db.run(
+    "ALTER TABLE users ADD COLUMN read_receipts INTEGER DEFAULT 1",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("read_receipts error:", err.message);
+      }
+    },
+  );
 
   // ================= FRIENDS =================
   db.run(`
@@ -225,7 +233,7 @@ app.post("/api/getMessagesByIds", (req, res) => {
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
-    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status FROM users WHERE id=?",
+    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, read_receipts FROM users WHERE id=?",
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
@@ -1065,30 +1073,34 @@ io.on("connection", (socket) => {
           replyTo: replyTo || null,
         };
 
-        io.to(`user_${receiver}`)
-          .to(`user_${sender}`)
-          .emit("newMessage", payload);
+        // Determine status based on receiver's read receipt setting
+        db.get("SELECT read_receipts FROM users WHERE id=?", [receiver], (err, userRow) => {
+          const receiptsEnabled = !userRow || userRow.read_receipts !== 0;
+          const isInChat = activeChats.get(receiver) === sender;
 
-        const isInChat = activeChats.get(receiver) === sender;
+          io.to(`user_${receiver}`)
+            .to(`user_${sender}`)
+            .emit("newMessage", payload);
 
-        if (isInChat) {
-          const now = new Date().toISOString();
-          db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [
-            now,
-            finalMsgId,
-          ]);
-          io.to(`user_${sender}`).emit("messageSeen", {
-            msgId: finalMsgId,
-            seenAt: now,
-          });
-        } else {
-          db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [
-            finalMsgId,
-          ]);
-          io.to(`user_${sender}`).emit("messageDelivered", {
-            msgId: finalMsgId,
-          });
-        }
+          if (isInChat && receiptsEnabled) {
+            const now = new Date().toISOString();
+            db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [
+              now,
+              finalMsgId,
+            ]);
+            io.to(`user_${sender}`).emit("messageSeen", {
+              msgId: finalMsgId,
+              seenAt: now,
+            });
+          } else {
+            db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [
+              finalMsgId,
+            ]);
+            io.to(`user_${sender}`).emit("messageDelivered", {
+              msgId: finalMsgId,
+            });
+          }
+        });
 
         callback?.({ success: true, data: payload });
       },
@@ -1157,17 +1169,25 @@ io.on("connection", (socket) => {
     const userId = String(socket.userId);
     const now = new Date().toISOString();
 
-    // ✅ ONLY update messages that are NOT seen yet
-    db.run(
-      `UPDATE messages 
-     SET status='seen', seen_at=? 
-     WHERE sender=? AND receiver=? AND status!='seen'`,
-      [now, withUser, userId],
-    );
+    // Check if the user has read receipts enabled
+    db.get("SELECT read_receipts FROM users WHERE id=?", [userId], (err, row) => {
+      if (err || (row && row.read_receipts === 0)) {
+        // If receipts are disabled, do not update status to seen or notify sender
+        return;
+      }
 
-    io.to(`user_${withUser}`).emit("messageSeenAll", {
-      from: userId,
-      seenAt: now,
+      // ✅ ONLY update messages that are NOT seen yet
+      db.run(
+        `UPDATE messages 
+       SET status='seen', seen_at=? 
+       WHERE sender=? AND receiver=? AND status!='seen'`,
+        [now, withUser, userId],
+      );
+
+      io.to(`user_${withUser}`).emit("messageSeenAll", {
+        from: userId,
+        seenAt: now,
+      });
     });
   });
 

@@ -120,6 +120,11 @@ async function setupMyProfile() {
     activeStatusInp.onchange = () => saveAdvancedProfile();
   }
 
+  const readReceiptsInp = document.getElementById("readReceipts");
+  if (readReceiptsInp) {
+    readReceiptsInp.onchange = () => saveAdvancedProfile();
+  }
+
   window.openEditProfile = () => {
     document.getElementById("fullEditModal").style.display = "flex";
   };
@@ -177,6 +182,11 @@ async function setupMyProfile() {
             u.active_status !== 0;
         }
 
+        if (document.getElementById("readReceipts")) {
+          document.getElementById("readReceipts").checked = u.read_receipts !== 0;
+          localStorage.setItem("readReceipts", u.read_receipts !== 0);
+        }
+
         if (u.avatar) {
           document.getElementById("myAvatarPreview").src = u.avatar;
           const pBtn = document.getElementById("profileBtn");
@@ -219,9 +229,12 @@ async function setupMyProfile() {
     const links = document.getElementById("editInpLink").value;
     const avatar = document.getElementById("myAvatarPreview").src;
     const cover = document.getElementById("coverPreview").src;
-    const active_status = document.getElementById("activeStatus")?.checked
-      ? 1
-      : 0;
+
+    const activeStatusEl = document.getElementById("activeStatus");
+    const active_status = activeStatusEl ? (activeStatusEl.checked ? 1 : 0) : undefined;
+
+    const readReceiptsEl = document.getElementById("readReceipts");
+    const read_receipts = readReceiptsEl ? (readReceiptsEl.checked ? 1 : 0) : undefined;
 
     const res = await fetch("/api/updateProfile", {
       method: "POST",
@@ -237,12 +250,17 @@ async function setupMyProfile() {
         city,
         birthday,
         active_status,
+        read_receipts,
       }),
     });
     const data = await res.json();
     if (data.success) {
       // Update local storage so the chat header/sidebar updates the name
       localStorage.setItem("username", name);
+
+      if (read_receipts !== undefined) {
+        localStorage.setItem("readReceipts", read_receipts !== 0);
+      }
 
       document.getElementById("fullEditModal").style.display = "none";
       loadMyProfile(false);
