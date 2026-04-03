@@ -568,14 +568,10 @@ window.removeFriend = async function () {
   });
 
   const data = await res.json();
-  console.log("REMOVE RESPONSE:", data); // 🔥 DEBUG
 
   if (data.success) {
-    showPopup("Friend removed");
     document.getElementById("userProfileModal").style.display = "none";
-    document.getElementById("chatScreen").style.display = "none";
-    socket.emit("leaveChat");
-    loadFriends();
+    // UI removal and active chat clearing is now handled symmetrically via socket events
   } else {
     showPopup("Failed to remove");
   }
@@ -591,14 +587,10 @@ window.blockUser = async function () {
   });
 
   const data = await res.json();
-  console.log("BLOCK RESPONSE:", data); // 🔥 DEBUG
 
   if (data.success) {
-    showPopup("User blocked");
     document.getElementById("userProfileModal").style.display = "none";
-    document.getElementById("chatScreen").style.display = "none";
-    socket.emit("leaveChat");
-    loadFriends();
+    // UI removal and active chat clearing is now handled symmetrically via socket events
   } else {
     showPopup("Failed to block");
   }
@@ -939,6 +931,26 @@ function getAvatarSrc(user) {
 
 let activeChat = null;
 
+function removeFriendFromUI(targetId) {
+  // Remove from the chat list feed
+  const item = document.querySelector(`.chat-item[data-friend-id="${targetId}"]`);
+  if (item) item.remove();
+
+  // Clear any unread tracking
+  delete unreadCounts[targetId];
+
+  // If currently chatting with this user, force close the chat screen
+  if (String(currentFriendId) === String(targetId)) {
+    document.getElementById("chatScreen").style.display = "none";
+    isChatOpen = false;
+    activeChat = null;
+    currentFriendId = null;
+    currentFriendName = null;
+    socket.emit("leaveChat");
+    showPopup("Removed");
+  }
+}
+
 const socket = io();
 socket.on("connect", () => {
   socket.emit("register", userId);
@@ -952,8 +964,25 @@ socket.on("newFriendRequest", () => {
   }
 });
 
+socket.on("requestCanceled", () => {
+  const requestModal = document.getElementById("requestModal");
+  if (requestModal && requestModal.style.display === "flex") {
+    loadRequests();
+  }
+});
+
 socket.on("friendAdded", () => {
   loadFriends();
+});
+
+socket.on("friendRemoved", (data) => {
+  const targetId = String(data.userId) === String(userId) ? data.friendId : data.userId;
+  removeFriendFromUI(targetId);
+});
+
+socket.on("userBlocked", (data) => {
+  const targetId = String(data.blockerId) === String(userId) ? data.blockedId : data.blockerId;
+  removeFriendFromUI(targetId);
 });
 
 // ================= FRIEND SEARCH =================
@@ -996,7 +1025,7 @@ document.getElementById("searchBtn").onclick = async () => {
     } else if (relation.status === "friends") {
       buttonHtml = `<button class="chat-btn" onclick="openChat(${user.id}, '${user.name}')">Chat</button>`;
     } else if (relation.status === "pending") {
-      buttonHtml = '<span class="pending-label">Request Sent</span>';
+      buttonHtml = `<button class="cancel-btn" style="background:#444; color:white; padding: 6px 12px; border-radius: 6px; border:none; cursor:pointer;" onclick="cancelRequest(${user.id})">Cancel</button>`;
     } else {
       buttonHtml = `<button onclick="sendRequest(${user.id})">Send Request</button>`;
     }
@@ -1023,6 +1052,23 @@ async function sendRequest(id) {
   if (res.ok) {
     showPopup("Friend request sent!");
     socket.emit("friendRequestSent", { receiver: id });
+    // Instantly refresh search view to show "Cancel" button
+    document.getElementById("searchBtn")?.click();
+  }
+}
+
+async function cancelRequest(id) {
+  const res = await fetch("/api/cancelRequest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sender: userId, receiver: id }),
+  });
+
+  if (res.ok) {
+    showPopup("Request canceled");
+    socket.emit("cancelFriendRequest", { receiver: id });
+    // Instantly refresh search view to show "Send Request" button
+    document.getElementById("searchBtn")?.click();
   }
 }
 

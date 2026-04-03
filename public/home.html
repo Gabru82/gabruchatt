@@ -663,7 +663,266 @@
             </div>
         </div>
 
+        <!-- // profile page // -->
 
+        <div id="myProfileModal" class="user-profile-modal" style="display: none; background: black;">
+            <div class="user-profile-content">
+                <div class="user-profile-header">
+                    <button class="close-profile-btn" id="closeMyProfileBtn"
+                        style="position:absolute; right:2; top:15px; z-index:100; background:rgba(0,0,0,0.5);">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="profile-header-visual">
+                    <div class="cover-photo-container" onclick="document.getElementById('coverUpload').click()">
+                        <img id="coverPreview" src="https://images.unsplash.com/photo-1557683316-973673baf926?w=800">
+                        <input type="file" id="coverUpload" hidden accept="image/*">
+                    </div>
+                    <div class="profile-avatar-wrapper">
+                        <img id="myAvatarPreview" src="https://i.pravatar.cc/150"
+                            onclick="document.getElementById('avatarUpload').click()">
+                        <div class="status-indicator"></div>
+                        <input type="file" id="avatarUpload" hidden accept="image/*">
+                    </div>
+                </div>
+
+                <div class="profile-main-info">
+                    <div class="profile-name-row">
+                        <div>
+                            <h2 id="dispName" style="font-size: 22px;">Loading...</h2>
+                            <span id="dispHandle" style="color: #888; font-size: 14px;">@user</span>
+                        </div>
+                        <button class="action-btn-outline" onclick="openEditProfile()">Edit Profile</button>
+                    </div>
+
+
+                    <div class="profile-bio" id="dispBio">Tell the world about yourself...</div>
+                    <div class="profile-city" id="dispCity" style="font-size: 13px; color: #aaa; margin-bottom: 10px;">
+                        <i class="fa-solid fa-location-dot"></i> <span id="dispCityText">Add city</span></div>
+                    <div class="profile-links"><i class="fa-solid fa-link"></i> <span id="dispLink">Add website</span>
+                    </div>
+                </div>
+
+                <div class="profile-stats-bar">
+
+                    <div class="stat-box">
+                        <span class="stat-value" id="statFriends">0</span>
+                        <span class="stat-label">Friends</span>
+                    </div>
+
+                    <div class="stat-box">
+                        <span class="stat-value" id="statScore2">0</span>
+                        <span class="stat-label">Score</span>
+                    </div>
+
+                    <div class="stat-box">
+                        <span class="stat-value" id="statPosts2">0</span>
+                        <span class="stat-label">Posts</span>
+                    </div>
+
+                    <div class="stat-box">
+                        <span class="stat-value" id="statLevel2">1</span>
+                        <span class="stat-label">Level</span>
+                    </div>
+
+                    <!-- 📅 Personal Info -->
+                    <div class="stat-box info">
+                        <span class="stat-value" id="statBirthday2">--</span>
+                        <span class="stat-label">Birthday</span>
+                    </div>
+
+                </div>
+
+                <div style="padding: 10px 20px; width:100%;">
+                    <h3
+                        style="margin-bottom: 10px; font-size: 16px; border-left: 3px solid var(--profile-accent); padding-left: 10px;">
+                        Settings</h3>
+                    <div class="settings-group">
+
+                        <!-- 🔐 Privacy Controls -->
+                        <div class="settings-title">Privacy</div>
+
+                        <div class="settings-item">
+                            <span>Active Status</span>
+                            <input type="checkbox" id="activeStatus">
+                        </div>
+                        <div class="settings-item">
+                            <span>Read Receipts</span>
+                            <input type="checkbox" id="readReceipts">
+                        </div>
+
+                        <!-- 🔔 Notifications -->
+                        <div class="settings-title">Notifications</div>
+                        <div class="settings-item">
+                            <span>Push Notifications</span>
+                            <input type="checkbox" id="pushNotifications">
+                        </div>
+                        <div class="settings-item">
+                            <span>Email Notifications</span>
+                            <input type="checkbox" id="emailNotifications">
+                        </div>
+                        <div class="settings-item">
+                            <span>Message Alerts</span>
+                            <input type="checkbox" id="messageAlerts">
+                        </div>
+
+                        <!-- 🛡️ Security -->
+                        <div class="settings-title">Security</div>
+                        <div class="settings-item">
+                            <span>Change Password</span>
+                            <button id="updatePasswordBtn" onclick="openChangePassword()">Update</button>
+                        </div>
+                        <div class="settings-item">
+                            <span>Two-Factor Authentication</span>
+                            <input type="checkbox" id="twoFactorAuth">
+                        </div>
+                        <div class="settings-item">
+                            <span>Login Activity</span>
+                            <button onclick="viewLoginActivity()">View</button>
+                        </div>
+
+                        <!-- 🎨 Appearance -->
+                        <div class="settings-title">Appearance</div>
+                        <div class="settings-item">
+                            <span>Dark Mode</span>
+                            <input type="checkbox" id="darkModeToggle">
+                        </div>
+                        <div class="settings-item">
+                            <span>Language</span>
+                            <select id="languageSelect">
+                                <option>English</option>
+                                <option>Hindi</option>
+                            </select>
+                        </div>
+
+                        <!-- ⚙️ Account -->
+                        <div class="settings-title">Account</div>
+
+                        <div class="settings-item">
+                            <span>Blocked Users</span>
+                            <button onclick="viewBlockedUsers()">Manage</button>
+                        </div>
+                        <div class="settings-item danger">
+                            <span>Delete Account</span>
+                            <button onclick="deleteAccount()">Delete</button>
+                        </div>
+
+                    </div>
+
+                    <h3
+                        style="margin: 20px 0 10px; font-size: 16px; border-left: 3px solid var(--profile-accent); padding-left: 10px;">
+                        Friends</h3>
+                    <div id="profileFriendsList" class="friends-list-mini"></div>
+
+                    <button onclick="logoutFromProfile()" class="logout-btn"
+                        style="background:#ff416c; width:100%; border:none; padding:15px; border-radius:12px; color:white; font-weight:bold;">Logout</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="fullEditModal" class="theme-popup" style="z-index: 4000;">
+        <div class="theme-popup-content" style="text-align:left; width:90%; max-width:400px;">
+            <h3>Edit Profile</h3>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Full Name</label>
+                <input id="editInpName"
+                    style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Email Address</label>
+                <input id="editInpEmail" type="email"
+                    style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Bio</label>
+                <textarea id="editInpBio"
+                    style="width:100%; height:80px; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px; resize:none;"></textarea>
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">City</label>
+                <input id="editInpCity"
+                    style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Birthday</label>
+                <input type="date" id="editInpBirthday"
+                    style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:12px; color:#aaa;">Website</label>
+                <input id="editInpLink"
+                    style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white; border-radius:8px; margin-top:5px;">
+            </div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="saveAdvancedProfile()" class="save-btn" style="flex:2;">Save Changes</button>
+                <button onclick="document.getElementById('fullEditModal').style.display='none'"
+                    class="action-btn-outline" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crop Modal for Zoom/Adjust -->
+    <div id="cropModal" class="theme-popup" style="z-index: 5000; display: none;">
+        <div class="theme-popup-content" style="width: 90%; max-width: 480px; padding: 20px;">
+            <h3>Adjust Photo</h3>
+            <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">Drag to reposition and use slider to zoom</p>
+            <div id="cropViewport"
+                style="width: 100%; height: 320px; background: #000; overflow: hidden; position: relative; margin: 0; touch-action: none; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                <img id="cropImage" style="position: absolute; cursor: move; user-select: none; max-width: none;">
+                <div id="cropOverlay"
+                    style="position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); pointer-events: none; z-index: 5;">
+                </div>
+            </div>
+            <div style="margin: 20px 0;">
+                <div
+                    style="display: flex; justify-content: space-between; font-size: 12px; color: #eee; margin-bottom: 8px;">
+                    <span>Zoom Level</span>
+                    <span id="zoomLabel">100%</span>
+                </div>
+                <input type="range" id="cropZoom" min="0.1" max="4" step="0.01" value="1" style="width: 100%;">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="applyCropBtn" class="save-btn" style="flex: 2;">Save Photo</button>
+                <button onclick="document.getElementById('cropModal').style.display='none'" class="action-btn-outline"
+                    style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+
+    </div>
+    <div id="blockedUsersModal" class="user-profile-modal" style="display:none;">
+        <div class="user-profile-content">
+
+            <div class="user-profile-header">
+                <button class="close-profile-btn"
+                    onclick="document.getElementById('blockedUsersModal').style.display='none'">
+                    ✕
+                </button>
+            </div>
+
+            <h2 style="margin: 10px 0;">Blocked Users</h2>
+
+            <div id="blockedUsersList" style="width:100%; padding: 10px 20px;"></div>
+
+        </div>
+    </div>
+    <div id="confirmModal" class="user-profile-modal" style="display:none;">
+        <div class="user-profile-content" style="max-width:300px; text-align:center; padding:20px;">
+
+            <h3 id="confirmText" style="margin-bottom:20px;">Are you sure?</h3>
+
+            <div style="display:flex; gap:10px;">
+                <button id="confirmYesBtn" class="save-btn" style="flex:1;">Yes</button>
+                <button id="confirmNoBtn" class="action-btn-outline" style="flex:1;">Cancel</button>
+            </div>
+
+        </div>
+    </div>
 
 
 

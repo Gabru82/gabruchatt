@@ -328,6 +328,10 @@ app.post("/api/removeFriend", (req, res) => {
     [userId, friendId, friendId, userId],
     function (err) {
       if (err) return res.status(500).json({ success: false });
+
+      // Emit event to both users for real-time UI synchronization
+      io.to(`user_${userId}`).to(`user_${friendId}`).emit("friendRemoved", { userId, friendId });
+
       res.json({ success: true });
     },
   );
@@ -353,6 +357,10 @@ app.post("/api/blockUser", (req, res) => {
       [userId, friendId],
       function (err) {
         if (err) return res.status(500).json({ success: false });
+
+        // Emit event to both users for real-time UI synchronization
+        io.to(`user_${userId}`).to(`user_${friendId}`).emit("userBlocked", { blockerId: userId, blockedId: friendId });
+
         res.json({ success: true });
       },
     );
@@ -397,13 +405,38 @@ app.post("/sendRequest", (req, res) => {
     return res.status(400).json({ success: false });
   }
 
+  // Prevent duplicate pending requests
+  db.get(
+    "SELECT id FROM friend_requests WHERE sender=? AND receiver=? AND status='pending'",
+    [sender, receiver],
+    (err, row) => {
+      if (err) return res.status(500).json({ success: false });
+      if (row) return res.json({ success: true, message: "Request already pending" });
+
+      db.run(
+        `INSERT INTO friend_requests(sender,receiver,status) VALUES(?,?,?)`,
+        [sender, receiver, "pending"],
+        function (err) {
+          if (err) return res.json({ success: false });
+          res.json({ success: true });
+        },
+      );
+    }
+  );
+});
+
+app.post("/api/cancelRequest", (req, res) => {
+  const { sender, receiver } = req.body;
+
+  if (!sender || !receiver) return res.status(400).json({ success: false });
+
   db.run(
-    `INSERT INTO friend_requests(sender,receiver,status) VALUES(?,?,?)`,
-    [sender, receiver, "pending"],
+    "DELETE FROM friend_requests WHERE sender = ? AND receiver = ? AND status = 'pending'",
+    [sender, receiver],
     function (err) {
-      if (err) return res.json({ success: false });
+      if (err) return res.status(500).json({ success: false });
       res.json({ success: true });
-    },
+    }
   );
 });
 app.get("/debug-users", (req, res) => {
@@ -1563,6 +1596,10 @@ io.on("connection", (socket) => {
 
   socket.on("friendRequestSent", ({ receiver }) => {
     io.to(`user_${String(receiver)}`).emit("newFriendRequest");
+  });
+
+  socket.on("cancelFriendRequest", ({ receiver }) => {
+    io.to(`user_${String(receiver)}`).emit("requestCanceled");
   });
 
   socket.on("friendRequestAccepted", ({ friendId }) => {
