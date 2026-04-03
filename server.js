@@ -88,6 +88,14 @@ db.serialize(() => {
     },
   );
   db.run(
+    "ALTER TABLE users ADD COLUMN account_status INTEGER DEFAULT 1",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("account_status error:", err.message);
+      }
+    },
+  );
+  db.run(
     "ALTER TABLE users ADD COLUMN read_receipts INTEGER DEFAULT 1",
     (err) => {
       if (err && !err.message.includes("duplicate column")) {
@@ -347,13 +355,13 @@ app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
   db.get(
-    "SELECT id, name, active_status FROM users WHERE email=? AND password=?",
+    "SELECT id, name, account_status FROM users WHERE email=? AND password=?",
     [email, password],
     (err, row) => {
       if (err) return res.status(500).json({ success: false });
 
       if (row) {
-        if (row.active_status === 0) {
+        if (row.account_status === 0) {
           return res.json({ success: false, message: "Account is deactivated" });
         }
         res.json({
@@ -374,7 +382,7 @@ app.post("/api/deactivateAccount", (req, res) => {
     if (err || !row || row.password !== password) {
       return res.json({ success: false, message: "Incorrect password" });
     }
-    db.run("UPDATE users SET active_status = 0 WHERE id = ?", [userId], function(err) {
+    db.run("UPDATE users SET account_status = 0 WHERE id = ?", [userId], function(err) {
       if (err) return res.json({ success: false });
       res.json({ success: true });
     });
@@ -398,7 +406,7 @@ app.post("/api/getMessagesByIds", (req, res) => {
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
-    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, read_receipts, notifications_enabled FROM users WHERE id=?",
+    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, account_status, read_receipts, notifications_enabled FROM users WHERE id=?",
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
@@ -483,7 +491,7 @@ app.post("/searchUser", (req, res) => {
   db.all(
     `SELECT id, name, avatar FROM users 
      WHERE name LIKE ? 
-     AND active_status = 1
+     AND account_status = 1
      AND id != ?
      AND id NOT IN (SELECT blocked FROM blocks WHERE blocker = ?)
      AND id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`,
@@ -751,7 +759,7 @@ app.get("/getFriends/:userId", (req, res) => {
     (SELECT message FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessage
     FROM friends f 
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
-    WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.active_status = 1
+    WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
     `,
     [userId, userId, userId, userId, userId, userId],
     async (err, rows) => {
@@ -899,12 +907,12 @@ app.get("/getUserStatus/:userId", (req, res) => {
   const requesterId = req.query.requesterId;
 
   db.get(
-    "SELECT last_seen, avatar, active_status FROM users WHERE id=?",
+    "SELECT last_seen, avatar, active_status, account_status FROM users WHERE id=?",
     [userId],
     (err, row) => {
-      if (err) return res.json({ online: false, lastSeen: null });
+      if (err || !row || row.account_status === 0) return res.json({ online: false, lastSeen: null });
 
-      const statusHidden = row && row.active_status === 0;
+      const statusHidden = row.active_status === 0;
       const inChatWithRequester =
         !statusHidden &&
         activeChats.get(String(userId)) === String(requesterId);
@@ -1206,8 +1214,8 @@ io.on("connection", (socket) => {
     const timestamp = new Date().toISOString();
 
     // Verify receiver is still active before sending
-    db.get("SELECT active_status FROM users WHERE id=?", [receiver], (err, userRow) => {
-      if (err || !userRow || userRow.active_status === 0) {
+    db.get("SELECT account_status FROM users WHERE id=?", [receiver], (err, userRow) => {
+      if (err || !userRow || userRow.account_status === 0) {
         return callback?.({ success: false, message: "User is unavailable" });
       }
 
