@@ -16,10 +16,13 @@ messageSound.preload = "auto";
 callSound.preload = "auto";
 callSound.loop = true;
 let isChatOpen = false;
+
+const canPlaySounds = () => localStorage.getItem("notificationsEnabled") !== "false";
+
 document.addEventListener(
   "click",
   () => {
-    messageSound.play().then(() => messageSound.pause());
+    if (canPlaySounds()) messageSound.play().then(() => messageSound.pause());
   },
   { once: true },
 );
@@ -1474,7 +1477,7 @@ socket.on("newMessage", (data) => {
     currentFriendId &&
     (data.from == currentFriendId || data.to == currentFriendId);
 
-  if (!isMuted && (!isCurrentChat || !isChatOpen)) {
+  if (canPlaySounds() && !isMuted && (!isCurrentChat || !isChatOpen)) {
     messageSound.currentTime = 0;
     messageSound.play().catch(() => {});
   }
@@ -3347,7 +3350,7 @@ socket.on("callUser", ({ from, signal, callType }) => {
   incomingCallData = { from, signal, callType };
   const isCallMuted = localStorage.getItem(`muteCall_${from}`) === "true";
 
-  if (!isCallMuted && !isChatOpen) {
+  if (canPlaySounds() && !isCallMuted && !isChatOpen) {
     callSound.currentTime = 0;
     callSound.play().catch(() => {});
   }

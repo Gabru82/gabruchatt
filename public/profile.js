@@ -125,6 +125,11 @@ async function setupMyProfile() {
     readReceiptsInp.onchange = () => saveAdvancedProfile();
   }
 
+  const pushNotificationsInp = document.getElementById("pushNotifications");
+  if (pushNotificationsInp) {
+    pushNotificationsInp.onchange = () => saveAdvancedProfile();
+  }
+
   window.openEditProfile = () => {
     document.getElementById("fullEditModal").style.display = "flex";
   };
@@ -187,6 +192,12 @@ async function setupMyProfile() {
           localStorage.setItem("readReceipts", u.read_receipts !== 0);
         }
 
+        if (document.getElementById("pushNotifications")) {
+          const enabled = u.notifications_enabled !== 0;
+          document.getElementById("pushNotifications").checked = enabled;
+          localStorage.setItem("notificationsEnabled", enabled);
+        }
+
         if (u.avatar) {
           document.getElementById("myAvatarPreview").src = u.avatar;
           const pBtn = document.getElementById("profileBtn");
@@ -236,6 +247,9 @@ async function setupMyProfile() {
     const readReceiptsEl = document.getElementById("readReceipts");
     const read_receipts = readReceiptsEl ? (readReceiptsEl.checked ? 1 : 0) : undefined;
 
+    const notificationsEl = document.getElementById("pushNotifications");
+    const notifications_enabled = notificationsEl ? (notificationsEl.checked ? 1 : 0) : undefined;
+
     const res = await fetch("/api/updateProfile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -251,6 +265,7 @@ async function setupMyProfile() {
         birthday,
         active_status,
         read_receipts,
+        notifications_enabled,
       }),
     });
     const data = await res.json();
@@ -260,6 +275,10 @@ async function setupMyProfile() {
 
       if (read_receipts !== undefined) {
         localStorage.setItem("readReceipts", read_receipts !== 0);
+      }
+
+      if (notifications_enabled !== undefined) {
+        localStorage.setItem("notificationsEnabled", notifications_enabled !== 0);
       }
 
       document.getElementById("fullEditModal").style.display = "none";

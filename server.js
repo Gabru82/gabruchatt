@@ -95,6 +95,14 @@ db.serialize(() => {
       }
     },
   );
+  db.run(
+    "ALTER TABLE users ADD COLUMN notifications_enabled INTEGER DEFAULT 1",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("notifications_enabled error:", err.message);
+      }
+    },
+  );
 
   // ================= FRIENDS =================
   db.run(`
@@ -233,7 +241,7 @@ app.post("/api/getMessagesByIds", (req, res) => {
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
-    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, read_receipts FROM users WHERE id=?",
+    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, read_receipts, notifications_enabled FROM users WHERE id=?",
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
