@@ -765,9 +765,80 @@ app.use(express.static("public"));
 
 const onlineUsers = new Map();
 const activeChats = new Map();
-const activeCalls = new Map();
-// callerId -> { receiver, timeout }
-const ongoingCalls = new Map();
+
+/**
+ * Unified Call Sessions
+ * Key: sessionKey (minId_maxId)
+ * Value: { 
+ *   initiatorId, 
+ *   receiverId, 
+ *   status: 'ringing'|'active'|'ended', 
+ *   startTime, 
+ *   timeout,
+ *   loggingStarted: boolean 
+ * }
+ */
+const callSessions = new Map();
+
+function getSessionKey(id1, id2) {
+  return `${Math.min(id1, id2)}_${Math.max(id1, id2)}`;
+}
+
+function finalizeCallLog(session, duration = null, answered = false) {
+  if (session.loggingStarted) return;
+  session.loggingStarted = true;
+  session.status = 'ended';
+
+  const initiator = String(session.initiatorId);
+  const receiver = String(session.receiverId);
+  const now = new Date().toISOString();
+
+  let messageText = "";
+  let senderId = "";
+  let receiverId = "";
+
+  if (!answered) {
+    // Single terminal event: store as 'Missed call'
+    // Logic in chat.js: isMe ? 'No answer' : 'Missed call'
+    senderId = initiator;
+    receiverId = receiver;
+    messageText = "Missed call";
+  } else {
+    senderId = initiator;
+    receiverId = receiver;
+    messageText = `Call ended (${duration || '0s'})`;
+  }
+
+  db.run(
+    `INSERT INTO messages(sender, receiver, message, status, type, timestamp) VALUES(?,?,?,?,?,?)`,
+    [senderId, receiverId, messageText, "sent", "call_log", now],
+    function (err) {
+      if (err) return console.error("Call Log Error:", err);
+
+      const payload = {
+        from: senderId,
+        to: receiverId,
+        message: messageText,
+        msgId: this.lastID,
+        status: "sent",
+        type: "call_log",
+        timestamp: now,
+      };
+
+      io.to(`user_${initiator}`).to(`user_${receiver}`).emit("newMessage", payload);
+    }
+  );
+}
+
+function getSessionByUserId(userId) {
+  for (const [key, session] of callSessions.entries()) {
+    if (String(session.initiatorId) === String(userId) || String(session.receiverId) === String(userId)) {
+      if (session.status !== 'ended') return { key, session };
+    }
+  }
+  return null;
+}
+
 io.on("connection", (socket) => {
   console.log("User connected");
 
@@ -784,33 +855,15 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     if (socket.userId) {
-      const friendId = activeChats.get(socket.userId);
-      if (friendId) {
-        io.to(`user_${friendId}`).emit("friendLeftChat", {
-          friendId: socket.userId,
-        });
-      }
-
-      if (ongoingCalls.has(socket.userId)) {
-        const partnerId = ongoingCalls.get(socket.userId);
+      const activeSessionData = getSessionByUserId(socket.userId);
+      if (activeSessionData) {
+        const { key, session } = activeSessionData;
+        clearTimeout(session.timeout);
+        const partnerId = String(session.initiatorId) === String(socket.userId) ? session.receiverId : session.initiatorId;
+        
+        finalizeCallLog(session, null, session.status === 'active');
         io.to(`user_${partnerId}`).emit("callEnded");
-        ongoingCalls.delete(socket.userId);
-        ongoingCalls.delete(partnerId);
-      }
-
-      if (activeCalls.has(socket.userId)) {
-        const { receiver, timeout } = activeCalls.get(socket.userId);
-        clearTimeout(timeout);
-        io.to(`user_${receiver}`).emit("callEnded");
-        activeCalls.delete(socket.userId);
-      }
-
-      for (const [callerId, data] of activeCalls.entries()) {
-        if (data.receiver === socket.userId) {
-          clearTimeout(data.timeout);
-          io.to(`user_${callerId}`).emit("callEnded");
-          activeCalls.delete(callerId);
-        }
+        callSessions.delete(key);
       }
 
       onlineUsers.delete(socket.userId);
@@ -896,6 +949,7 @@ io.on("connection", (socket) => {
     const u1 = Math.min(userId, friendId);
     const u2 = Math.max(userId, friendId);
 
+    const now = new Date().toISOString();
     db.run(
       "INSERT OR REPLACE INTO chat_settings (user1_id, user2_id, timer_mode) VALUES (?, ?, ?)",
       [u1, u2, mode],
@@ -907,8 +961,8 @@ io.on("connection", (socket) => {
 
         // Log the change in the messages table
         db.run(
-          `INSERT INTO messages(sender, receiver, message, status, type) VALUES(?,?,?,?,?)`,
-          [senderId, receiverId, mode, "sent", "timer_log"],
+          `INSERT INTO messages(sender, receiver, message, status, type, timestamp) VALUES(?,?,?,?,?,?)`,
+          [senderId, receiverId, mode, "sent", "timer_log", now],
           function (err2) {
             if (err2) return;
 
@@ -919,7 +973,7 @@ io.on("connection", (socket) => {
               msgId: this.lastID,
               status: "sent",
               type: "timer_log",
-              timestamp: new Date().toISOString(),
+              timestamp: now,
             };
 
             io.to(`user_${receiverId}`).to(`user_${senderId}`).emit("newMessage", payload);
@@ -942,10 +996,11 @@ io.on("connection", (socket) => {
     const replyTo = data.replyTo;
 
     if (!message) return;
+    const timestamp = new Date().toISOString();
 
     db.run(
-      `INSERT INTO messages(sender, receiver, message, unread_count, status, type, caption, reply_to)
-       VALUES(?,?,?,?,?,?,?,?)`,
+      `INSERT INTO messages(sender, receiver, message, unread_count, status, type, caption, reply_to, timestamp)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
       [
         sender,
         receiver,
@@ -955,6 +1010,7 @@ io.on("connection", (socket) => {
         msgType,
         caption || null,
         replyTo || null,
+        timestamp,
       ],
       function (err) {
         if (err) {
@@ -963,7 +1019,6 @@ io.on("connection", (socket) => {
         }
 
         const finalMsgId = this.lastID;
-        const timestamp = new Date().toISOString();
 
         const payload = {
           from: sender,
@@ -1113,6 +1168,7 @@ io.on("connection", (socket) => {
     const sender = String(socket.userId);
     const receiver = String(to);
 
+    const now = new Date().toISOString();
     let messageText = "";
     if (type === "missed") {
       messageText = "Missed call";
@@ -1123,9 +1179,9 @@ io.on("connection", (socket) => {
     }
 
     db.run(
-      `INSERT INTO messages(sender, receiver, message, unread_count, status, type)
-       VALUES(?,?,?,?,?,?)`,
-      [sender, receiver, messageText, 1, "sent", "call_log"],
+      `INSERT INTO messages(sender, receiver, message, unread_count, status, type, timestamp)
+       VALUES(?,?,?,?,?,?,?)`,
+      [sender, receiver, messageText, 1, "sent", "call_log", now],
       function (err) {
         if (err) return console.error(err);
 
@@ -1136,7 +1192,7 @@ io.on("connection", (socket) => {
           msgId: this.lastID,
           status: "sent",
           type: "call_log",
-          timestamp: new Date().toISOString(),
+          timestamp: now,
         };
 
         io.to(`user_${receiver}`)
@@ -1157,11 +1213,12 @@ io.on("connection", (socket) => {
     const sender = String(socket.userId);
     const receiver = String(to);
     const messageText = "Took a screenshot";
+    const now = new Date().toISOString();
 
     db.run(
-      `INSERT INTO messages(sender, receiver, message, unread_count, status, type)
-       VALUES(?,?,?,?,?,?)`,
-      [sender, receiver, messageText, 1, "sent", "screenshot_log"],
+      `INSERT INTO messages(sender, receiver, message, unread_count, status, type, timestamp)
+       VALUES(?,?,?,?,?,?,?)`,
+      [sender, receiver, messageText, 1, "sent", "screenshot_log", now],
       function (err) {
         if (err) return console.error(err);
 
@@ -1172,7 +1229,7 @@ io.on("connection", (socket) => {
           msgId: this.lastID,
           status: "sent",
           type: "screenshot_log",
-          timestamp: new Date().toISOString(),
+          timestamp: now,
         };
 
         io.to(`user_${receiver}`)
@@ -1191,6 +1248,9 @@ io.on("connection", (socket) => {
   socket.on("callUser", ({ userToCall, signalData, from, callType }) => {
     const caller = String(socket.userId);
     const receiver = String(userToCall);
+    const key = getSessionKey(caller, receiver);
+
+    if (callSessions.has(key) && callSessions.get(key).status !== 'ended') return;
 
     io.to(`user_${receiver}`).emit("callUser", {
       signal: signalData,
@@ -1198,33 +1258,37 @@ io.on("connection", (socket) => {
       callType,
     });
 
-    // ✅ Start 30 sec timeout
+    // Standardized 15 sec timeout
     const timeout = setTimeout(() => {
-      const call = activeCalls.get(caller);
-      if (!call) return;
+      const session = callSessions.get(key);
+      if (!session || session.status !== 'ringing') return;
 
-      handleMissedCall(caller, receiver);
-
-      activeCalls.delete(caller);
-
+      finalizeCallLog(session, null, false);
       io.to(`user_${caller}`).emit("callEnded");
       io.to(`user_${receiver}`).emit("callEnded");
-    }, 30000);
+      callSessions.delete(key);
+    }, 15000);
 
-    activeCalls.set(caller, { receiver, timeout });
+    callSessions.set(key, {
+      initiatorId: caller,
+      receiverId: receiver,
+      status: 'ringing',
+      timeout,
+      loggingStarted: false
+    });
   });
+
   socket.on("answerCall", ({ signal, to }) => {
     const caller = String(to);
+    const receiver = String(socket.userId);
+    const key = getSessionKey(caller, receiver);
+    const session = callSessions.get(key);
 
-    // ✅ clear timeout (call picked)
-    const call = activeCalls.get(caller);
-    if (call) {
-      clearTimeout(call.timeout);
-      activeCalls.delete(caller);
+    if (session) {
+      clearTimeout(session.timeout);
+      session.status = 'active';
+      session.startTime = Date.now();
     }
-
-    ongoingCalls.set(caller, String(socket.userId));
-    ongoingCalls.set(String(socket.userId), caller);
 
     io.to(`user_${caller}`).emit("callAccepted", signal);
   });
@@ -1253,58 +1317,14 @@ io.on("connection", (socket) => {
   socket.on("endCall", ({ to, duration, answered }) => {
     const sender = String(socket.userId);
     const receiver = String(to);
+    const key = getSessionKey(sender, receiver);
+    const session = callSessions.get(key);
 
-    // ✅ prevent duplicate (timeout vs manual end)
-    const call = activeCalls.get(sender);
-    if (call) {
-      clearTimeout(call.timeout);
-      activeCalls.delete(sender);
+    if (session) {
+      clearTimeout(session.timeout);
+      finalizeCallLog(session, duration, answered);
+      callSessions.delete(key);
     }
-
-    ongoingCalls.delete(sender);
-    ongoingCalls.delete(receiver);
-
-    const now = new Date().toISOString();
-
-    let callerMessage = "";
-    let receiverMessage = "";
-
-    if (!answered) {
-      callerMessage = "No answer";
-      receiverMessage = "Missed call";
-    } else {
-      callerMessage = `Call ended (${duration})`;
-      receiverMessage = `Call ended (${duration})`;
-    }
-
-    // 👉 caller log
-    db.run(
-      `INSERT INTO messages(sender, receiver, message, status, type)
-     VALUES(?,?,?,?,?)`,
-      [sender, receiver, callerMessage, "seen", "call_log"],
-    );
-
-    // 👉 receiver log
-    db.run(
-      `INSERT INTO messages(sender, receiver, message, status, type)
-     VALUES(?,?,?,?,?)`,
-      [receiver, sender, receiverMessage, "sent", "call_log"],
-      function () {
-        const payload = {
-          from: receiver,
-          to: sender,
-          message: receiverMessage,
-          msgId: this.lastID,
-          status: "sent",
-          type: "call_log",
-          timestamp: now,
-        };
-
-        io.to(`user_${sender}`)
-          .to(`user_${receiver}`)
-          .emit("newMessage", payload);
-      },
-    );
 
     io.to(`user_${receiver}`).emit("callEnded");
   });
@@ -1541,6 +1561,19 @@ io.on("connection", (socket) => {
     );
   });
 
+  socket.on("friendRequestSent", ({ receiver }) => {
+    io.to(`user_${String(receiver)}`).emit("newFriendRequest");
+  });
+
+  socket.on("friendRequestAccepted", ({ friendId }) => {
+    const senderId = String(socket.userId);
+    const receiverId = String(friendId);
+
+    // Notify both users to refresh their lists
+    io.to(`user_${receiverId}`).emit("friendAdded");
+    io.to(`user_${senderId}`).emit("friendAdded");
+  });
+
   socket.on("toggleCamera", ({ to, isVideo }) => {
     io.to(`user_${to}`).emit("cameraToggled", {
       from: socket.userId,
@@ -1569,16 +1602,16 @@ function handleMissedCall(caller, receiver) {
 
   // Caller → No answer
   db.run(
-    `INSERT INTO messages(sender, receiver, message, status, type)
-     VALUES(?,?,?,?,?)`,
-    [caller, receiver, "No answer", "seen", "call_log"],
+    `INSERT INTO messages(sender, receiver, message, status, type, timestamp)
+     VALUES(?,?,?,?,?,?)`,
+    [caller, receiver, "No answer", "seen", "call_log", now],
   );
 
   // Receiver → Missed call
   db.run(
-    `INSERT INTO messages(sender, receiver, message, status, type)
-     VALUES(?,?,?,?,?)`,
-    [receiver, caller, "Missed call", "sent", "call_log"],
+    `INSERT INTO messages(sender, receiver, message, status, type, timestamp)
+     VALUES(?,?,?,?,?,?)`,
+    [receiver, caller, "Missed call", "sent", "call_log", now],
     function () {
       const payload = {
         from: receiver,

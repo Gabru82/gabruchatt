@@ -340,19 +340,119 @@ async function openForwardModal() {
 
 setupForwardModal();
 
-// ================= USER PROFILE & MEDIA MODAL =================
+// ================= SHARE PROFILE FEATURE =================
 
-const sharedMediaOptionsHTML = `
-<div id="sharedMediaOptionsModal" class="theme-popup" style="z-index: 2100;">
-    <div class="theme-popup-content">
-        <h3>Options</h3>
-        <div class="theme-option" id="smShowInChat">Show in Chat</div>
-        <div class="theme-option" id="smDelete">Delete</div>
-        <div class="theme-option" id="smCancel" style="color: #ff7b7b;">Cancel</div>
+let selectedShareFriends = new Set();
+
+function setupShareModal() {
+  const shareModalHTML = `
+    <div id="shareProfileModal" class="theme-popup">
+        <div class="theme-popup-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+            <button class="close-btn" onclick="closeShareModal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+            <h3 style="margin-bottom: 10px;">Share Profile to...</h3>
+            <div id="shareFriendList" style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
+                <!-- Friends list -->
+            </div>
+            <div style="display: flex; justify-content: center; padding-top: 10px;">
+                <button id="confirmShareBtn" class="save-btn" style="width: auto; padding: 12px 60px; display: none;">Send Profile</button>
+            </div>
+        </div>
     </div>
-</div>
-`;
-app.insertAdjacentHTML("beforeend", sharedMediaOptionsHTML);
+  `;
+  app.insertAdjacentHTML("beforeend", shareModalHTML);
+}
+
+window.closeShareModal = function () {
+  document.getElementById("shareProfileModal").style.display = "none";
+  selectedShareFriends.clear();
+};
+
+window.shareProfile = async function () {
+  if (!currentFriendId) return;
+  closeProfileMenu();
+  document.getElementById("userProfileModal").style.display = "none";
+  // Get data of the user being shared
+  const profileRes = await fetch(`/api/getMyProfile/${currentFriendId}`);
+  const profileData = await profileRes.json();
+  if (!profileData.success) return;
+
+  const sharedUser = profileData.user;
+  const modal = document.getElementById("shareProfileModal");
+  const list = document.getElementById("shareFriendList");
+  const confirmBtn = document.getElementById("confirmShareBtn");
+
+  modal.style.display = "flex";
+  list.innerHTML = "Loading friends...";
+  confirmBtn.style.display = "none";
+
+  const res = await fetch(`/getFriends/${userId}`);
+  const data = await res.json();
+  list.innerHTML = "";
+
+  data.friends.forEach((friend) => {
+    const item = document.createElement("div");
+    item.className = "forward-friend-item";
+    item.onclick = () => {
+      if (selectedShareFriends.has(friend.id)) {
+        selectedShareFriends.delete(friend.id);
+        item.classList.remove("selected");
+      } else {
+        selectedShareFriends.add(friend.id);
+        item.classList.add("selected");
+      }
+      confirmBtn.style.display =
+        selectedShareFriends.size > 0 ? "block" : "none";
+    };
+
+    item.innerHTML = `
+      <img src="${getAvatarSrc(friend)}">
+      <div class="forward-friend-info">
+          <div class="forward-friend-name">${friend.name}</div>
+      </div>
+      <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
+    `;
+    list.appendChild(item);
+  });
+
+  confirmBtn.onclick = () => {
+    const shareData = JSON.stringify({
+      sharedUserId: sharedUser.id,
+      name: sharedUser.name,
+      avatar: sharedUser.avatar || getAvatarSrc(sharedUser.id),
+    });
+
+    selectedShareFriends.forEach((targetId) => {
+      socket.emit("sendMessage", {
+        to: targetId,
+        message: shareData,
+        type: "profile_share",
+      });
+    });
+
+    showPopup("Profile Shared!");
+    closeShareModal();
+  };
+};
+
+window.requestFromShare = async function (targetId, msgId) {
+  const btn = document.getElementById(`addBtn_${msgId}`);
+  if (btn) btn.disabled = true;
+
+  const res = await fetch("/sendRequest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, receiver: targetId }),
+  });
+
+  if (res.ok) {
+    showPopup("Friend request sent!");
+    if (btn) btn.innerText = "Pending";
+  }
+};
+
+setupShareModal();
+
+// ================= USER PROFILE & MEDIA MODAL =================
 
 function openProfileMenu(e) {
   e.stopPropagation();
@@ -423,14 +523,6 @@ window.setTimerMode = function (mode) {
 window.closeTimerModal = function () {
   document.getElementById("chatTimerModal").style.display = "none";
 };
-
-
-
-function shareProfile() {
-  navigator.clipboard.writeText("Profile link");
-  showPopup("Profile copied");
-  closeProfileMenu();
-}
 function loadMuteState() {
   if (!currentFriendId) return;
 
@@ -449,14 +541,12 @@ muteChatToggle.addEventListener("change", (e) => {
   if (!currentFriendId) return;
 
   localStorage.setItem(`muteChat_${currentFriendId}`, e.target.checked);
-
 });
 
 muteCallToggle.addEventListener("change", (e) => {
   if (!currentFriendId) return;
 
   localStorage.setItem(`muteCall_${currentFriendId}`, e.target.checked);
-
 });
 // CLOSE ON OUTSIDE CLICK
 document.addEventListener("click", (e) => {
@@ -470,7 +560,7 @@ document.addEventListener("click", (e) => {
 
 window.removeFriend = async function () {
   if (!currentFriendId) return;
-
+  closeProfileMenu();
   const res = await fetch("/api/removeFriend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -493,7 +583,7 @@ window.removeFriend = async function () {
 
 window.blockUser = async function () {
   if (!currentFriendId) return;
-
+  closeProfileMenu();
   const res = await fetch("/api/blockUser", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -643,7 +733,8 @@ async function loadSharedInfo(friendId) {
   docsList.innerHTML = "";
 
   if (data.media.length === 0) {
-    const noDataHtml = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>Nothing shared yet</p>";
+    const noDataHtml =
+      "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>Nothing shared yet</p>";
     grid.innerHTML = noDataHtml;
     linksList.innerHTML = noDataHtml;
     docsList.innerHTML = noDataHtml;
@@ -659,102 +750,103 @@ async function loadSharedInfo(friendId) {
 
       if (msg.type === "image") {
         item.innerHTML = `<img src="${msg.message}" loading="lazy">`;
-    } else if (msg.type === "video") {
-      item.innerHTML = `<video src="${msg.message}"></video><div class="play-icon">▶</div>`;
+      } else if (msg.type === "video") {
+        item.innerHTML = `<video src="${msg.message}"></video><div class="play-icon">▶</div>`;
       } else if (msg.type === "sticker") {
         item.innerHTML = `<img src="${msg.message}" loading="lazy" style="object-fit: contain; padding: 5px;">`;
-    } else if (msg.type === "audio") {
-      item.innerHTML = `<div class="audio-icon">🎤</div>`;
-    }
+      } else if (msg.type === "audio") {
+        item.innerHTML = `<div class="audio-icon">🎤</div>`;
+      }
 
-    let longPressTimer;
-    let isLongPress = false;
+      let longPressTimer;
+      let isLongPress = false;
 
-    const showDeleteOption = () => {
-      isLongPress = true;
+      const showDeleteOption = () => {
+        isLongPress = true;
         selectedMsgId = parseInt(msg.id);
         selectedMsgSender = String(msg.sender);
 
-      const optionsModal = document.getElementById("sharedMediaOptionsModal");
-      optionsModal.style.display = "flex";
-        
-      document.getElementById("smShowInChat").onclick = () => {
-        optionsModal.style.display = "none";
-        document.getElementById("userProfileModal").style.display = "none";
-        scrollToMessage(msg.id);
+        const optionsModal = document.getElementById("sharedMediaOptionsModal");
+        optionsModal.style.display = "flex";
+
+        document.getElementById("smShowInChat").onclick = () => {
+          optionsModal.style.display = "none";
+          document.getElementById("userProfileModal").style.display = "none";
+          scrollToMessage(msg.id);
+        };
+
+        document.getElementById("smDelete").onclick = () => {
+          optionsModal.style.display = "none";
+          const modal = document.getElementById("deleteModal");
+          modal.style.display = "flex";
+          modal.style.justifyContent = "center";
+          modal.style.alignItems = "center";
+          modal.style.position = "absolute";
+          modal.style.top = "0";
+          modal.style.left = "0";
+          modal.style.zIndex = "10000";
+          modal.style.width = "100%";
+          modal.style.height = "100%";
+          modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+
+          if (String(msg.sender) !== String(userId)) {
+            document.getElementById("deleteEveryone").style.display = "none";
+          } else {
+            document.getElementById("deleteEveryone").style.display = "block";
+          }
+        };
+
+        document.getElementById("smCancel").onclick = () => {
+          optionsModal.style.display = "none";
+        };
       };
 
-      document.getElementById("smDelete").onclick = () => {
-        optionsModal.style.display = "none";
-        const modal = document.getElementById("deleteModal");
-        modal.style.display = "flex";
-        modal.style.justifyContent = "center";
-        modal.style.alignItems = "center";
-        modal.style.position = "absolute";
-        modal.style.top = "0";
-        modal.style.left = "0";
-        modal.style.zIndex = "10000";
-        modal.style.width = "100%";
-        modal.style.height = "100%";
-        modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-
-        if (String(msg.sender) !== String(userId)) {
-          document.getElementById("deleteEveryone").style.display = "none";
-        } else {
-          document.getElementById("deleteEveryone").style.display = "block";
+      item.addEventListener("touchstart", () => {
+        isLongPress = false;
+        longPressTimer = setTimeout(showDeleteOption, 600);
+      });
+      item.addEventListener("touchend", () => clearTimeout(longPressTimer));
+      item.addEventListener("touchmove", () => clearTimeout(longPressTimer));
+      item.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showDeleteOption();
+      });
+      item.onclick = () => {
+        if (!isLongPress) {
+          if (msg.type === "image") {
+            openFullScreenImage(msg.message);
+          } else if (msg.type === "audio") {
+            item.innerHTML = "";
+            const audio = document.createElement("audio");
+            audio.src = msg.message;
+            audio.controls = true;
+            audio.autoplay = true;
+            audio.style.width = "100%";
+            item.style.display = "flex";
+            item.style.alignItems = "center";
+            item.appendChild(audio);
+            item.onclick = null;
+          } else {
+            window.open(msg.message);
+          }
         }
       };
 
-      document.getElementById("smCancel").onclick = () => {
-        optionsModal.style.display = "none";
-      };
-    };
-
-    item.addEventListener("touchstart", () => {
-      isLongPress = false;
-      longPressTimer = setTimeout(showDeleteOption, 600);
-    });
-    item.addEventListener("touchend", () => clearTimeout(longPressTimer));
-    item.addEventListener("touchmove", () => clearTimeout(longPressTimer));
-    item.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      showDeleteOption();
-    });
-    item.onclick = () => {
-      if (!isLongPress) {
-        if (msg.type === "image") {
-          openFullScreenImage(msg.message);
-        } else if (msg.type === "audio") {
-          item.innerHTML = "";
-          const audio = document.createElement("audio");
-          audio.src = msg.message;
-          audio.controls = true;
-          audio.autoplay = true;
-          audio.style.width = "100%";
-          item.style.display = "flex";
-          item.style.alignItems = "center";
-          item.appendChild(audio);
-          item.onclick = null;
-        } else {
-          window.open(msg.message);
-        }
-      }
-    };
-
-    grid.appendChild(item);
-    } 
+      grid.appendChild(item);
+    }
     // --- CATEGORY: LINKS ---
     else if (msg.type === "text") {
       const urlRegex = /(https?:\/\/[^\s]+)/g;
       const urls = msg.message.match(urlRegex);
       if (urls) {
-        urls.forEach(url => {
+        urls.forEach((url) => {
           const item = document.createElement("div");
           item.className = "link-item";
-          
+
           // Simple icon based on common domains
           let icon = "fa-link";
-          if (url.includes("youtube.com") || url.includes("youtu.be")) icon = "fa-youtube";
+          if (url.includes("youtube.com") || url.includes("youtu.be"))
+            icon = "fa-youtube";
           else if (url.includes("google.com")) icon = "fa-google";
           else if (url.includes("github.com")) icon = "fa-github";
 
@@ -777,7 +869,7 @@ async function loadSharedInfo(friendId) {
       const item = document.createElement("div");
       item.className = "doc-item";
       const fileName = msg.caption || "Document";
-      
+
       item.innerHTML = `
         <div style="width: 40px; height: 40px; background: rgba(255,204,0,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
             <i class="fa-solid fa-file-pdf" style="color: #ffcc00;"></i>
@@ -801,9 +893,15 @@ async function loadSharedInfo(friendId) {
   });
 
   // Default fallback if a tab is empty after loop
-  if (!grid.innerHTML) grid.innerHTML = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No media</p>";
-  if (!linksList.innerHTML) linksList.innerHTML = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No links</p>";
-  if (!docsList.innerHTML) docsList.innerHTML = "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No documents</p>";
+  if (!grid.innerHTML)
+    grid.innerHTML =
+      "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No media</p>";
+  if (!linksList.innerHTML)
+    linksList.innerHTML =
+      "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No links</p>";
+  if (!docsList.innerHTML)
+    docsList.innerHTML =
+      "<p style='color:#777; width:100%; text-align:center; padding: 20px;'>No documents</p>";
 }
 
 // Initialize Tab Switching Logic
@@ -844,6 +942,18 @@ let activeChat = null;
 const socket = io();
 socket.on("connect", () => {
   socket.emit("register", userId);
+});
+
+socket.on("newFriendRequest", () => {
+  showPopup("You have a new friend request!");
+  const requestModal = document.getElementById("requestModal");
+  if (requestModal && requestModal.style.display === "flex") {
+    loadRequests();
+  }
+});
+
+socket.on("friendAdded", () => {
+  loadFriends();
 });
 
 // ================= FRIEND SEARCH =================
@@ -1442,6 +1552,26 @@ window.selectAllMessages = function () {
   });
 };
 
+async function checkShareRelation(targetId, msgId) {
+  const btn = document.getElementById(`addBtn_${msgId}`);
+  if (!btn) return;
+
+  if (targetId == userId) {
+    btn.style.display = "none";
+    return;
+  }
+
+  const res = await fetch(`/checkRelation/${userId}/${targetId}`);
+  const data = await res.json();
+  if (data.status === "friends") {
+    btn.innerText = "Friends";
+    btn.disabled = true;
+  } else if (data.status === "pending") {
+    btn.innerText = "Pending";
+    btn.disabled = true;
+  }
+}
+
 function toggleSelectionMode(enabled, initialMsgEl = null) {
   isSelectionMode = enabled;
   const chatActions = document.querySelector(".chat-actions");
@@ -1561,10 +1691,14 @@ function appendMessage(
   };
 
   // ✅ HANDLE CALL LOGS
-  if (type === "call_log" || type === "screenshot_log" || type === "timer_log") {
+  if (
+    type === "call_log" ||
+    type === "screenshot_log" ||
+    type === "timer_log"
+  ) {
     div.className = `message ${type.replace("_", "-")}`;
     const timeStr = timestamp
-      ? new Date(timestamp).toLocaleTimeString([], {
+      ? new Date(timestamp).toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
         })
@@ -1573,15 +1707,18 @@ function appendMessage(
     let icon = "";
 
     if (type === "call_log") {
-      icon = "📞";
-      // If I sent "Missed call", it means I called and they didn't answer -> "No Answer"
-      if (isMe && message === "Missed call") text = "No answer";
-      else if (!isMe && message === "Missed call") text = "Missed call";
+      icon = message === "Missed call" ? "📞" : "☎️";
+      // Map "Missed call" database entry to appropriate text based on perspective
+      if (message === "Missed call") {
+        text = isMe ? "No answer" : "Missed call";
+      }
     } else if (type === "screenshot_log") {
       icon = "📸";
     } else if (type === "timer_log") {
       icon = "⏱️";
-      text = isMe ? `You set chat timer to ${message}` : `Chat timer updated to ${message}`;
+      text = isMe
+        ? `You set chat timer to ${message}`
+        : `Chat timer updated to ${message}`;
     }
 
     div.innerHTML = `${icon} ${text} <span class="call-log-time">${timeStr}</span>`;
@@ -1636,6 +1773,19 @@ function appendMessage(
       `;
     } else if (type === "sticker") {
       contentHtml = `<img src="${message}" class="chat-sticker">`;
+    } else if (type === "profile_share") {
+      const sharedData = JSON.parse(message);
+      contentHtml = `
+        <div class="profile-share-card">
+          <img src="${sharedData.avatar}" class="share-avatar">
+          <div class="share-info">
+            <div class="share-name">${sharedData.name}</div>
+            <button class="share-add-btn" id="addBtn_${msgId}" onclick="requestFromShare(${sharedData.sharedUserId}, '${msgId}')">Add Friend</button>
+          </div>
+        </div>
+      `;
+      // Check relation after a tiny delay so the element is in the DOM
+      setTimeout(() => checkShareRelation(sharedData.sharedUserId, msgId), 50);
     } else {
       // Default to text
       const sanitizedMessage = message

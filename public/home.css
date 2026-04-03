@@ -2448,3 +2448,54 @@ input:checked + .slider:before {
   font-weight: 600;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
+
+/* ================= PROFILE SHARE CARD ================= */
+.profile-share-card {
+  background: #1a1a1a;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 5px 0;
+}
+
+.share-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--profile-accent);
+}
+
+.share-info {
+  text-align: center;
+}
+
+.share-name {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 8px;
+  color: white;
+}
+
+.share-add-btn {
+  background: var(--profile-accent);
+  color: black;
+  border: none;
+  padding: 6px 15px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.share-add-btn:disabled {
+  background: #444;
+  color: #888;
+  cursor: default;
+}
