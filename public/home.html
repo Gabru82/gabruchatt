@@ -498,7 +498,6 @@
         </div>
         <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" />
 
-
         <!-- // friend profile model // -->
         <div id="userProfileModal" class="user-profile-modal">
             <div class="user-profile-content">
@@ -578,10 +577,7 @@
         </div>
 
 
-
-
-
-
+        <!-- Profile Menu {mute, calls, timer, share, remove, block,} -->
         <div id="profileActionSheet" class="action-sheet">
 
             <div class="action-sheet-overlay" onclick="closeProfileMenu()"></div>
@@ -636,9 +632,35 @@
         </div>
 
 
+        <!-- Chat Timer Modal (Top Sheet Style) -->
+        <div id="chatTimerModal" class="chat-timer-overlay">
+            <div class="chat-timer-sheet">
+
+                <h3 class="chat-timer-title">Chat Delete Timer</h3>
+
+                <div class="chat-timer-option" onclick="setTimerMode('Normal')">
+                    <span>Normal</span>
+                </div>
+
+                <div class="chat-timer-option" onclick="setTimerMode('After View')">
+                    <span>After View</span>
+                </div>
+
+                <div class="chat-timer-option" onclick="setTimerMode('24 Hours')">
+                    <span>24 Hours</span>
+                </div>
+
+                <div class="chat-timer-cancel" onclick="closeTimerModal()">
+                    Cancel
+                </div>
+
+            </div>
+        </div>
 
 
-        
+
+
+
     </div>
 
 

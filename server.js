@@ -150,6 +150,16 @@ db.serialize(() => {
     )
   `);
 
+  // ================= CHAT SETTINGS (Timer) =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_settings(
+      user1_id INTEGER,
+      user2_id INTEGER,
+      timer_mode TEXT DEFAULT 'Normal',
+      PRIMARY KEY(user1_id, user2_id)
+    )
+  `);
+
   // ================= BLOCKS =================
   db.run(`
     CREATE TABLE IF NOT EXISTS blocks(
@@ -252,6 +262,18 @@ app.get("/api/getMyProfile/:userId", (req, res) => {
       );
     },
   );
+});
+
+app.get("/api/getChatSettings/:userId/:friendId", (req, res) => {
+  const { userId, friendId } = req.params;
+  const u1 = Math.min(parseInt(userId), parseInt(friendId));
+  const u2 = Math.max(parseInt(userId), parseInt(friendId));
+  db.get("SELECT timer_mode FROM chat_settings WHERE user1_id=? AND user2_id=?", [u1, u2], (err, row) => {
+    if (err) return res.status(500).json({ timer_mode: 'Normal' });
+    res.json({
+      timer_mode: row ? row.timer_mode : 'Normal'
+    });
+  });
 });
 
 app.post("/api/updateProfile", (req, res) => {
@@ -831,9 +853,78 @@ io.on("connection", (socket) => {
     db.run("UPDATE users SET last_seen=? WHERE id=?", [now, userId]);
 
     if (friendId) {
+      // Handle "After View" deletion logic
+      const u1 = Math.min(parseInt(userId), parseInt(friendId));
+      const u2 = Math.max(parseInt(userId), parseInt(friendId));
+      db.get("SELECT timer_mode FROM chat_settings WHERE user1_id=? AND user2_id=?", [u1, u2], (err, row) => {
+        if (row && row.timer_mode === 'After View') {
+          const uIdStr = String(userId);
+          db.run(`
+            UPDATE messages 
+            SET deleted_for = (CASE 
+              WHEN deleted_for IS NULL OR deleted_for = '' THEN ? 
+              ELSE deleted_for || ',' || ? 
+              END)
+            WHERE ((sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?))
+            AND status = 'seen'
+            AND (
+              deleted_for IS NULL 
+              OR (',' || deleted_for || ',') NOT LIKE ?
+            )
+          `, [
+            uIdStr, uIdStr, 
+            userId, friendId, 
+            friendId, userId, 
+            `%,${uIdStr},%`
+          ]);
+        }
+      });
+
       io.to(`user_${friendId}`).emit("friendLeftChat", { friendId: userId });
     }
     activeChats.delete(userId);
+  });
+
+  socket.on("setTimerMode", ({ to, mode }) => {
+    const userId = parseInt(socket.userId);
+    const friendId = parseInt(to);
+    if (!userId || !friendId) return;
+
+    const u1 = Math.min(userId, friendId);
+    const u2 = Math.max(userId, friendId);
+
+    db.run(
+      "INSERT OR REPLACE INTO chat_settings (user1_id, user2_id, timer_mode) VALUES (?, ?, ?)",
+      [u1, u2, mode],
+      function (err) {
+        if (err) return;
+
+        const senderId = String(userId);
+        const receiverId = String(friendId);
+
+        // Log the change in the messages table
+        db.run(
+          `INSERT INTO messages(sender, receiver, message, status, type) VALUES(?,?,?,?,?)`,
+          [senderId, receiverId, mode, "sent", "timer_log"],
+          function (err2) {
+            if (err2) return;
+
+            const payload = {
+              from: senderId,
+              to: receiverId,
+              message: mode,
+              msgId: this.lastID,
+              status: "sent",
+              type: "timer_log",
+              timestamp: new Date().toISOString(),
+            };
+
+            io.to(`user_${receiverId}`).to(`user_${senderId}`).emit("newMessage", payload);
+            io.to(`user_${friendId}`).emit("timerModeChanged", { from: userId, mode });
+          }
+        );
+      }
+    );
   });
 
   // ================= MESSAGE HANDLER HELPER =================
@@ -1454,6 +1545,22 @@ io.on("connection", (socket) => {
     });
   });
 });
+
+// Background task for 24-hour message deletion
+setInterval(() => {
+  db.run(`
+    DELETE FROM messages 
+    WHERE timestamp < datetime('now', '-1 day')
+    AND EXISTS (
+      SELECT 1 FROM chat_settings 
+      WHERE (
+        (user1_id = messages.sender AND user2_id = messages.receiver) 
+        OR (user1_id = messages.receiver AND user2_id = messages.sender)
+      ) AND timer_mode = '24 Hours'
+    )
+  `);
+}, 60000); // Runs every minute
+
 function handleMissedCall(caller, receiver) {
   const now = new Date().toISOString();
 

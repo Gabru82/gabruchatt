@@ -373,20 +373,58 @@ function closeProfileMenu() {
     sheet.style.display = "none";
   }, 300);
 }
-function muteChat() {
-  showPopup("Chat muted");
-  closeProfileMenu();
-}
 
-function muteCall() {
-  showPopup("Calls muted");
-  closeProfileMenu();
-}
+// 🔥 Open Timer Modal (Top UI)
+window.setChatTimer = function () {
+  const modal = document.getElementById("chatTimerModal");
+  modal.style.display = "flex";
 
-function setChatTimer() {
-  showPopup("Timer coming soon");
+  // ✅ highlight current selected mode
+  const current =
+    localStorage.getItem(`chatTimer_${currentFriendId}`) || "Normal";
+
+  document.querySelectorAll(".chat-timer-option").forEach((el) => {
+    el.classList.remove("active");
+
+    if (el.innerText.trim() === current) {
+      el.classList.add("active");
+    }
+  });
+
   closeProfileMenu();
-}
+};
+
+// 🔥 Set Mode
+window.setTimerMode = function (mode) {
+  if (!currentFriendId) return;
+
+  // ✅ store locally (for UI state)
+  localStorage.setItem(`chatTimer_${currentFriendId}`, mode);
+
+  // ✅ send to backend
+  socket.emit("setTimerMode", { to: currentFriendId, mode });
+
+  // ✅ update UI instantly
+  document.querySelectorAll(".chat-timer-option").forEach((el) => {
+    el.classList.remove("active");
+
+    if (el.innerText.trim() === mode) {
+      el.classList.add("active");
+    }
+  });
+
+  // ✅ close modal
+  document.getElementById("chatTimerModal").style.display = "none";
+
+  // showPopup(`Chat timer set to ${mode}`);
+};
+
+// 🔥 Close Modal
+window.closeTimerModal = function () {
+  document.getElementById("chatTimerModal").style.display = "none";
+};
+
+
 
 function shareProfile() {
   navigator.clipboard.writeText("Profile link");
@@ -1402,8 +1440,8 @@ function appendMessage(
   };
 
   // ✅ HANDLE CALL LOGS
-  if (type === "call_log" || type === "screenshot_log") {
-    div.className = `message ${type === "call_log" ? "call-log" : "screenshot-log"}`;
+  if (type === "call_log" || type === "screenshot_log" || type === "timer_log") {
+    div.className = `message ${type.replace("_", "-")}`;
     const timeStr = timestamp
       ? new Date(timestamp).toLocaleTimeString([], {
           hour: "2-digit",
@@ -1411,12 +1449,18 @@ function appendMessage(
         })
       : "";
     let text = message;
-    let icon = type === "call_log" ? "📞" : "📸";
+    let icon = "";
 
     if (type === "call_log") {
+      icon = "📞";
       // If I sent "Missed call", it means I called and they didn't answer -> "No Answer"
       if (isMe && message === "Missed call") text = "No answer";
       else if (!isMe && message === "Missed call") text = "Missed call";
+    } else if (type === "screenshot_log") {
+      icon = "📸";
+    } else if (type === "timer_log") {
+      icon = "⏱️";
+      text = isMe ? `You set chat timer to ${message}` : `Chat timer updated to ${message}`;
     }
 
     div.innerHTML = `${icon} ${text} <span class="call-log-time">${timeStr}</span>`;
@@ -1936,7 +1980,8 @@ function showMessageMenu(e, messageEl) {
 
   const isLog =
     messageEl.classList.contains("call-log") ||
-    messageEl.classList.contains("screenshot-log");
+    messageEl.classList.contains("screenshot-log") ||
+    messageEl.classList.contains("timer-log");
 
   if (isLog) {
     // Only show delete for log messages
@@ -2352,6 +2397,11 @@ async function openChat(friendId, friendName, friendAvatar = null) {
   // ✅ Fetch Initial Status
   updateChatStatus(friendId);
 
+  // Fetch Chat Settings (Timer)
+  const settingsRes = await fetch(`/api/getChatSettings/${userId}/${friendId}`);
+  const settingsData = await settingsRes.json();
+  console.log("Chat Timer Mode:", settingsData.timer_mode);
+
   // Load and apply theme
   const themeRes = await fetch(`/getTheme/${userId}/${friendId}`);
   const themeData = await themeRes.json();
@@ -2511,7 +2561,11 @@ function closeModal(event) {
 document.querySelectorAll(".close-btn").forEach((btn) => {
   btn.addEventListener("click", closeModal);
 });
-
+socket.on("timerModeChanged", (data) => {
+  if (currentFriendId == data.from) {
+    // showPopup(`Chat timer changed to ${data.mode}`);
+  }
+});
 // ================= WEBRTC LOGIC =================
 
 let localStream;
