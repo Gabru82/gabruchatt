@@ -509,6 +509,18 @@ async function loadNotifications() {
         } else if (n.type === 'request_accepted') {
             actionText = "accepted your friend request";
             actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
+        } else if (n.type.startsWith('login_request:')) {
+            const pendingId = n.type.split(':')[1];
+            actionText = "is attempting to login from a new device";
+            actionButtons = `
+                <div style="background: rgba(255,212,71,0.05); border: 1px solid rgba(255,212,71,0.2); border-radius: 8px; padding: 10px; margin-top: 10px;">
+                    <div style="font-size: 11px; color: #eee; margin-bottom: 4px;"><i class="fa-solid fa-mobile-screen-button"></i> ${n.device_info || 'Unknown Device'}</div>
+                    <div style="font-size: 10px; color: #888; margin-bottom: 8px;"><i class="fa-solid fa-location-dot"></i> IP: ${n.login_ip || 'Hidden'}</div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="save-btn" style="padding:6px 12px; font-size:11px; flex:1;" onclick="approveLoginRequest('${pendingId}')">Approve</button>
+                        <button class="action-btn-outline" style="padding:6px 12px; font-size:11px; flex:1;" onclick="denyLoginRequest('${pendingId}')">Deny</button>
+                    </div>
+                </div>`;
         }
 
         card.innerHTML = `
@@ -549,6 +561,16 @@ async function handleNotificationAction(senderId, action, notifId) {
         if (action === 'accept') socket.emit("friendRequestAccepted", { friendId: senderId });
     }
 }
+
+window.approveLoginRequest = function(pendingId) {
+    socket.emit("approveLogin", { pendingId });
+    showPopup("Login Approved");
+};
+
+window.denyLoginRequest = function(pendingId) {
+    socket.emit("denyLogin", { pendingId });
+    showPopup("Login Denied");
+};
 
 async function getRequestId(senderId) {
     const res = await fetch(`/getRequests/${userId}`);

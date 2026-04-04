@@ -112,6 +112,14 @@ db.serialize(() => {
       }
     },
   );
+  db.run(
+    "ALTER TABLE users ADD COLUMN tfa_enabled INTEGER DEFAULT 0",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("tfa_enabled error:", err.message);
+      }
+    },
+  );
 
   // ================= FRIENDS =================
   db.run(`
@@ -219,12 +227,25 @@ db.serialize(() => {
       status INTEGER DEFAULT 1
     )
   `);
+
+  // ================= PENDING LOGINS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pending_logins(
+      id TEXT PRIMARY KEY,
+      user_id INTEGER,
+      device_info TEXT,
+      ip_address TEXT,
+      status TEXT DEFAULT 'pending',
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 });
 // ================= ROUTES =================
 
 // Temporary store for registration OTPs
 const regOtpStore = new Map();
 const forgotOtpStore = new Map();
+const loginOtpStore = new Map();
 
 const nodemailer = require("nodemailer");
 
@@ -268,10 +289,14 @@ app.post("/api/verifyRegOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = regOtpStore.get(email);
 
-  if (!stored) return res.json({ success: false, message: "Please request a new OTP." });
+  if (!stored)
+    return res.json({ success: false, message: "Please request a new OTP." });
   if (Date.now() > stored.expires) {
     regOtpStore.delete(email);
-    return res.json({ success: false, message: "OTP expired. Please request a new one." });
+    return res.json({
+      success: false,
+      message: "OTP expired. Please request a new one.",
+    });
   }
   if (stored.otp !== otp) {
     return res.json({ success: false, message: "Invalid OTP." });
@@ -292,7 +317,10 @@ app.post("/api/sendForgotOtp", async (req, res) => {
     // Cooldown check: 60 seconds
     const stored = forgotOtpStore.get(email);
     if (stored && Date.now() - stored.lastSent < 60000) {
-      return res.json({ success: false, message: "Please wait 60s before resending." });
+      return res.json({
+        success: false,
+        message: "Please wait 60s before resending.",
+      });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -301,7 +329,7 @@ app.post("/api/sendForgotOtp", async (req, res) => {
       otp,
       expires: Date.now() + 5 * 60 * 1000,
       lastSent: Date.now(),
-      verified: false
+      verified: false,
     });
 
     try {
@@ -324,13 +352,14 @@ app.post("/api/verifyForgotOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = forgotOtpStore.get(email);
 
-  if (!stored) return res.json({ success: false, message: "Request a new OTP." });
-  
+  if (!stored)
+    return res.json({ success: false, message: "Request a new OTP." });
+
   if (Date.now() > stored.expires) {
     forgotOtpStore.delete(email);
     return res.json({ success: false, message: "OTP expired." });
   }
-  
+
   if (stored.otp !== otp) {
     return res.json({ success: false, message: "Invalid OTP." });
   }
@@ -347,17 +376,93 @@ app.post("/api/resetPassword", (req, res) => {
   const stored = forgotOtpStore.get(email);
 
   if (!stored || !stored.verified) {
-    return res.json({ success: false, message: "Session invalid or OTP not verified." });
+    return res.json({
+      success: false,
+      message: "Session invalid or OTP not verified.",
+    });
   }
 
   db.run(
     "UPDATE users SET password = ? WHERE email = ?",
     [newPassword, email],
     function (err) {
-      if (err) return res.json({ success: false, message: "Failed to update password." });
-      
+      if (err)
+        return res.json({
+          success: false,
+          message: "Failed to update password.",
+        });
+
       forgotOtpStore.delete(email); // Cleanup session
       res.json({ success: true, message: "Password updated successfully!" });
+    },
+  );
+});
+
+async function sendLoginOtp(user, res) {
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  loginOtpStore.set(user.email, {
+    otp,
+    userId: user.id,
+    name: user.name,
+    expires: Date.now() + 5 * 60 * 1000,
+    lastSent: Date.now(),
+  });
+
+  try {
+    await transporter.sendMail({
+      from: '"Gabru Support" <rc82398266@gmail.com>',
+      to: user.email,
+      subject: "Login Verification Code",
+      text: `Your login verification code is: ${otp}. It will expire in 5 minutes.`,
+    });
+
+    res.json({ success: true, needsOtp: true, email: user.email });
+  } catch (mailErr) {
+    console.error("Login OTP Email Error:", mailErr);
+    res.json({ success: false, message: "Failed to send login OTP" });
+  }
+}
+
+app.post("/api/sendLoginOtp", (req, res) => {
+  const { email, password } = req.body;
+  db.get(
+    "SELECT id, name, email FROM users WHERE email=? AND password=?",
+    [email, password],
+    async (err, row) => {
+      if (err || !row) return res.json({ success: false, message: "Invalid credentials" });
+
+      const stored = loginOtpStore.get(email);
+      if (stored && Date.now() - stored.lastSent < 60000) {
+        return res.json({ success: false, message: "Please wait 60s before resending." });
+      }
+      sendLoginOtp(row, res);
+    }
+  );
+});
+
+app.post("/api/verifyLoginOtp", (req, res) => {
+  const { email, otp } = req.body;
+  const stored = loginOtpStore.get(email);
+
+  if (!stored) return res.json({ success: false, message: "Request a new OTP." });
+  if (Date.now() > stored.expires) {
+    loginOtpStore.delete(email);
+    return res.json({ success: false, message: "OTP expired." });
+  }
+  if (stored.otp !== otp) return res.json({ success: false, message: "Invalid OTP." });
+
+  const userAgent = req.headers["user-agent"] || "Unknown Device";
+  const ip = req.ip || req.connection.remoteAddress;
+  const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+  db.run(
+    "INSERT INTO sessions(user_id, session_token, user_agent, ip_address) VALUES(?,?,?,?)",
+    [stored.userId, sessionToken, userAgent, ip],
+    (sessErr) => {
+      if (sessErr) return res.status(500).json({ success: false });
+      loginOtpStore.delete(email);
+      res.json({ success: true, id: stored.userId, name: stored.name, sessionToken: sessionToken });
     }
   );
 });
@@ -383,19 +488,54 @@ app.post("/login", (req, res) => {
   const ip = req.ip || req.connection.remoteAddress;
 
   db.get(
-    "SELECT id, name, account_status FROM users WHERE email=? AND password=?",
+    "SELECT id, name, email, account_status, tfa_enabled FROM users WHERE email=? AND password=?",
     [email, password],
-    (err, row) => {
+    async (err, row) => {
       if (err) return res.status(500).json({ success: false });
 
       if (row) {
         if (row.account_status === 0) {
-          return res.json({ success: false, message: "Account is deactivated" });
+          return res.json({
+            success: false,
+            message: "Account is deactivated",
+          });
+        }
+
+        // Check 2FA
+        if (row.tfa_enabled === 1) {
+          // Priority 1: Check for active sessions using socket rooms
+          const activeSockets = await io.in(`user_${row.id}`).fetchSockets();
+          
+          if (activeSockets.length > 0) {
+            const pendingId = Math.random().toString(36).substring(2, 15);
+            db.run(
+              "INSERT INTO pending_logins(id, user_id, device_info, ip_address) VALUES(?,?,?,?)",
+              [pendingId, row.id, userAgent, ip],
+            );
+            // Notify active devices and add to notifications table
+            db.run(
+              "INSERT INTO notifications(user_id, sender_id, type, status) VALUES(?,?,?,?)",
+              [row.id, row.id, "login_request:" + pendingId, "unread"],
+            );
+
+            io.to(`user_${row.id}`).emit("newNotification");
+            io.to(`user_${row.id}`).emit("newLoginRequest", {
+              pendingId,
+              device: userAgent,
+              ip: ip,
+            });
+
+            return res.json({ success: true, pending: true, pendingId });
+          } else {
+            // Priority 2: Fallback to Email OTP if no devices are active
+            return sendLoginOtp(row, res);
+          }
         }
 
         // Generate a simple session token
-        const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
-        
+        const sessionToken =
+          Math.random().toString(36).substring(2) + Date.now().toString(36);
+
         db.run(
           "INSERT INTO sessions(user_id, session_token, user_agent, ip_address) VALUES(?,?,?,?)",
           [row.id, sessionToken, userAgent, ip],
@@ -405,9 +545,9 @@ app.post("/login", (req, res) => {
               success: true,
               id: row.id,
               name: row.name,
-              sessionToken: sessionToken
+              sessionToken: sessionToken,
             });
-          }
+          },
         );
       } else {
         res.json({ success: false, message: "Invalid email or password" });
@@ -422,19 +562,54 @@ app.post("/api/deactivateAccount", (req, res) => {
     if (err || !row || row.password !== password) {
       return res.json({ success: false, message: "Incorrect password" });
     }
-    db.run("UPDATE users SET account_status = 0 WHERE id = ?", [userId], function(err) {
-      if (err) return res.json({ success: false });
-      res.json({ success: true });
-    });
+    db.run(
+      "UPDATE users SET account_status = 0 WHERE id = ?",
+      [userId],
+      function (err) {
+        if (err) return res.json({ success: false });
+        res.json({ success: true });
+      },
+    );
   });
+});
+
+app.post("/api/toggle2FA", (req, res) => {
+  const { userId, enabled, password } = req.body;
+  db.get("SELECT password FROM users WHERE id=?", [userId], (err, row) => {
+    if (err || !row || row.password !== password) {
+      return res.json({ success: false, message: "Incorrect password" });
+    }
+    db.run(
+      "UPDATE users SET tfa_enabled = ? WHERE id = ?",
+      [enabled ? 1 : 0, userId],
+      function (err) {
+        if (err) return res.json({ success: false });
+        res.json({ success: true });
+      },
+    );
+  });
+});
+
+app.get("/api/getPendingLogin/:pendingId", (req, res) => {
+  db.get(
+    "SELECT * FROM pending_logins WHERE id = ?",
+    [req.params.pendingId],
+    (err, row) => {
+      res.json({ success: !!row, data: row });
+    },
+  );
 });
 
 app.post("/api/verifyCurrentPassword", (req, res) => {
   const { userId, password } = req.body;
-  if (!userId || !password) return res.json({ success: false, message: "Missing credentials" });
+  if (!userId || !password)
+    return res.json({ success: false, message: "Missing credentials" });
   db.get("SELECT password FROM users WHERE id=?", [userId], (err, row) => {
     if (err || !row || row.password !== password) {
-      return res.json({ success: false, message: "Incorrect current password" });
+      return res.json({
+        success: false,
+        message: "Incorrect current password",
+      });
     }
     res.json({ success: true });
   });
@@ -444,25 +619,31 @@ app.post("/api/verifyCurrentPassword", (req, res) => {
 
 app.get("/api/getNotifications/:userId", (req, res) => {
   const { userId } = req.params;
+  // We join with pending_logins for login_request types to get device info
   db.all(
-    `SELECT n.*, u.name, u.avatar 
+    `SELECT n.*, u.name, u.avatar, p.device_info, p.ip_address as login_ip
      FROM notifications n 
-     JOIN users u ON n.sender_id = u.id 
+     JOIN users u ON n.sender_id = u.id
+     LEFT JOIN pending_logins p ON n.type = 'login_request:' || p.id
      WHERE n.user_id = ? 
      ORDER BY n.timestamp DESC`,
     [userId],
     (err, rows) => {
       if (err) return res.json({ success: false });
       res.json({ success: true, notifications: rows || [] });
-    }
+    },
   );
 });
 
 app.post("/api/markNotificationsRead", (req, res) => {
   const { userId } = req.body;
-  db.run("UPDATE notifications SET status = 'read' WHERE user_id = ?", [userId], (err) => {
-    res.json({ success: !err });
-  });
+  db.run(
+    "UPDATE notifications SET status = 'read' WHERE user_id = ?",
+    [userId],
+    (err) => {
+      res.json({ success: !err });
+    },
+  );
 });
 
 app.post("/api/clearNotifications", (req, res) => {
@@ -477,35 +658,46 @@ app.post("/api/rejectRequest", (req, res) => {
   db.run(
     "DELETE FROM friend_requests WHERE sender = ? AND receiver = ? AND status = 'pending'",
     [senderId, receiverId],
-    function(err) {
+    function (err) {
       if (err) return res.json({ success: false });
       // Remove associated notification
-      db.run("DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'", [receiverId, senderId]);
+      db.run(
+        "DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'",
+        [receiverId, senderId],
+      );
       res.json({ success: true });
-    }
+    },
   );
 });
 
 app.get("/api/getLoginSessions/:userId", (req, res) => {
   const { userId } = req.params;
-  db.all("SELECT * FROM sessions WHERE user_id = ? AND status = 1 ORDER BY login_time DESC", [userId], (err, rows) => {
-    if (err) return res.json({ success: false });
-    res.json({ success: true, sessions: rows });
-  });
+  db.all(
+    "SELECT * FROM sessions WHERE user_id = ? AND status = 1 ORDER BY login_time DESC",
+    [userId],
+    (err, rows) => {
+      if (err) return res.json({ success: false });
+      res.json({ success: true, sessions: rows });
+    },
+  );
 });
 
 app.post("/api/terminateSession", (req, res) => {
   const { userId, sessionToken } = req.body;
-  db.run("UPDATE sessions SET status = 0 WHERE user_id = ? AND session_token = ?", [userId, sessionToken], function(err) {
-    if (err) return res.json({ success: false });
-    for (const [socketId, token] of sessionTokens.entries()) {
-      if (token === sessionToken) {
-        io.to(socketId).emit("forcedLogout");
-        break;
+  db.run(
+    "UPDATE sessions SET status = 0 WHERE user_id = ? AND session_token = ?",
+    [userId, sessionToken],
+    function (err) {
+      if (err) return res.json({ success: false });
+      for (const [socketId, token] of sessionTokens.entries()) {
+        if (token === sessionToken) {
+          io.to(socketId).emit("forcedLogout");
+          break;
+        }
       }
-    }
-    res.json({ success: true });
-  });
+      res.json({ success: true });
+    },
+  );
 });
 
 app.post("/api/getMessagesByIds", (req, res) => {
@@ -525,7 +717,7 @@ app.post("/api/getMessagesByIds", (req, res) => {
 app.get("/api/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
-    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, account_status, read_receipts, notifications_enabled FROM users WHERE id=?",
+    "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, account_status, read_receipts, notifications_enabled, tfa_enabled FROM users WHERE id=?",
     [userId],
     (err, row) => {
       if (err || !row) return res.json({ success: false });
@@ -568,12 +760,16 @@ app.get("/api/getChatSettings/:userId/:friendId", (req, res) => {
   const { userId, friendId } = req.params;
   const u1 = Math.min(parseInt(userId), parseInt(friendId));
   const u2 = Math.max(parseInt(userId), parseInt(friendId));
-  db.get("SELECT timer_mode FROM chat_settings WHERE user1_id=? AND user2_id=?", [u1, u2], (err, row) => {
-    if (err) return res.status(500).json({ timer_mode: 'Normal' });
-    res.json({
-      timer_mode: row ? row.timer_mode : 'Normal'
-    });
-  });
+  db.get(
+    "SELECT timer_mode FROM chat_settings WHERE user1_id=? AND user2_id=?",
+    [u1, u2],
+    (err, row) => {
+      if (err) return res.status(500).json({ timer_mode: "Normal" });
+      res.json({
+        timer_mode: row ? row.timer_mode : "Normal",
+      });
+    },
+  );
 });
 
 app.post("/api/updateProfile", (req, res) => {
@@ -631,7 +827,9 @@ app.post("/api/removeFriend", (req, res) => {
       if (err) return res.status(500).json({ success: false });
 
       // Emit event to both users for real-time UI synchronization
-      io.to(`user_${userId}`).to(`user_${friendId}`).emit("friendRemoved", { userId, friendId });
+      io.to(`user_${userId}`)
+        .to(`user_${friendId}`)
+        .emit("friendRemoved", { userId, friendId });
 
       res.json({ success: true });
     },
@@ -660,7 +858,9 @@ app.post("/api/blockUser", (req, res) => {
         if (err) return res.status(500).json({ success: false });
 
         // Emit event to both users for real-time UI synchronization
-        io.to(`user_${userId}`).to(`user_${friendId}`).emit("userBlocked", { blockerId: userId, blockedId: friendId });
+        io.to(`user_${userId}`)
+          .to(`user_${friendId}`)
+          .emit("userBlocked", { blockerId: userId, blockedId: friendId });
 
         res.json({ success: true });
       },
@@ -712,7 +912,8 @@ app.post("/sendRequest", (req, res) => {
     [sender, receiver],
     (err, row) => {
       if (err) return res.status(500).json({ success: false });
-      if (row) return res.json({ success: true, message: "Request already pending" });
+      if (row)
+        return res.json({ success: true, message: "Request already pending" });
 
       db.run(
         `INSERT INTO friend_requests(sender,receiver,status) VALUES(?,?,?)`,
@@ -720,11 +921,14 @@ app.post("/sendRequest", (req, res) => {
         function (err) {
           if (err) return res.json({ success: false });
           // Trigger notification
-          db.run("INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)", [receiver, sender, 'friend_request']);
+          db.run(
+            "INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)",
+            [receiver, sender, "friend_request"],
+          );
           res.json({ success: true });
         },
       );
-    }
+    },
   );
 });
 
@@ -739,9 +943,12 @@ app.post("/api/cancelRequest", (req, res) => {
     function (err) {
       if (err) return res.status(500).json({ success: false });
       // Remove notification if sender cancels
-      db.run("DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'", [receiver, sender]);
+      db.run(
+        "DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'",
+        [receiver, sender],
+      );
       res.json({ success: true });
-    }
+    },
   );
 });
 app.get("/debug-users", (req, res) => {
@@ -779,11 +986,17 @@ app.post("/acceptRequest", (req, res) => {
               console.error("UPDATE REQUEST ERROR:", err);
               return res.json({ success: false });
             }
-            
+
             // Notify original sender that their request was accepted
-            db.run("INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)", [row.sender, userId, 'request_accepted']);
+            db.run(
+              "INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)",
+              [row.sender, userId, "request_accepted"],
+            );
             // Mark original request notification as resolved by deleting it
-            db.run("DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'", [userId, row.sender]);
+            db.run(
+              "DELETE FROM notifications WHERE user_id = ? AND sender_id = ? AND type = 'friend_request'",
+              [userId, row.sender],
+            );
 
             res.json({ success: true });
           },
@@ -1038,7 +1251,8 @@ app.get("/getUserStatus/:userId", (req, res) => {
     "SELECT last_seen, avatar, active_status, account_status FROM users WHERE id=?",
     [userId],
     (err, row) => {
-      if (err || !row || row.account_status === 0) return res.json({ online: false, lastSeen: null });
+      if (err || !row || row.account_status === 0)
+        return res.json({ online: false, lastSeen: null });
 
       const statusHidden = row.active_status === 0;
       const inChatWithRequester =
@@ -1112,13 +1326,13 @@ const activeChats = new Map();
 /**
  * Unified Call Sessions
  * Key: sessionKey (minId_maxId)
- * Value: { 
- *   initiatorId, 
- *   receiverId, 
- *   status: 'ringing'|'active'|'ended', 
- *   startTime, 
+ * Value: {
+ *   initiatorId,
+ *   receiverId,
+ *   status: 'ringing'|'active'|'ended',
+ *   startTime,
  *   timeout,
- *   loggingStarted: boolean 
+ *   loggingStarted: boolean
  * }
  */
 const callSessions = new Map();
@@ -1130,7 +1344,7 @@ function getSessionKey(id1, id2) {
 function finalizeCallLog(session, duration = null, answered = false) {
   if (session.loggingStarted) return;
   session.loggingStarted = true;
-  session.status = 'ended';
+  session.status = "ended";
 
   const initiator = String(session.initiatorId);
   const receiver = String(session.receiverId);
@@ -1149,7 +1363,7 @@ function finalizeCallLog(session, duration = null, answered = false) {
   } else {
     senderId = initiator;
     receiverId = receiver;
-    messageText = `Call ended (${duration || '0s'})`;
+    messageText = `Call ended (${duration || "0s"})`;
   }
 
   db.run(
@@ -1168,15 +1382,20 @@ function finalizeCallLog(session, duration = null, answered = false) {
         timestamp: now,
       };
 
-      io.to(`user_${initiator}`).to(`user_${receiver}`).emit("newMessage", payload);
-    }
+      io.to(`user_${initiator}`)
+        .to(`user_${receiver}`)
+        .emit("newMessage", payload);
+    },
   );
 }
 
 function getSessionByUserId(userId) {
   for (const [key, session] of callSessions.entries()) {
-    if (String(session.initiatorId) === String(userId) || String(session.receiverId) === String(userId)) {
-      if (session.status !== 'ended') return { key, session };
+    if (
+      String(session.initiatorId) === String(userId) ||
+      String(session.receiverId) === String(userId)
+    ) {
+      if (session.status !== "ended") return { key, session };
     }
   }
   return null;
@@ -1205,9 +1424,12 @@ io.on("connection", (socket) => {
       if (activeSessionData) {
         const { key, session } = activeSessionData;
         clearTimeout(session.timeout);
-        const partnerId = String(session.initiatorId) === String(socket.userId) ? session.receiverId : session.initiatorId;
-        
-        finalizeCallLog(session, null, session.status === 'active');
+        const partnerId =
+          String(session.initiatorId) === String(socket.userId)
+            ? session.receiverId
+            : session.initiatorId;
+
+        finalizeCallLog(session, null, session.status === "active");
         io.to(`user_${partnerId}`).emit("callEnded");
         callSessions.delete(key);
       }
@@ -1219,6 +1441,88 @@ io.on("connection", (socket) => {
       db.run("UPDATE users SET last_seen=? WHERE id=?", [now, socket.userId]);
       io.emit("userOffline", socket.userId);
     }
+  });
+
+  socket.on("watchPendingLogin", (pendingId) => {
+    socket.join(`pending_login_${pendingId}`);
+    // Auto-expiry after 60s
+    setTimeout(() => {
+      db.run("DELETE FROM pending_logins WHERE id = ? AND status = 'pending'", [
+        pendingId,
+      ]);
+      io.to(`pending_login_${pendingId}`).emit("loginTimeout");
+    }, 60000);
+  });
+
+  socket.on("approveLogin", ({ pendingId }) => {
+    db.get(
+      "SELECT * FROM pending_logins WHERE id = ?",
+      [pendingId],
+      (err, row) => {
+        if (row && row.status === "pending") {
+          db.run("UPDATE pending_logins SET status = 'approved' WHERE id = ?", [
+            pendingId,
+          ]);
+
+          const sessionToken =
+            Math.random().toString(36).substring(2) + Date.now().toString(36);
+          db.get(
+            "SELECT id, name FROM users WHERE id = ?",
+            [row.user_id],
+            (uErr, user) => {
+              db.run(
+                "INSERT INTO sessions(user_id, session_token, user_agent, ip_address) VALUES(?,?,?,?)",
+                [user.id, sessionToken, row.device_info, row.ip_address],
+              );
+
+              io.to(`pending_login_${pendingId}`).emit("loginApproved", {
+                id: user.id,
+                name: user.name,
+                sessionToken,
+              });
+
+              // Clean up notification
+              db.run(
+                "DELETE FROM notifications WHERE user_id = ? AND type = ?",
+                [user.id, "login_request:" + pendingId],
+              );
+              io.to(`user_${user.id}`).emit("newNotification");
+            },
+          );
+        }
+      },
+    );
+    // Clean up record after approval
+    setTimeout(
+      () => db.run("DELETE FROM pending_logins WHERE id = ?", [pendingId]),
+      10000,
+    );
+  });
+
+  socket.on("denyLogin", ({ pendingId }) => {
+    db.get(
+      "SELECT user_id FROM pending_logins WHERE id = ?",
+      [pendingId],
+      (err, row) => {
+        if (row) {
+          db.run("UPDATE pending_logins SET status = 'denied' WHERE id = ?", [
+            pendingId,
+          ]);
+          io.to(`pending_login_${pendingId}`).emit("loginDenied");
+
+          db.run("DELETE FROM notifications WHERE user_id = ? AND type = ?", [
+            row.user_id,
+            "login_request:" + pendingId,
+          ]);
+          io.to(`user_${row.user_id}`).emit("newNotification");
+        }
+      },
+    );
+    // Delete record shortly after
+    setTimeout(
+      () => db.run("DELETE FROM pending_logins WHERE id = ?", [pendingId]),
+      5000,
+    );
   });
 
   socket.on("joinChat", (friendId) => {
@@ -1259,10 +1563,14 @@ io.on("connection", (socket) => {
       // Handle "After View" deletion logic
       const u1 = Math.min(parseInt(userId), parseInt(friendId));
       const u2 = Math.max(parseInt(userId), parseInt(friendId));
-      db.get("SELECT timer_mode FROM chat_settings WHERE user1_id=? AND user2_id=?", [u1, u2], (err, row) => {
-        if (row && row.timer_mode === 'After View') {
-          const uIdStr = String(userId);
-          db.run(`
+      db.get(
+        "SELECT timer_mode FROM chat_settings WHERE user1_id=? AND user2_id=?",
+        [u1, u2],
+        (err, row) => {
+          if (row && row.timer_mode === "After View") {
+            const uIdStr = String(userId);
+            db.run(
+              `
             UPDATE messages 
             SET deleted_for = (CASE 
               WHEN deleted_for IS NULL OR deleted_for = '' THEN ? 
@@ -1274,14 +1582,20 @@ io.on("connection", (socket) => {
               deleted_for IS NULL 
               OR (',' || deleted_for || ',') NOT LIKE ?
             )
-          `, [
-            uIdStr, uIdStr, 
-            userId, friendId, 
-            friendId, userId, 
-            `%,${uIdStr},%`
-          ]);
-        }
-      });
+          `,
+              [
+                uIdStr,
+                uIdStr,
+                userId,
+                friendId,
+                friendId,
+                userId,
+                `%,${uIdStr},%`,
+              ],
+            );
+          }
+        },
+      );
 
       io.to(`user_${friendId}`).emit("friendLeftChat", { friendId: userId });
     }
@@ -1323,11 +1637,16 @@ io.on("connection", (socket) => {
               timestamp: now,
             };
 
-            io.to(`user_${receiverId}`).to(`user_${senderId}`).emit("newMessage", payload);
-            io.to(`user_${friendId}`).emit("timerModeChanged", { from: userId, mode });
-          }
+            io.to(`user_${receiverId}`)
+              .to(`user_${senderId}`)
+              .emit("newMessage", payload);
+            io.to(`user_${friendId}`).emit("timerModeChanged", {
+              from: userId,
+              mode,
+            });
+          },
         );
-      }
+      },
     );
   });
 
@@ -1346,78 +1665,86 @@ io.on("connection", (socket) => {
     const timestamp = new Date().toISOString();
 
     // Verify receiver is still active before sending
-    db.get("SELECT account_status FROM users WHERE id=?", [receiver], (err, userRow) => {
-      if (err || !userRow || userRow.account_status === 0) {
-        return callback?.({ success: false, message: "User is unavailable" });
-      }
-
-    db.run(
-      `INSERT INTO messages(sender, receiver, message, unread_count, status, type, caption, reply_to, timestamp)
-       VALUES(?,?,?,?,?,?,?,?,?)`,
-      [
-        sender,
-        receiver,
-        message,
-        1,
-        "sent",
-        msgType,
-        caption || null,
-        replyTo || null,
-        timestamp,
-      ],
-      function (err) {
-        if (err) {
-          console.error(err);
-          return callback?.({ success: false });
+    db.get(
+      "SELECT account_status FROM users WHERE id=?",
+      [receiver],
+      (err, userRow) => {
+        if (err || !userRow || userRow.account_status === 0) {
+          return callback?.({ success: false, message: "User is unavailable" });
         }
 
-        const finalMsgId = this.lastID;
+        db.run(
+          `INSERT INTO messages(sender, receiver, message, unread_count, status, type, caption, reply_to, timestamp)
+       VALUES(?,?,?,?,?,?,?,?,?)`,
+          [
+            sender,
+            receiver,
+            message,
+            1,
+            "sent",
+            msgType,
+            caption || null,
+            replyTo || null,
+            timestamp,
+          ],
+          function (err) {
+            if (err) {
+              console.error(err);
+              return callback?.({ success: false });
+            }
 
-        const payload = {
-          from: sender,
-          to: receiver,
-          message,
-          msgId: finalMsgId,
-          status: "sent",
-          type: msgType,
-          caption: caption,
-          timestamp: timestamp,
-          replyTo: replyTo || null,
-        };
+            const finalMsgId = this.lastID;
 
-        // Determine status based on receiver's read receipt setting
-        db.get("SELECT read_receipts FROM users WHERE id=?", [receiver], (err, userRow) => {
-          const receiptsEnabled = !userRow || userRow.read_receipts !== 0;
-          const isInChat = activeChats.get(receiver) === sender;
-
-          io.to(`user_${receiver}`)
-            .to(`user_${sender}`)
-            .emit("newMessage", payload);
-
-          if (isInChat && receiptsEnabled) {
-            const now = new Date().toISOString();
-            db.run(`UPDATE messages SET status='seen', seen_at=? WHERE id=?`, [
-              now,
-              finalMsgId,
-            ]);
-            io.to(`user_${sender}`).emit("messageSeen", {
+            const payload = {
+              from: sender,
+              to: receiver,
+              message,
               msgId: finalMsgId,
-              seenAt: now,
-            });
-          } else {
-            db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [
-              finalMsgId,
-            ]);
-            io.to(`user_${sender}`).emit("messageDelivered", {
-              msgId: finalMsgId,
-            });
-          }
-        });
+              status: "sent",
+              type: msgType,
+              caption: caption,
+              timestamp: timestamp,
+              replyTo: replyTo || null,
+            };
 
-        callback?.({ success: true, data: payload });
+            // Determine status based on receiver's read receipt setting
+            db.get(
+              "SELECT read_receipts FROM users WHERE id=?",
+              [receiver],
+              (err, userRow) => {
+                const receiptsEnabled = !userRow || userRow.read_receipts !== 0;
+                const isInChat = activeChats.get(receiver) === sender;
+
+                io.to(`user_${receiver}`)
+                  .to(`user_${sender}`)
+                  .emit("newMessage", payload);
+
+                if (isInChat && receiptsEnabled) {
+                  const now = new Date().toISOString();
+                  db.run(
+                    `UPDATE messages SET status='seen', seen_at=? WHERE id=?`,
+                    [now, finalMsgId],
+                  );
+                  io.to(`user_${sender}`).emit("messageSeen", {
+                    msgId: finalMsgId,
+                    seenAt: now,
+                  });
+                } else {
+                  db.run(`UPDATE messages SET status='delivered' WHERE id=?`, [
+                    finalMsgId,
+                  ]);
+                  io.to(`user_${sender}`).emit("messageDelivered", {
+                    msgId: finalMsgId,
+                  });
+                }
+              },
+            );
+
+            callback?.({ success: true, data: payload });
+          },
+        );
       },
     );
-    });
   };
 
   // ================= SEND MESSAGE =================
@@ -1483,25 +1810,29 @@ io.on("connection", (socket) => {
     const now = new Date().toISOString();
 
     // Check if the user has read receipts enabled
-    db.get("SELECT read_receipts FROM users WHERE id=?", [userId], (err, row) => {
-      if (err || (row && row.read_receipts === 0)) {
-        // If receipts are disabled, do not update status to seen or notify sender
-        return;
-      }
+    db.get(
+      "SELECT read_receipts FROM users WHERE id=?",
+      [userId],
+      (err, row) => {
+        if (err || (row && row.read_receipts === 0)) {
+          // If receipts are disabled, do not update status to seen or notify sender
+          return;
+        }
 
-      // ✅ ONLY update messages that are NOT seen yet
-      db.run(
-        `UPDATE messages 
+        // ✅ ONLY update messages that are NOT seen yet
+        db.run(
+          `UPDATE messages 
        SET status='seen', seen_at=? 
        WHERE sender=? AND receiver=? AND status!='seen'`,
-        [now, withUser, userId],
-      );
+          [now, withUser, userId],
+        );
 
-      io.to(`user_${withUser}`).emit("messageSeenAll", {
-        from: userId,
-        seenAt: now,
-      });
-    });
+        io.to(`user_${withUser}`).emit("messageSeenAll", {
+          from: userId,
+          seenAt: now,
+        });
+      },
+    );
   });
 
   socket.on("typing", ({ to }) => {
@@ -1616,7 +1947,8 @@ io.on("connection", (socket) => {
     const receiver = String(userToCall);
     const key = getSessionKey(caller, receiver);
 
-    if (callSessions.has(key) && callSessions.get(key).status !== 'ended') return;
+    if (callSessions.has(key) && callSessions.get(key).status !== "ended")
+      return;
 
     io.to(`user_${receiver}`).emit("callUser", {
       signal: signalData,
@@ -1627,7 +1959,7 @@ io.on("connection", (socket) => {
     // Standardized 15 sec timeout
     const timeout = setTimeout(() => {
       const session = callSessions.get(key);
-      if (!session || session.status !== 'ringing') return;
+      if (!session || session.status !== "ringing") return;
 
       finalizeCallLog(session, null, false);
       io.to(`user_${caller}`).emit("callEnded");
@@ -1638,9 +1970,9 @@ io.on("connection", (socket) => {
     callSessions.set(key, {
       initiatorId: caller,
       receiverId: receiver,
-      status: 'ringing',
+      status: "ringing",
       timeout,
-      loggingStarted: false
+      loggingStarted: false,
     });
   });
 
@@ -1652,7 +1984,7 @@ io.on("connection", (socket) => {
 
     if (session) {
       clearTimeout(session.timeout);
-      session.status = 'active';
+      session.status = "active";
       session.startTime = Date.now();
     }
 

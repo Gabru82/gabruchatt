@@ -6,6 +6,7 @@ const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
 const forgotForm = document.getElementById("forgotForm");
 const otpForm = document.getElementById("otpForm");
+const loginOtpForm = document.getElementById("loginOtpForm");
 const resetForm = document.getElementById("resetForm");
 
 function switchForm(targetForm) {
@@ -14,11 +15,30 @@ function switchForm(targetForm) {
   registerForm.classList.remove("active");
   forgotForm.classList.remove("active");
   otpForm.classList.remove("active");
+  if (loginOtpForm) loginOtpForm.classList.remove("active");
   resetForm.classList.remove("active");
 
   // activate target
   if (targetForm) targetForm.classList.add("active");
 }
+
+const socket = io();
+socket.on("loginApproved", (data) => {
+  document.getElementById("pendingLoginModal").style.display = "none";
+  localStorage.setItem("userId", data.id);
+  localStorage.setItem("username", data.name);
+  localStorage.setItem("sessionToken", data.sessionToken);
+  showPopup("Login Approved!");
+  setTimeout(() => window.location.href = "/home.html", 1000);
+});
+socket.on("loginDenied", () => {
+  document.getElementById("pendingLoginModal").style.display = "none";
+  showPopup("Login Denied by other device.");
+});
+socket.on("loginTimeout", () => {
+  document.getElementById("pendingLoginModal").style.display = "none";
+  showPopup("Approval request timed out.");
+});
 
 // Navigation Listeners
 document.getElementById("showForgot").onclick = () => switchForm(forgotForm);
@@ -35,6 +55,7 @@ document.getElementById("backToLogin3").onclick = () => {
   document.getElementById("confirmPassword").value = "";
   switchForm(loginForm);
 };
+document.getElementById("backToLogin4").onclick = () => switchForm(loginForm);
 
 // ================= FORGOT PASSWORD FLOW =================
 
@@ -158,14 +179,22 @@ savePasswordBtn.onclick = async () => {
 function setupCustomPopup() {
   // Ensure the popup is always on top
   const existingPopup = document.getElementById("customPopup");
-  const popupHTML = `
-        <div id="customPopup" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
-            <div style="background:#222; padding:25px; border-radius:12px; text-align:center; color:white; border:1px solid #444; box-shadow:0 10px 30px rgba(0,0,0,0.5); min-width: 280px;">
-                <p id="customPopupMessage" style="margin-bottom:20px; font-size:56px; line-height:1.4;"></p>
-            </div>
-        </div>
-    `;
   if (!existingPopup) {
+    const popupHTML = `
+      <div id="customPopup" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
+          <div style="background:#222; padding:25px; border-radius:12px; text-align:center; color:white; border:1px solid #444; box-shadow:0 10px 30px rgba(0,0,0,0.5); min-width: 280px;">
+              <p id="customPopupMessage" style="margin-bottom:20px; font-size:18px; line-height:1.4;"></p>
+          </div>
+      </div>
+      <div id="pendingLoginModal" style="display:none; position:fixed; z-index:10001; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.9); justify-content:center; align-items:center;">
+          <div style="background:#1a1a1a; padding:40px; border-radius:20px; text-align:center; color:white; border:1px solid #333; max-width: 400px;">
+              <div class="spinner" style="border: 4px solid rgba(255,255,255,0.1); border-left-color: #ffd447; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+              <h3 style="margin-bottom:15px;">2FA Approval Required</h3>
+              <p style="color:#aaa; font-size:14px;">A notification has been sent to your active devices. Please approve this login to continue.</p>
+              <p id="pendingTimer" style="margin-top:20px; color:#ffd447; font-weight:bold;">60s</p>
+          </div>
+      </div>
+    `;
     document.body.insertAdjacentHTML("beforeend", popupHTML);
   }
 }
@@ -315,6 +344,24 @@ document.querySelector("#loginForm button").onclick = async () => {
   const data = await res.json();
 
   if (data.success) {
+    if (data.pending) {
+      document.getElementById("pendingLoginModal").style.display = "flex";
+      socket.emit("watchPendingLogin", data.pendingId);
+      let timeLeft = 60;
+      const timer = setInterval(() => {
+        timeLeft--;
+        document.getElementById("pendingTimer").innerText = timeLeft + "s";
+        if (timeLeft <= 0) clearInterval(timer);
+      }, 1000);
+      return;
+    }
+    if (data.needsOtp) {
+      window._loginEmail = data.email;
+      window._loginPassword = password; // Store for potential resend
+      showPopup("2FA Required: OTP sent to your email.");
+      switchForm(loginOtpForm);
+      return;
+    }
     localStorage.setItem("userId", data.id);
     localStorage.setItem("username", data.name);
     localStorage.setItem("sessionToken", data.sessionToken);
@@ -326,4 +373,40 @@ document.querySelector("#loginForm button").onclick = async () => {
   } else {
     showPopup(data.message || "Invalid login");
   }
+};
+
+// ================= LOGIN OTP FLOW =================
+
+document.getElementById("verifyLoginOtpBtn").onclick = async () => {
+  const email = window._loginEmail;
+  const otp = document.getElementById("loginOtpInput").value;
+
+  if (!otp) return showPopup("Enter OTP");
+
+  const res = await fetch("/api/verifyLoginOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await res.json();
+  if (data.success) {
+    localStorage.setItem("userId", data.id);
+    localStorage.setItem("username", data.name);
+    localStorage.setItem("sessionToken", data.sessionToken);
+    showPopup("Login Successful!");
+    setTimeout(() => window.location.href = "/home.html", 1000);
+  } else {
+    showPopup(data.message);
+  }
+};
+
+document.getElementById("resendLoginOtpBtn").onclick = async () => {
+  const res = await fetch("/api/sendLoginOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: window._loginEmail, password: window._loginPassword }),
+  });
+  const data = await res.json();
+  showPopup(data.message);
 };

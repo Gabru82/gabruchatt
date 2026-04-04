@@ -264,6 +264,39 @@ async function setupMyProfile() {
     activeStatusInp.onchange = () => saveAdvancedProfile();
   }
 
+  const tfaInp = document.getElementById("twoFactorAuth");
+  if (tfaInp) {
+    tfaInp.onchange = (e) => {
+      const isEnabling = e.target.checked;
+      // Revert until verified
+      e.target.checked = !isEnabling;
+      
+      const modal = document.getElementById("passwordModal");
+      const title = modal.querySelector("h3");
+      title.innerText = isEnabling ? "Enable 2FA" : "Disable 2FA";
+      modal.style.display = "flex";
+      
+      window.verifyDeletePassword = async function() {
+        const password = document.getElementById("deletePasswordInput").value;
+        if (!password) return showPopup("Enter password");
+        
+        const res = await fetch("/api/toggle2FA", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, enabled: isEnabling, password }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          tfaInp.checked = isEnabling;
+          showPopup(`2FA ${isEnabling ? 'Enabled' : 'Disabled'}`);
+          closePasswordModal();
+        } else {
+          showPopup(data.message || "Verification failed");
+        }
+      };
+    };
+  }
+
   const readReceiptsInp = document.getElementById("readReceipts");
   if (readReceiptsInp) {
     readReceiptsInp.onchange = () => saveAdvancedProfile();
@@ -400,6 +433,10 @@ async function setupMyProfile() {
           const enabled = u.notifications_enabled !== 0;
           document.getElementById("pushNotifications").checked = enabled;
           localStorage.setItem("notificationsEnabled", enabled);
+        }
+        
+        if (document.getElementById("twoFactorAuth")) {
+          document.getElementById("twoFactorAuth").checked = u.tfa_enabled === 1;
         }
 
         if (u.avatar) {
