@@ -564,11 +564,7 @@ async function loadNotifications() {
 
         if (n.type === "friend_request") {
           actionText = "sent you a friend request";
-          actionButtons = `
-                <div style="display:flex; gap:8px; margin-top:10px;">
-                    <button class="save-btn" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'accept', ${n.id})">Accept</button>
-                    <button class="action-btn-outline" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'reject', ${n.id})">Reject</button>
-                </div>`;
+          actionButtons = "";
         } else if (n.type === "request_accepted") {
           actionText = "accepted your friend request";
           actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
@@ -583,7 +579,7 @@ async function loadNotifications() {
                     <span style="color:#aaa;">${actionText}</span>
                 </div>
                 <div style="font-size:11px; color:#888; margin-top:4px;">${timeAgo(n.timestamp)}</div>
-                ${actionButtons}
+                ${n.type === "friend_request" ? "" : actionButtons}
             </div>
         `;
       list.appendChild(card);
@@ -920,17 +916,17 @@ function removeSharedItem(msgId) {
   // MEDIA
   document
     .querySelectorAll(`.shared-media-item[data-id="${msgId}"]`)
-    .forEach(el => el.remove());
+    .forEach((el) => el.remove());
 
   // LINKS
   document
     .querySelectorAll(`.link-item[data-id="${msgId}"]`)
-    .forEach(el => el.remove());
+    .forEach((el) => el.remove());
 
   // DOCUMENTS
   document
     .querySelectorAll(`.doc-item[data-id="${msgId}"]`)
-    .forEach(el => el.remove());
+    .forEach((el) => el.remove());
 }
 async function loadSharedInfo(friendId) {
   const res = await fetch(`/getSharedInfo/${userId}/${friendId}`);
@@ -1074,7 +1070,7 @@ async function loadSharedInfo(friendId) {
         urls.forEach((url) => {
           const item = document.createElement("div");
           item.className = "link-item";
-item.dataset.id = msg.id;
+          item.dataset.id = msg.id;
           let icon = "fa-link";
           if (url.includes("youtube.com") || url.includes("youtu.be"))
             icon = "fa-youtube";
@@ -1464,7 +1460,7 @@ async function loadModernRequests() {
     const card = document.createElement("div");
     card.className = "user-modern-card";
     card.innerHTML = `
-            <img src="${getAvatarSrc(req.senderId)}" class="card-avatar">
+            <img src="${req.avatar || getAvatarSrc(req.senderId)}" class="card-avatar">
             <div class="card-info">
                 <div class="card-name">${req.name}</div>
                 <div class="card-sub">Sent you a request</div>
