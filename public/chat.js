@@ -460,7 +460,9 @@ setupShareModal();
 let isNotificationPanelOpen = false;
 let notificationUpdateTimer = null;
 
-window.toggleNotificationPanel = async function() {
+window.toggleNotificationPanel = async function(e) {
+    if (e) e.stopPropagation(); // ✅ prevent immediate close
+
     const panel = document.getElementById("notificationPanel");
     isNotificationPanelOpen = !isNotificationPanelOpen;
     
@@ -472,7 +474,18 @@ window.toggleNotificationPanel = async function() {
         panel.classList.remove("active");
     }
 };
+document.addEventListener("click", function (e) {
+    const panel = document.getElementById("notificationPanel");
+    const bell = document.querySelector(".notification-icon-wrapper");
 
+    if (!panel || !isNotificationPanelOpen) return;
+
+    // ❌ click outside panel + bell
+    if (!panel.contains(e.target) && !bell.contains(e.target)) {
+        panel.classList.remove("active");
+        isNotificationPanelOpen = false;
+    }
+});
 async function loadNotifications() {
     // Debounce to handle rapid notifications and ensure a single UI update
     if (notificationUpdateTimer) clearTimeout(notificationUpdateTimer);
