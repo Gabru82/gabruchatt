@@ -248,7 +248,6 @@ const forgotOtpStore = new Map();
 const loginOtpStore = new Map();
 
 const nodemailer = require("nodemailer");
-
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -257,10 +256,21 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-app.post("/sendRegOtp", async (req, res) => {
+app.post("/sendRegOtp", (req, res) => {
   const { email } = req.body;
 
-  if (!email) return res.json({ success: false, message: "Email required" });
+  if (!email) {
+    return res.json({ success: false, message: "Email required" });
+  }
+
+  // ✅ cooldown (IMPORTANT)
+  const existing = regOtpStore.get(email);
+  if (existing && Date.now() - existing.lastSent < 60000) {
+    return res.json({
+      success: false,
+      message: "Wait 60 seconds before retry",
+    });
+  }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -270,21 +280,24 @@ app.post("/sendRegOtp", async (req, res) => {
     lastSent: Date.now(),
   });
 
-  try {
-    await transporter.sendMail({
-      from: "your_email@gmail.com",
+  // ✅ send email in background (NO await)
+  transporter
+    .sendMail({
+      from: '"Gabru Support" <rc82398266@gmail.com>',
       to: email,
       subject: "Your OTP Code",
       text: `Your OTP is: ${otp}`,
+    })
+    .then(() => {
+      console.log("OTP sent:", email);
+    })
+    .catch((err) => {
+      console.error("Mail error:", err);
     });
 
-    res.json({ success: true, message: "OTP sent to email" });
-  } catch (err) {
-    console.error(err);
-    res.json({ success: false, message: "Failed to send OTP" });
-  }
+  // ⚡ instant response
+  res.json({ success: true, message: "OTP sent" });
 });
-
 app.post("/verifyRegOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = regOtpStore.get(email);
@@ -333,13 +346,17 @@ app.post("/sendForgotOtp", async (req, res) => {
     });
 
     try {
-      await transporter.sendMail({
-        from: '"Gabru Support" <rc82398266@gmail.com>',
-        to: email,
-        subject: "Password Reset OTP",
-        text: `Your OTP for password reset is: ${otp}. It will expire in 5 minutes.`,
-      });
+      // ❌ REMOVE await
+      transporter
+        .sendMail({
+          from: '"Gabru Support" <rc82398266@gmail.com>',
+          to: email,
+          subject: "Password Reset OTP",
+          text: `Your OTP for password reset is: ${otp}`,
+        })
+        .catch((err) => console.error(err));
 
+      // ✅ instant response
       res.json({ success: true, message: "OTP sent to your email" });
     } catch (mailErr) {
       console.error(mailErr);
@@ -410,13 +427,18 @@ async function sendLoginOtp(user, res) {
   });
 
   try {
-    await transporter.sendMail({
-      from: '"Gabru Support" <rc82398266@gmail.com>',
-      to: user.email,
-      subject: "Login Verification Code",
-      text: `Your login verification code is: ${otp}. It will expire in 5 minutes.`,
-    });
+    transporter
+      .sendMail({
+        from: '"Gabru Support" <rc82398266@gmail.com>',
+        to: user.email,
+        subject: "Login Verification Code",
+        text: `Your login verification code is: ${otp}`,
+      })
+      .catch((err) => {
+        console.error("Login OTP Email Error:", err);
+      });
 
+    // ⚡ instant response
     res.json({ success: true, needsOtp: true, email: user.email });
   } catch (mailErr) {
     console.error("Login OTP Email Error:", mailErr);
