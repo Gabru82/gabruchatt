@@ -257,7 +257,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-app.post("/api/sendRegOtp", async (req, res) => {
+app.post("/sendRegOtp", async (req, res) => {
   const { email } = req.body;
 
   if (!email) return res.json({ success: false, message: "Email required" });
@@ -285,7 +285,7 @@ app.post("/api/sendRegOtp", async (req, res) => {
   }
 });
 
-app.post("/api/verifyRegOtp", (req, res) => {
+app.post("/verifyRegOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = regOtpStore.get(email);
 
@@ -305,7 +305,7 @@ app.post("/api/verifyRegOtp", (req, res) => {
   res.json({ success: true });
 });
 
-app.post("/api/sendForgotOtp", async (req, res) => {
+app.post("/sendForgotOtp", async (req, res) => {
   const { email } = req.body;
 
   if (!email) return res.json({ success: false, message: "Email required" });
@@ -348,7 +348,7 @@ app.post("/api/sendForgotOtp", async (req, res) => {
   });
 });
 
-app.post("/api/verifyForgotOtp", (req, res) => {
+app.post("/verifyForgotOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = forgotOtpStore.get(email);
 
@@ -371,7 +371,7 @@ app.post("/api/verifyForgotOtp", (req, res) => {
   res.json({ success: true, message: "OTP verified" });
 });
 
-app.post("/api/resetPassword", (req, res) => {
+app.post("/resetPassword", (req, res) => {
   const { email, newPassword } = req.body;
   const stored = forgotOtpStore.get(email);
 
@@ -424,7 +424,7 @@ async function sendLoginOtp(user, res) {
   }
 }
 
-app.post("/api/sendLoginOtp", (req, res) => {
+app.post("/sendLoginOtp", (req, res) => {
   const { email, password } = req.body;
   db.get(
     "SELECT id, name, email FROM users WHERE email=? AND password=?",
@@ -445,7 +445,7 @@ app.post("/api/sendLoginOtp", (req, res) => {
   );
 });
 
-app.post("/api/verifyLoginOtp", (req, res) => {
+app.post("/verifyLoginOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = loginOtpStore.get(email);
 
@@ -568,7 +568,7 @@ app.post("/login", (req, res) => {
   );
 });
 
-app.post("/api/deactivateAccount", (req, res) => {
+app.post("/deactivateAccount", (req, res) => {
   const { userId, password } = req.body;
   db.get("SELECT password FROM users WHERE id=?", [userId], (err, row) => {
     if (err || !row || row.password !== password) {
@@ -585,7 +585,7 @@ app.post("/api/deactivateAccount", (req, res) => {
   });
 });
 
-app.post("/api/toggle2FA", (req, res) => {
+app.post("/toggle2FA", (req, res) => {
   const { userId, enabled, password } = req.body;
   db.get("SELECT password FROM users WHERE id=?", [userId], (err, row) => {
     if (err || !row || row.password !== password) {
@@ -602,7 +602,7 @@ app.post("/api/toggle2FA", (req, res) => {
   });
 });
 
-app.get("/api/getPendingLogin/:pendingId", (req, res) => {
+app.get("/getPendingLogin/:pendingId", (req, res) => {
   db.get(
     "SELECT * FROM pending_logins WHERE id = ?",
     [req.params.pendingId],
@@ -612,7 +612,7 @@ app.get("/api/getPendingLogin/:pendingId", (req, res) => {
   );
 });
 
-app.post("/api/verifyCurrentPassword", (req, res) => {
+app.post("/verifyCurrentPassword", (req, res) => {
   const { userId, password } = req.body;
   if (!userId || !password)
     return res.json({ success: false, message: "Missing credentials" });
@@ -629,7 +629,7 @@ app.post("/api/verifyCurrentPassword", (req, res) => {
 
 // ================= NOTIFICATION ROUTES =================
 
-app.get("/api/getNotifications/:userId", (req, res) => {
+app.get("/getNotifications/:userId", (req, res) => {
   const { userId } = req.params;
   // We join with pending_logins for login_request types to get device info
   db.all(
@@ -647,7 +647,7 @@ app.get("/api/getNotifications/:userId", (req, res) => {
   );
 });
 
-app.post("/api/markNotificationsRead", (req, res) => {
+app.post("/markNotificationsRead", (req, res) => {
   const { userId } = req.body;
   db.run(
     "UPDATE notifications SET status = 'read' WHERE user_id = ?",
@@ -658,14 +658,14 @@ app.post("/api/markNotificationsRead", (req, res) => {
   );
 });
 
-app.post("/api/clearNotifications", (req, res) => {
+app.post("/clearNotifications", (req, res) => {
   const { userId } = req.body;
   db.run("DELETE FROM notifications WHERE user_id = ?", [userId], (err) => {
     res.json({ success: !err });
   });
 });
 
-app.post("/api/rejectRequest", (req, res) => {
+app.post("/rejectRequest", (req, res) => {
   const { senderId, receiverId } = req.body;
   db.run(
     "DELETE FROM friend_requests WHERE sender = ? AND receiver = ? AND status = 'pending'",
@@ -682,7 +682,7 @@ app.post("/api/rejectRequest", (req, res) => {
   );
 });
 
-app.get("/api/getLoginSessions/:userId", (req, res) => {
+app.get("/getLoginSessions/:userId", (req, res) => {
   const { userId } = req.params;
   db.all(
     "SELECT * FROM sessions WHERE user_id = ? AND status = 1 ORDER BY login_time DESC",
@@ -694,7 +694,7 @@ app.get("/api/getLoginSessions/:userId", (req, res) => {
   );
 });
 
-app.post("/api/terminateSession", (req, res) => {
+app.post("/terminateSession", (req, res) => {
   const { userId, sessionToken } = req.body;
   db.run(
     "UPDATE sessions SET status = 0 WHERE user_id = ? AND session_token = ?",
@@ -712,7 +712,7 @@ app.post("/api/terminateSession", (req, res) => {
   );
 });
 
-app.post("/api/getMessagesByIds", (req, res) => {
+app.post("/getMessagesByIds", (req, res) => {
   const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) return res.json({ messages: [] });
   const placeholders = ids.map(() => "?").join(",");
@@ -726,7 +726,7 @@ app.post("/api/getMessagesByIds", (req, res) => {
   );
 });
 
-app.get("/api/getMyProfile/:userId", (req, res) => {
+app.get("/getMyProfile/:userId", (req, res) => {
   const userId = req.params.userId;
   db.get(
     "SELECT id, name, email, password, avatar, bio, cover, links, settings, city, birthday, active_status, account_status, read_receipts, notifications_enabled, tfa_enabled FROM users WHERE id=?",
@@ -768,7 +768,7 @@ app.get("/api/getMyProfile/:userId", (req, res) => {
   );
 });
 
-app.get("/api/getChatSettings/:userId/:friendId", (req, res) => {
+app.get("/getChatSettings/:userId/:friendId", (req, res) => {
   const { userId, friendId } = req.params;
   const u1 = Math.min(parseInt(userId), parseInt(friendId));
   const u2 = Math.max(parseInt(userId), parseInt(friendId));
@@ -784,7 +784,7 @@ app.get("/api/getChatSettings/:userId/:friendId", (req, res) => {
   );
 });
 
-app.post("/api/updateProfile", (req, res) => {
+app.post("/updateProfile", (req, res) => {
   const { userId, ...updates } = req.body;
 
   if (!userId) return res.json({ success: false, message: "User ID required" });
@@ -842,7 +842,7 @@ app.post("/searchUser", (req, res) => {
   });
 });
 
-app.post("/api/removeFriend", (req, res) => {
+app.post("/removeFriend", (req, res) => {
   const { userId, friendId } = req.body;
   db.run(
     "DELETE FROM friends WHERE (user1 = ? AND user2 = ?) OR (user1 = ? AND user2 = ?)",
@@ -860,7 +860,7 @@ app.post("/api/removeFriend", (req, res) => {
   );
 });
 
-app.post("/api/blockUser", (req, res) => {
+app.post("/blockUser", (req, res) => {
   const { userId, friendId } = req.body;
 
   db.serialize(() => {
@@ -891,7 +891,7 @@ app.post("/api/blockUser", (req, res) => {
     );
   });
 });
-app.get("/api/getBlockedUsers/:userId", (req, res) => {
+app.get("/getBlockedUsers/:userId", (req, res) => {
   const { userId } = req.params;
 
   db.all(
@@ -910,7 +910,7 @@ app.get("/api/getBlockedUsers/:userId", (req, res) => {
     },
   );
 });
-app.post("/api/unblockUser", (req, res) => {
+app.post("/unblockUser", (req, res) => {
   const { userId, blockedId } = req.body;
 
   db.run(
@@ -956,7 +956,7 @@ app.post("/sendRequest", (req, res) => {
   );
 });
 
-app.post("/api/cancelRequest", (req, res) => {
+app.post("/cancelRequest", (req, res) => {
   const { sender, receiver } = req.body;
 
   if (!sender || !receiver) return res.status(400).json({ success: false });
@@ -2252,7 +2252,7 @@ io.on("connection", (socket) => {
           return callback({ success: false });
         }
 
-        // 👇 SAME LOGIC YOU ALREADY USE IN /api/getMyProfile
+        // 👇 SAME LOGIC YOU ALREADY USE IN /getMyProfile
         db.get(
           `SELECT COUNT(*) as count FROM messages WHERE sender=?`,
           [userId],

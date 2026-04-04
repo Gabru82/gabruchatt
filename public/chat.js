@@ -319,7 +319,7 @@ async function openForwardModal() {
     if (!selectedForwardFriendId || selectedMessages.size === 0) return;
 
     const ids = Array.from(selectedMessages).map((id) => parseInt(id));
-    const msgRes = await fetch("/api/getMessagesByIds", {
+    const msgRes = await fetch("/getMessagesByIds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
@@ -376,7 +376,7 @@ window.shareProfile = async function () {
   closeProfileMenu();
   document.getElementById("userProfileModal").style.display = "none";
   // Get data of the user being shared
-  const profileRes = await fetch(`/api/getMyProfile/${currentFriendId}`);
+  const profileRes = await fetch(`/getMyProfile/${currentFriendId}`);
   const profileData = await profileRes.json();
   if (!profileData.success) return;
 
@@ -497,7 +497,7 @@ async function loadNotifications() {
   if (notificationUpdateTimer) clearTimeout(notificationUpdateTimer);
 
   notificationUpdateTimer = setTimeout(async () => {
-    const res = await fetch(`/api/getNotifications/${userId}`);
+    const res = await fetch(`/getNotifications/${userId}`);
     const data = await res.json();
     const list = document.getElementById("notificationList");
 
@@ -590,7 +590,7 @@ async function loadNotifications() {
 }
 
 async function handleNotificationAction(senderId, action, notifId) {
-  let endpoint = action === "accept" ? "/acceptRequest" : "/api/rejectRequest";
+  let endpoint = action === "accept" ? "/acceptRequest" : "/rejectRequest";
 
   // If accepting, we need the request ID. For simplicity, the notification system here assumes
   // we handle via senderId/receiverId pairs for direct rejection or fetching the request ID
@@ -632,7 +632,7 @@ async function getRequestId(senderId) {
 }
 
 async function markNotificationsRead() {
-  await fetch("/api/markNotificationsRead", {
+  await fetch("/markNotificationsRead", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId }),
@@ -642,7 +642,7 @@ async function markNotificationsRead() {
 
 window.clearAllNotifications = async function () {
   if (!confirm("Clear all notifications?")) return;
-  const res = await fetch("/api/clearNotifications", {
+  const res = await fetch("/clearNotifications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId }),
@@ -662,7 +662,7 @@ function updateNotificationBadge(count) {
 
 // Initialize badge on load
 setTimeout(async () => {
-  const res = await fetch(`/api/getNotifications/${userId}`);
+  const res = await fetch(`/getNotifications/${userId}`);
   const data = await res.json();
   if (data.success) {
     const unread = data.notifications.filter(
@@ -781,7 +781,7 @@ document.addEventListener("click", (e) => {
 window.removeFriend = async function () {
   if (!currentFriendId) return;
   closeProfileMenu();
-  const res = await fetch("/api/removeFriend", {
+  const res = await fetch("/removeFriend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, friendId: currentFriendId }),
@@ -800,7 +800,7 @@ window.removeFriend = async function () {
 window.blockUser = async function () {
   if (!currentFriendId) return;
   closeProfileMenu();
-  const res = await fetch("/api/blockUser", {
+  const res = await fetch("/blockUser", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, friendId: currentFriendId }),
@@ -1550,7 +1550,7 @@ async function sendModernRequest(id, btn) {
 
 async function cancelModernRequest(id, btn) {
   btn.disabled = true;
-  const res = await fetch("/api/cancelRequest", {
+  const res = await fetch("/cancelRequest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sender: userId, receiver: id }),
@@ -3194,7 +3194,7 @@ async function openChat(friendId, friendName, friendAvatar = null) {
   updateChatStatus(friendId);
 
   // Fetch Chat Settings (Timer)
-  const settingsRes = await fetch(`/api/getChatSettings/${userId}/${friendId}`);
+  const settingsRes = await fetch(`/getChatSettings/${userId}/${friendId}`);
   const settingsData = await settingsRes.json();
   console.log("Chat Timer Mode:", settingsData.timer_mode);
 

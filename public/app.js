@@ -78,7 +78,7 @@ sendForgotOtpBtn.onclick = async () => {
   sendForgotOtpBtn.disabled = true;
   sendForgotOtpBtn.innerText = "Sending...";
 
-  const res = await fetch("/api/sendForgotOtp", {
+  const res = await fetch("/sendForgotOtp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -118,7 +118,7 @@ verifyForgotOtpBtn.onclick = async () => {
   verifyForgotOtpBtn.disabled = true;
   verifyForgotOtpBtn.innerText = "Verifying...";
 
-  const res = await fetch("/api/verifyForgotOtp", {
+  const res = await fetch("/verifyForgotOtp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, otp }),
@@ -153,7 +153,7 @@ savePasswordBtn.onclick = async () => {
   savePasswordBtn.disabled = true;
   savePasswordBtn.innerText = "Saving...";
 
-  const res = await fetch("/api/resetPassword", {
+  const res = await fetch("/resetPassword", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -233,7 +233,7 @@ sendRegOtpBtn.onclick = async () => {
   sendRegOtpBtn.disabled = true;
   sendRegOtpBtn.innerText = "Sending...";
 
-  const res = await fetch("/api/sendRegOtp", {
+  const res = await fetch("/sendRegOtp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -265,7 +265,7 @@ verifyRegOtpBtn.onclick = async () => {
 
   if (!otp) return showPopup("Enter the 6-digit OTP");
 
-  const res = await fetch("/api/verifyRegOtp", {
+  const res = await fetch("/verifyRegOtp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, otp }),
@@ -383,7 +383,7 @@ document.getElementById("verifyLoginOtpBtn").onclick = async () => {
 
   if (!otp) return showPopup("Enter OTP");
 
-  const res = await fetch("/api/verifyLoginOtp", {
+  const res = await fetch("/verifyLoginOtp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, otp }),
@@ -402,7 +402,7 @@ document.getElementById("verifyLoginOtpBtn").onclick = async () => {
 };
 
 document.getElementById("resendLoginOtpBtn").onclick = async () => {
-  const res = await fetch("/api/sendLoginOtp", {
+  const res = await fetch("/sendLoginOtp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: window._loginEmail, password: window._loginPassword }),

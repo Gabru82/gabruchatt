@@ -143,7 +143,7 @@ async function setupMyProfile() {
     if (!password) return showPopup("Please enter your current password");
 
     e.target.disabled = true;
-    const res = await fetch("/api/verifyCurrentPassword", {
+    const res = await fetch("/verifyCurrentPassword", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, password }),
@@ -169,7 +169,7 @@ async function setupMyProfile() {
     if (!email || !email.includes("@")) return showPopup("Enter a valid registered email");
 
     e.target.disabled = true;
-    const res = await fetch("/api/sendForgotOtp", {
+    const res = await fetch("/sendForgotOtp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -191,7 +191,7 @@ async function setupMyProfile() {
     if (otp.length !== 6) return showPopup("Enter the 6-digit OTP");
 
     e.target.disabled = true;
-    const res = await fetch("/api/verifyForgotOtp", {
+    const res = await fetch("/verifyForgotOtp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: updateFlowEmail, otp }),
@@ -223,7 +223,7 @@ async function setupMyProfile() {
 
     if (updateFlowMethod === 'id') {
       // Use profile update route for logged-in user
-      const res = await fetch("/api/updateProfile", {
+      const res = await fetch("/updateProfile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, password: newPwd }),
@@ -233,7 +233,7 @@ async function setupMyProfile() {
       message = success ? "Password updated successfully" : (data.message || "Failed to update");
     } else {
       // Use reset password route for forgot flow
-      const res = await fetch("/api/resetPassword", {
+      const res = await fetch("/resetPassword", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: updateFlowEmail, newPassword: newPwd }),
@@ -280,7 +280,7 @@ async function setupMyProfile() {
         const password = document.getElementById("deletePasswordInput").value;
         if (!password) return showPopup("Enter password");
         
-        const res = await fetch("/api/toggle2FA", {
+        const res = await fetch("/toggle2FA", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, enabled: isEnabling, password }),
@@ -358,7 +358,7 @@ window.verifyDeletePassword = function () {
 window.confirmDeleteAccount = async function () {
   const password = window._deletePassword;
 
-  const res = await fetch("/api/deactivateAccount", {
+  const res = await fetch("/deactivateAccount", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, password }),
@@ -406,7 +406,7 @@ window.closePasswordModal = function () {
   window.confirmDeleteAccount = async function () {
     const password = window._deletePassword;
 
-    const res = await fetch("/api/deactivateAccount", {
+    const res = await fetch("/deactivateAccount", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, password }),
@@ -424,7 +424,7 @@ window.closePasswordModal = function () {
 
   const loadMyProfile = async (showModal = false) => {
     try {
-      const res = await fetch(`/api/getMyProfile/${userId}`);
+      const res = await fetch(`/getMyProfile/${userId}`);
       const data = await res.json();
       if (data.success && data.user) {
         const u = data.user;
@@ -548,7 +548,7 @@ window.closePasswordModal = function () {
         : 0
       : undefined;
 
-    const res = await fetch("/api/updateProfile", {
+    const res = await fetch("/updateProfile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -652,7 +652,7 @@ window.closePasswordModal = function () {
     list.innerHTML = "<p style='text-align:center; color:#888;'>Loading sessions...</p>";
 
     try {
-      const res = await fetch(`/api/getLoginSessions/${userId}`);
+      const res = await fetch(`/getLoginSessions/${userId}`);
       const data = await res.json();
 
       if (!data.success || !data.sessions.length) {
@@ -686,7 +686,7 @@ window.closePasswordModal = function () {
   };
 
   window.terminateSession = async function (token) {
-    const res = await fetch("/api/terminateSession", {
+    const res = await fetch("/terminateSession", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, sessionToken: token }),
@@ -703,7 +703,7 @@ window.closePasswordModal = function () {
     list.innerHTML = "Loading...";
 
     try {
-      const res = await fetch(`/api/getBlockedUsers/${userId}`);
+      const res = await fetch(`/getBlockedUsers/${userId}`);
       const data = await res.json();
 
       if (!data.success || !data.users.length) {
@@ -754,7 +754,7 @@ window.closePasswordModal = function () {
   }
   window.unblockUser = function (blockedId) {
     showConfirm("Unblock this user?", async () => {
-      const res = await fetch("/api/unblockUser", {
+      const res = await fetch("/unblockUser", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
