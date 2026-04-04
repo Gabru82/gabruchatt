@@ -327,15 +327,60 @@ async function setupMyProfile() {
     window.location.href = "/index.html";
   };
   // 🔥 Open password modal
-  window.deleteAccount = function () {
-    document.getElementById("passwordModal").style.display = "flex";
-  };
+// 🔥 Open password modal
+window.deleteAccount = function () {
+  document.getElementById("passwordModal").style.display = "flex";
+};
 
-  // 🔥 Close password modal (FIXED)
-  window.closePasswordModal = function () {
-    document.getElementById("passwordModal").style.display = "none";
-  };
+// 🔥 Close password modal
+function closePasswordModal() {
+  document.getElementById("passwordModal").style.display = "none";
+}
 
+// 🔥 Step 1: verify password input
+window.verifyDeletePassword = function () {
+  const password = document.getElementById("deletePasswordInput").value;
+  if (!password) {
+    showPopup("Enter your password");
+    return;
+  }
+
+  // store temp password
+  window._deletePassword = password;
+
+  closePasswordModal();
+
+  // open confirm modal
+  document.getElementById("deleteConfirmModal").style.display = "flex";
+};
+
+// 🔥 Final confirm → API call
+window.confirmDeleteAccount = async function () {
+  const password = window._deletePassword;
+
+  const res = await fetch("/api/deactivateAccount", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, password }),
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    localStorage.clear();
+    window.location.href = "/index.html";
+  } else {
+    showPopup(data.message || "Failed to deactivate account");
+  }
+};
+
+window.closeDeleteConfirm = function () {
+  document.getElementById("deleteConfirmModal").style.display = "none";
+};
+
+window.closePasswordModal = function () {
+  document.getElementById("passwordModal").style.display = "none";
+};
   // 🔥 Step 1: verify password input
   window.verifyDeletePassword = function () {
     const password = document.getElementById("deletePasswordInput").value;

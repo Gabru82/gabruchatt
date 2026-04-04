@@ -215,46 +215,42 @@
             </div>
 
         </div>
-        <div id="addFriendModal">
 
-            <div class="add-box">
-                <button class="close-btn">&times;</button>
-
+        <!-- MODERN ADD FRIEND PANEL -->
+        <div id="addFriendPanel" class="modern-panel">
+            <div class="panel-header">
+                <button class="close-panel-btn" onclick="closeAddFriendPanel()" style="background:none; border:none; color:#888; font-size:24px; cursor:pointer;"><i class="fa-solid fa-arrow-left"></i></button>
                 <h3>Add Friends</h3>
-
-                <button id="searchUserBtn">Search User</button>
-
-                <button id="viewRequestsBtn">Friend Requests</button>
-
+                <div style="width:24px;"></div> <!-- Spacer -->
             </div>
+            <div class="panel-body">
+                <div class="search-wrapper">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="modernSearchInput" placeholder="Search for people...">
+                </div>
 
-        </div>
-        <div id="searchModal">
+                <!-- Dynamic Search Content -->
+                <div id="modernSearchContent" style="display: none;">
+                    <div class="dynamic-section">
+                        <h4>Search Results</h4>
+                        <div id="modernSearchResultsList" class="user-cards-list"></div>
+                    </div>
+                </div>
 
-            <div class="search-box">
-                <button class="close-btn">&times;</button>
-
-                <input id="searchInput" placeholder="Search username">
-
-                <button id="searchBtn">Search</button>
-
-                <div id="searchResult"></div>
-
+                <!-- Default Content -->
+                <div id="modernDefaultContent">
+                    <div id="modernRequestsSection" class="dynamic-section">
+                        <h4>Friend Requests</h4>
+                        <div id="modernRequestsList" class="user-cards-list"></div>
+                    </div>
+                    <div class="dynamic-section">
+                        <h4>Discover People</h4>
+                        <div id="modernDiscoverList" class="user-cards-list"></div>
+                    </div>
+                </div>
             </div>
-
         </div>
-        <div id="requestModal">
 
-            <div class="request-box">
-                <button class="close-btn">&times;</button>
-
-                <h3>Friend Requests</h3>
-
-                <div id="requestList"></div>
-
-            </div>
-
-        </div>
         <div id="chatScreen">
 
             <div class="chat-header">
@@ -599,7 +595,19 @@
             </div>
         </div>
 
-
+    <div id="sharedMediaOptionsModal" class="action-sheet">
+        <div class="action-sheet-overlay" onclick="closeSharedMediaOptions()"></div>
+        <div class="action-sheet-content">
+            <div class="sheet-handle"></div>
+            <div class="sheet-item" id="smShowInChat">
+                <i class="fa-solid fa-comment-dots"></i> Show in Chat
+            </div>
+            <div class="sheet-item danger" id="smDelete">
+                <i class="fa-solid fa-trash"></i> Delete
+            </div>
+            <div class="sheet-cancel" id="smCancel" onclick="closeSharedMediaOptions()">Cancel</div>
+        </div>
+    </div>
         <!-- Profile Menu {mute, calls, timer, share, remove, block,} -->
         <div id="profileActionSheet" class="action-sheet">
 

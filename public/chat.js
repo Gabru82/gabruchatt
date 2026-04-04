@@ -17,7 +17,8 @@ callSound.preload = "auto";
 callSound.loop = true;
 let isChatOpen = false;
 
-const canPlaySounds = () => localStorage.getItem("notificationsEnabled") !== "false";
+const canPlaySounds = () =>
+  localStorage.getItem("notificationsEnabled") !== "false";
 
 document.addEventListener(
   "click",
@@ -455,119 +456,126 @@ window.requestFromShare = async function (targetId, msgId) {
 
 setupShareModal();
 
+window.closeSharedMediaOptions = function () {
+  document.getElementById("sharedMediaOptionsModal").classList.remove("active");
+  document.getElementById("sharedMediaOptionsModal").style.display = "none";
+};
+
 // ================= NOTIFICATIONS LOGIC =================
 
 let isNotificationPanelOpen = false;
 let notificationUpdateTimer = null;
 
-window.toggleNotificationPanel = async function(e) {
-    if (e) e.stopPropagation(); // ✅ prevent immediate close
+window.toggleNotificationPanel = async function (e) {
+  if (e) e.stopPropagation(); // ✅ prevent immediate close
 
-    const panel = document.getElementById("notificationPanel");
-    isNotificationPanelOpen = !isNotificationPanelOpen;
-    
-    if (isNotificationPanelOpen) {
-        panel.classList.add("active");
-        await loadNotifications();
-        markNotificationsRead();
-    } else {
-        panel.classList.remove("active");
-    }
+  const panel = document.getElementById("notificationPanel");
+  isNotificationPanelOpen = !isNotificationPanelOpen;
+
+  if (isNotificationPanelOpen) {
+    panel.classList.add("active");
+    await loadNotifications();
+    markNotificationsRead();
+  } else {
+    panel.classList.remove("active");
+  }
 };
 document.addEventListener("click", function (e) {
-    const panel = document.getElementById("notificationPanel");
-    const bell = document.querySelector(".notification-icon-wrapper");
+  const panel = document.getElementById("notificationPanel");
+  const bell = document.querySelector(".notification-icon-wrapper");
 
-    if (!panel || !isNotificationPanelOpen) return;
+  if (!panel || !isNotificationPanelOpen) return;
 
-    // ❌ click outside panel + bell
-    if (!panel.contains(e.target) && !bell.contains(e.target)) {
-        panel.classList.remove("active");
-        isNotificationPanelOpen = false;
-    }
+  // ❌ click outside panel + bell
+  if (!panel.contains(e.target) && !bell.contains(e.target)) {
+    panel.classList.remove("active");
+    isNotificationPanelOpen = false;
+  }
 });
 async function loadNotifications() {
-    // Debounce to handle rapid notifications and ensure a single UI update
-    if (notificationUpdateTimer) clearTimeout(notificationUpdateTimer);
-    
-    notificationUpdateTimer = setTimeout(async () => {
+  // Debounce to handle rapid notifications and ensure a single UI update
+  if (notificationUpdateTimer) clearTimeout(notificationUpdateTimer);
+
+  notificationUpdateTimer = setTimeout(async () => {
     const res = await fetch(`/api/getNotifications/${userId}`);
     const data = await res.json();
     const list = document.getElementById("notificationList");
-    
+
     if (!data.success) return;
 
     // Remove duplicate notifications by ID before rendering
     const uniqueNotifications = [];
     const seenIds = new Set();
-    (data.notifications || []).forEach(n => {
-        if (!seenIds.has(n.id)) {
-            seenIds.add(n.id);
-            uniqueNotifications.push(n);
-        }
+    (data.notifications || []).forEach((n) => {
+      if (!seenIds.has(n.id)) {
+        seenIds.add(n.id);
+        uniqueNotifications.push(n);
+      }
     });
 
     if (uniqueNotifications.length === 0) {
-        list.innerHTML = `
+      list.innerHTML = `
             <div style="text-align:center; padding:50px 20px; color:#666;">
                 <i class="fa-regular fa-bell" style="font-size:40px; margin-bottom:15px; opacity:0.3;"></i>
                 <p>No notifications yet</p>
             </div>`;
-        updateNotificationBadge(0);
-        return;
+      updateNotificationBadge(0);
+      return;
     }
 
     list.innerHTML = "";
     let unreadCount = 0;
 
-    uniqueNotifications.forEach(n => {
-        if (n.status === 'unread') unreadCount++;
-        
-        const card = document.createElement("div");
-        card.className = "notification-card";
-        card.setAttribute("data-id", n.id);
-        
-        let actionButtons = "";
-        let actionText = "";
-        let avatarContent = "";
+    uniqueNotifications.forEach((n) => {
+      if (n.status === "unread") unreadCount++;
 
-        // Strict type-based rendering for accurate UI and icons
-        if (n.type.startsWith('login_request:')) {
-            const pendingId = n.type.split(':')[1];
-            actionText = "is attempting to login from a new device";
-            // Fixed security icon for login requests instead of user avatar
-            avatarContent = `
+      const card = document.createElement("div");
+      card.className = "notification-card";
+      card.setAttribute("data-id", n.id);
+
+      let actionButtons = "";
+      let actionText = "";
+      let avatarContent = "";
+
+      // Strict type-based rendering for accurate UI and icons
+      if (n.type.startsWith("login_request:")) {
+        const pendingId = n.type.split(":")[1];
+        actionText = "is attempting to login from a new device";
+        // Fixed security icon for login requests instead of user avatar
+        avatarContent = `
                 <div style="width: 45px; height: 45px; border-radius: 50%; background: rgba(255, 212, 71, 0.1); display: flex; align-items: center; justify-content: center; color: #ffd447; border: 1px solid rgba(255, 212, 71, 0.3);">
                     <i class="fa-solid fa-user-secret"></i>
                 </div>`;
-            actionButtons = `
+        actionButtons = `
                 <div style="background: rgba(255,212,71,0.05); border: 1px solid rgba(255,212,71,0.2); border-radius: 8px; padding: 10px; margin-top: 10px;">
-                    <div style="font-size: 11px; color: #eee; margin-bottom: 4px;"><i class="fa-solid fa-mobile-screen-button"></i> ${n.device_info || 'Unknown Device'}</div>
-                    <div style="font-size: 10px; color: #888; margin-bottom: 8px;"><i class="fa-solid fa-location-dot"></i> IP: ${n.login_ip || 'Hidden'}</div>
+                    <div style="font-size: 11px; color: #eee; margin-bottom: 4px;"><i class="fa-solid fa-mobile-screen-button"></i> ${n.device_info || "Unknown Device"}</div>
+                    <div style="font-size: 10px; color: #888; margin-bottom: 8px;"><i class="fa-solid fa-location-dot"></i> IP: ${n.login_ip || "Hidden"}</div>
                     <div style="display:flex; gap:8px;">
                         <button class="save-btn" style="padding:6px 12px; font-size:11px; flex:1;" onclick="approveLoginRequest('${pendingId}')">Approve</button>
                         <button class="action-btn-outline" style="padding:6px 12px; font-size:11px; flex:1;" onclick="denyLoginRequest('${pendingId}')">Deny</button>
                     </div>
                 </div>`;
-        } else {
-            // Friend-related notifications use actual sender profile image
-            const avatarSrc = n.senderAvatar || `https://i.pravatar.cc/150?img=${(n.sender_id % 70) + 1}`;
-            avatarContent = `<img src="${avatarSrc}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 255, 255, 0.1);">`;
+      } else {
+        // Friend-related notifications use actual sender profile image
+        const avatarSrc =
+          n.senderAvatar ||
+          `https://i.pravatar.cc/150?img=${(n.sender_id % 70) + 1}`;
+        avatarContent = `<img src="${avatarSrc}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 255, 255, 0.1);">`;
 
-            if (n.type === 'friend_request') {
-            actionText = "sent you a friend request";
-            actionButtons = `
+        if (n.type === "friend_request") {
+          actionText = "sent you a friend request";
+          actionButtons = `
                 <div style="display:flex; gap:8px; margin-top:10px;">
                     <button class="save-btn" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'accept', ${n.id})">Accept</button>
                     <button class="action-btn-outline" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'reject', ${n.id})">Reject</button>
                 </div>`;
-        } else if (n.type === 'request_accepted') {
-            actionText = "accepted your friend request";
-            actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
-            }
+        } else if (n.type === "request_accepted") {
+          actionText = "accepted your friend request";
+          actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
         }
+      }
 
-        card.innerHTML = `
+      card.innerHTML = `
             ${avatarContent}
             <div style="flex:1;">
                 <div style="font-size:13px;">
@@ -578,89 +586,94 @@ async function loadNotifications() {
                 ${actionButtons}
             </div>
         `;
-        list.appendChild(card);
+      list.appendChild(card);
     });
 
     updateNotificationBadge(unreadCount);
-    }, 300);
+  }, 300);
 }
 
 async function handleNotificationAction(senderId, action, notifId) {
-    let endpoint = action === 'accept' ? '/acceptRequest' : '/api/rejectRequest';
-    
-    // If accepting, we need the request ID. For simplicity, the notification system here assumes 
-    // we handle via senderId/receiverId pairs for direct rejection or fetching the request ID
-    let body = action === 'accept' 
-        ? { id: await getRequestId(senderId), userId: userId, senderId: senderId }
-        : { senderId: senderId, receiverId: userId };
+  let endpoint = action === "accept" ? "/acceptRequest" : "/api/rejectRequest";
 
-    const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-    });
+  // If accepting, we need the request ID. For simplicity, the notification system here assumes
+  // we handle via senderId/receiverId pairs for direct rejection or fetching the request ID
+  let body =
+    action === "accept"
+      ? { id: await getRequestId(senderId), userId: userId, senderId: senderId }
+      : { senderId: senderId, receiverId: userId };
 
-    if (res.ok) {
-        loadNotifications();
-        loadFriends();
-        if (action === 'accept') socket.emit("friendRequestAccepted", { friendId: senderId });
-    }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (res.ok) {
+    loadNotifications();
+    loadFriends();
+    loadAddFriendContent();
+    if (action === "accept")
+      socket.emit("friendRequestAccepted", { friendId: senderId });
+  }
 }
 
-window.approveLoginRequest = function(pendingId) {
-    socket.emit("approveLogin", { pendingId });
-    showPopup("Login Approved");
+window.approveLoginRequest = function (pendingId) {
+  socket.emit("approveLogin", { pendingId });
+  showPopup("Login Approved");
 };
 
-window.denyLoginRequest = function(pendingId) {
-    socket.emit("denyLogin", { pendingId });
-    showPopup("Login Denied");
+window.denyLoginRequest = function (pendingId) {
+  socket.emit("denyLogin", { pendingId });
+  showPopup("Login Denied");
 };
 
 async function getRequestId(senderId) {
-    const res = await fetch(`/getRequests/${userId}`);
-    const data = await res.json();
-    const req = data.requests.find(r => r.senderId == senderId);
-    return req ? req.id : null;
+  const res = await fetch(`/getRequests/${userId}`);
+  const data = await res.json();
+  const req = data.requests.find((r) => r.senderId == senderId);
+  return req ? req.id : null;
 }
 
 async function markNotificationsRead() {
-    await fetch("/api/markNotificationsRead", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-    });
-    setTimeout(() => updateNotificationBadge(0), 2000);
+  await fetch("/api/markNotificationsRead", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+  });
+  setTimeout(() => updateNotificationBadge(0), 2000);
 }
 
-window.clearAllNotifications = async function() {
-    if (!confirm("Clear all notifications?")) return;
-    const res = await fetch("/api/clearNotifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-    });
-    if (res.ok) loadNotifications();
+window.clearAllNotifications = async function () {
+  if (!confirm("Clear all notifications?")) return;
+  const res = await fetch("/api/clearNotifications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+  });
+  if (res.ok) loadNotifications();
 };
 
 function updateNotificationBadge(count) {
-    const badge = document.getElementById("notificationBadge");
-    if (count > 0) {
-        badge.innerText = count > 9 ? "9+" : count;
-        badge.style.display = "block";
-    } else {
-        badge.style.display = "none";
-    }
+  const badge = document.getElementById("notificationBadge");
+  if (count > 0) {
+    badge.innerText = count > 9 ? "9+" : count;
+    badge.style.display = "block";
+  } else {
+    badge.style.display = "none";
+  }
 }
 
 // Initialize badge on load
 setTimeout(async () => {
-    const res = await fetch(`/api/getNotifications/${userId}`);
-    const data = await res.json();
-    if (data.success) {
-        const unread = data.notifications.filter(n => n.status === 'unread').length;
-        updateNotificationBadge(unread);
-    }
+  const res = await fetch(`/api/getNotifications/${userId}`);
+  const data = await res.json();
+  if (data.success) {
+    const unread = data.notifications.filter(
+      (n) => n.status === "unread",
+    ).length;
+    updateNotificationBadge(unread);
+  }
 }, 1000);
 
 // ================= USER PROFILE & MEDIA MODAL =================
@@ -903,7 +916,22 @@ async function updateProfileStatus(friendId) {
     statusEl.style.color = "#aaa";
   }
 }
+function removeSharedItem(msgId) {
+  // MEDIA
+  document
+    .querySelectorAll(`.shared-media-item[data-id="${msgId}"]`)
+    .forEach(el => el.remove());
 
+  // LINKS
+  document
+    .querySelectorAll(`.link-item[data-id="${msgId}"]`)
+    .forEach(el => el.remove());
+
+  // DOCUMENTS
+  document
+    .querySelectorAll(`.doc-item[data-id="${msgId}"]`)
+    .forEach(el => el.remove());
+}
 async function loadSharedInfo(friendId) {
   const res = await fetch(`/getSharedInfo/${userId}/${friendId}`);
   const data = await res.json();
@@ -970,16 +998,19 @@ async function loadSharedInfo(friendId) {
         selectedMsgSender = String(msg.sender);
 
         const optionsModal = document.getElementById("sharedMediaOptionsModal");
-        optionsModal.style.display = "flex";
+        optionsModal.style.display = "block";
+        optionsModal.classList.add("active");
 
         document.getElementById("smShowInChat").onclick = () => {
           optionsModal.style.display = "none";
+          optionsModal.classList.remove("active");
           document.getElementById("userProfileModal").style.display = "none";
           scrollToMessage(msg.id);
         };
 
         document.getElementById("smDelete").onclick = () => {
           optionsModal.style.display = "none";
+          optionsModal.classList.remove("active");
           const modal = document.getElementById("deleteModal");
           modal.style.display = "flex";
           modal.style.justifyContent = "center";
@@ -992,15 +1023,12 @@ async function loadSharedInfo(friendId) {
           modal.style.height = "100%";
           modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
 
-          if (String(msg.sender) !== String(userId)) {
-            document.getElementById("deleteEveryone").style.display = "none";
-          } else {
-            document.getElementById("deleteEveryone").style.display = "block";
-          }
+          document.getElementById("deleteEveryone").style.display = "block"; // Always show for shared media
         };
 
         document.getElementById("smCancel").onclick = () => {
           optionsModal.style.display = "none";
+          optionsModal.classList.remove("active");
         };
       };
 
@@ -1041,12 +1069,12 @@ async function loadSharedInfo(friendId) {
     else if (msg.type === "text") {
       const urlRegex = /(https?:\/\/[^\s]+)/g;
       const urls = msg.message.match(urlRegex);
+
       if (urls) {
         urls.forEach((url) => {
           const item = document.createElement("div");
           item.className = "link-item";
-
-          // Simple icon based on common domains
+item.dataset.id = msg.id;
           let icon = "fa-link";
           if (url.includes("youtube.com") || url.includes("youtu.be"))
             icon = "fa-youtube";
@@ -1054,15 +1082,85 @@ async function loadSharedInfo(friendId) {
           else if (url.includes("github.com")) icon = "fa-github";
 
           item.innerHTML = `
-            <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.05); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                <i class="fa-solid ${icon}" style="color: #4facfe;"></i>
-            </div>
-            <div class="link-info">
-                <div class="link-title">${url}</div>
-                <div class="link-url">${url}</div>
-            </div>
-          `;
-          item.onclick = () => window.open(url, "_blank");
+        <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.05); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+            <i class="fa-solid ${icon}" style="color: #4facfe;"></i>
+        </div>
+        <div class="link-info">
+            <div class="link-title">${url}</div>
+            <div class="link-url">${url}</div>
+        </div>
+      `;
+
+          // 🔥 LONG PRESS LOGIC
+          let longPressTimer;
+          let isLongPress = false;
+
+          const showDeleteOption = () => {
+            isLongPress = true;
+            selectedMsgId = parseInt(msg.id);
+            selectedMsgSender = String(msg.sender);
+
+            const optionsModal = document.getElementById(
+              "sharedMediaOptionsModal",
+            );
+            optionsModal.style.display = "block";
+            optionsModal.classList.add("active");
+
+            document.getElementById("smShowInChat").onclick = () => {
+              optionsModal.style.display = "none";
+              optionsModal.classList.remove("active");
+              document.getElementById("userProfileModal").style.display =
+                "none";
+              scrollToMessage(msg.id);
+            };
+
+            document.getElementById("smDelete").onclick = () => {
+              optionsModal.style.display = "none";
+              optionsModal.classList.remove("active");
+              const modal = document.getElementById("deleteModal");
+              modal.style.display = "flex";
+              modal.style.justifyContent = "center";
+              modal.style.alignItems = "center";
+              modal.style.position = "absolute";
+              modal.style.top = "0";
+              modal.style.left = "0";
+              modal.style.zIndex = "10000";
+              modal.style.width = "100%";
+              modal.style.height = "100%";
+              modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+
+              document.getElementById("deleteEveryone").style.display = "block"; // Always show for shared media
+            };
+
+            document.getElementById("smCancel").onclick = () => {
+              optionsModal.style.display = "none";
+              optionsModal.classList.remove("active");
+            };
+          };
+
+          // Mobile
+          item.addEventListener("touchstart", () => {
+            isLongPress = false;
+            longPressTimer = setTimeout(showDeleteOption, 600);
+          });
+          item.addEventListener("touchend", () => clearTimeout(longPressTimer));
+          item.addEventListener("touchmove", () =>
+            clearTimeout(longPressTimer),
+          );
+
+          // Desktop
+          item.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            showDeleteOption();
+          });
+
+          // Normal click
+          item.onclick = () => {
+            if (!isLongPress) {
+              window.open(url, "_blank");
+            }
+          };
+
           linksList.appendChild(item);
         });
       }
@@ -1071,26 +1169,90 @@ async function loadSharedInfo(friendId) {
     else if (msg.type === "document") {
       const item = document.createElement("div");
       item.className = "doc-item";
+      item.dataset.id = msg.id;
       const fileName = msg.caption || "Document";
 
       item.innerHTML = `
-        <div style="width: 40px; height: 40px; background: rgba(255,204,0,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-            <i class="fa-solid fa-file-pdf" style="color: #ffcc00;"></i>
-        </div>
-        <div class="doc-info">
-            <div class="doc-name">${fileName}</div>
-            <div class="doc-size">Shared via Gabru</div>
-        </div>
-        <i class="fa-solid fa-download" style="color: #888; margin-left: auto;"></i>
-      `;
-      item.onclick = () => {
-        const a = document.createElement("a");
-        a.href = msg.message;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+    <div style="width: 40px; height: 40px; background: rgba(255,204,0,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+        <i class="fa-solid fa-file-pdf" style="color: #ffcc00;"></i>
+    </div>
+    <div class="doc-info">
+        <div class="doc-name">${fileName}</div>
+        <div class="doc-size">Shared via Gabru</div>
+    </div>
+    <i class="fa-solid fa-download" style="color: #888; margin-left: auto;"></i>
+  `;
+
+      // 🔥 LONG PRESS LOGIC
+      let longPressTimer;
+      let isLongPress = false;
+
+      const showDeleteOption = () => {
+        isLongPress = true;
+        selectedMsgId = parseInt(msg.id);
+        selectedMsgSender = String(msg.sender);
+
+        const optionsModal = document.getElementById("sharedMediaOptionsModal");
+        optionsModal.style.display = "block";
+        optionsModal.classList.add("active");
+
+        document.getElementById("smShowInChat").onclick = () => {
+          optionsModal.style.display = "none";
+          optionsModal.classList.remove("active");
+          document.getElementById("userProfileModal").style.display = "none";
+          scrollToMessage(msg.id);
+        };
+
+        document.getElementById("smDelete").onclick = () => {
+          optionsModal.style.display = "none";
+          optionsModal.classList.remove("active");
+          const modal = document.getElementById("deleteModal");
+          modal.style.display = "flex";
+          modal.style.justifyContent = "center";
+          modal.style.alignItems = "center";
+          modal.style.position = "absolute";
+          modal.style.top = "0";
+          modal.style.left = "0";
+          modal.style.zIndex = "10000";
+          modal.style.width = "100%";
+          modal.style.height = "100%";
+          modal.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+
+          document.getElementById("deleteEveryone").style.display = "block"; // Always show for shared media
+        };
+
+        document.getElementById("smCancel").onclick = () => {
+          optionsModal.style.display = "none";
+          optionsModal.classList.remove("active");
+        };
       };
+
+      // Mobile
+      item.addEventListener("touchstart", () => {
+        isLongPress = false;
+        longPressTimer = setTimeout(showDeleteOption, 600);
+      });
+      item.addEventListener("touchend", () => clearTimeout(longPressTimer));
+      item.addEventListener("touchmove", () => clearTimeout(longPressTimer));
+
+      // Desktop
+      item.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showDeleteOption();
+      });
+
+      // Normal click (download)
+      item.onclick = () => {
+        if (!isLongPress) {
+          const a = document.createElement("a");
+          a.href = msg.message;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      };
+
       docsList.appendChild(item);
     }
   });
@@ -1144,7 +1306,9 @@ let activeChat = null;
 
 function removeFriendFromUI(targetId) {
   // Remove from the chat list feed
-  const item = document.querySelector(`.chat-item[data-friend-id="${targetId}"]`);
+  const item = document.querySelector(
+    `.chat-item[data-friend-id="${targetId}"]`,
+  );
   if (item) item.remove();
 
   // Clear any unread tracking
@@ -1164,9 +1328,9 @@ function removeFriendFromUI(targetId) {
 
 const socket = io();
 socket.on("connect", () => {
-  socket.emit("register", { 
-    userId, 
-    sessionToken: localStorage.getItem("sessionToken") 
+  socket.emit("register", {
+    userId,
+    sessionToken: localStorage.getItem("sessionToken"),
   });
 });
 
@@ -1176,12 +1340,12 @@ socket.on("forcedLogout", () => {
 });
 
 socket.on("newNotification", () => {
-    if (canPlaySounds()) messageSound.play().catch(() => {});
-    loadNotifications();
+  if (canPlaySounds()) messageSound.play().catch(() => {});
+  loadNotifications();
 });
 
 socket.on("newLoginRequest", () => {
-    loadNotifications();
+  loadNotifications();
 });
 
 socket.on("newFriendRequest", () => {
@@ -1203,31 +1367,61 @@ socket.on("friendAdded", () => {
 });
 
 socket.on("friendRemoved", (data) => {
-  const targetId = String(data.userId) === String(userId) ? data.friendId : data.userId;
+  const targetId =
+    String(data.userId) === String(userId) ? data.friendId : data.userId;
   removeFriendFromUI(targetId);
 });
 
 socket.on("userBlocked", (data) => {
-  const targetId = String(data.blockerId) === String(userId) ? data.blockedId : data.blockerId;
+  const targetId =
+    String(data.blockerId) === String(userId) ? data.blockedId : data.blockerId;
   removeFriendFromUI(targetId);
 });
 
 // ================= FRIEND SEARCH =================
 
-const addFriendBtn = document.getElementById("addFriendBtn");
-const addFriendModal = document.getElementById("addFriendModal");
+let modernSearchTimer;
 
-addFriendBtn.onclick = () => (addFriendModal.style.display = "flex");
+window.toggleAddFriendPanel = async function (e) {
+  if (e) e.stopPropagation();
+  const panel = document.getElementById("addFriendPanel");
+  const isActive = panel.classList.toggle("active");
 
-const searchModal = document.getElementById("searchModal");
-
-document.getElementById("searchUserBtn").onclick = () => {
-  addFriendModal.style.display = "none";
-  searchModal.style.display = "flex";
+  if (isActive) {
+    document.getElementById("modernSearchInput").value = "";
+    document.getElementById("modernSearchContent").style.display = "none";
+    document.getElementById("modernDefaultContent").style.display = "block";
+    await loadAddFriendContent();
+  }
 };
 
-document.getElementById("searchBtn").onclick = async () => {
-  const name = document.getElementById("searchInput").value;
+function closeAddFriendPanel() {
+  document.getElementById("addFriendPanel").classList.remove("active");
+}
+
+document.getElementById("addFriendBtn").onclick = (e) =>
+  toggleAddFriendPanel(e);
+
+document.getElementById("modernSearchInput").oninput = function (e) {
+  const query = e.target.value.trim();
+  clearTimeout(modernSearchTimer);
+
+  if (query.length > 0) {
+    modernSearchTimer = setTimeout(() => performModernSearch(query), 300);
+  } else {
+    document.getElementById("modernSearchContent").style.display = "none";
+    document.getElementById("modernDefaultContent").style.display = "block";
+  }
+};
+
+async function performModernSearch(name) {
+  const searchContent = document.getElementById("modernSearchContent");
+  const searchList = document.getElementById("modernSearchResultsList");
+  const defaultContent = document.getElementById("modernDefaultContent");
+
+  searchContent.style.display = "block";
+  defaultContent.style.display = "none";
+  searchList.innerHTML = '<p class="empty-state">Searching...</p>';
 
   const res = await fetch("/searchUser", {
     method: "POST",
@@ -1236,40 +1430,113 @@ document.getElementById("searchBtn").onclick = async () => {
   });
 
   const data = await res.json();
-  const result = document.getElementById("searchResult");
-  result.innerHTML = "";
+  searchList.innerHTML = "";
+
+  if (data.users.length === 0) {
+    searchList.innerHTML = '<p class="empty-state">No users found</p>';
+    return;
+  }
 
   for (const user of data.users) {
-    const relationRes = await fetch(`/checkRelation/${userId}/${user.id}`);
-    const relation = await relationRes.json();
-
-    const div = document.createElement("div");
-    div.className = "search-result";
-
-    let buttonHtml = "";
-    if (relation.status === "self") {
-      buttonHtml = '<span class="self-label">Me</span>';
-    } else if (relation.status === "friends") {
-      buttonHtml = `<button class="chat-btn" onclick="openChat(${user.id}, '${user.name}')">Chat</button>`;
-    } else if (relation.status === "pending") {
-      buttonHtml = `<button class="cancel-btn" style="background:#444; color:white; padding: 6px 12px; border-radius: 6px; border:none; cursor:pointer;" onclick="cancelRequest(${user.id})">Cancel</button>`;
-    } else {
-      buttonHtml = `<button onclick="sendRequest(${user.id})">Send Request</button>`;
-    }
-
-    div.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px;">
-        <img src="${getAvatarSrc(user)}" style="width:30px; height:30px; border-radius:50%;">
-        <span>${user.name}</span>
-      </div>
-      ${buttonHtml}
-    `;
-
-    result.appendChild(div);
+    const card = await renderUserCard(user);
+    searchList.appendChild(card);
   }
-};
+}
 
-async function sendRequest(id) {
+async function loadAddFriendContent() {
+  await Promise.all([loadModernRequests(), loadModernDiscover()]);
+}
+
+async function loadModernRequests() {
+  const res = await fetch(`/getRequests/${userId}`);
+  const data = await res.json();
+  const list = document.getElementById("modernRequestsList");
+  const section = document.getElementById("modernRequestsSection");
+
+  list.innerHTML = "";
+  if (!data.requests || data.requests.length === 0) {
+    section.style.display = "none";
+    return;
+  }
+
+  section.style.display = "block";
+  data.requests.forEach((req) => {
+    const card = document.createElement("div");
+    card.className = "user-modern-card";
+    card.innerHTML = `
+            <img src="${getAvatarSrc(req.senderId)}" class="card-avatar">
+            <div class="card-info">
+                <div class="card-name">${req.name}</div>
+                <div class="card-sub">Sent you a request</div>
+            </div>
+            <div class="card-actions">
+                <button class="card-btn-accept" onclick="acceptRequest(${req.id}, ${req.senderId})"><i class="fa-solid fa-check"></i></button>
+                <button class="card-btn-reject" onclick="handleNotificationAction(${req.senderId}, 'reject', ${req.id})"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        `;
+    list.appendChild(card);
+  });
+}
+
+async function loadModernDiscover() {
+  const list = document.getElementById("modernDiscoverList");
+  list.innerHTML = '<p class="empty-state">Finding people...</p>';
+
+  const res = await fetch("/searchUser", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "", userId, discoverMode: true }), // Explicitly filter out existing connections
+  });
+
+  const data = await res.json();
+  list.innerHTML = "";
+
+  // Show up to 10 discoverable people
+  const discoverUsers = data.users.slice(0, 10);
+
+  if (discoverUsers.length === 0) {
+    list.innerHTML = '<p class="empty-state">No new people to discover</p>';
+    return;
+  }
+
+  for (const user of discoverUsers) {
+    const card = await renderUserCard(user);
+    list.appendChild(card);
+  }
+}
+
+async function renderUserCard(user) {
+  const relationRes = await fetch(`/checkRelation/${userId}/${user.id}`);
+  const relation = await relationRes.json();
+
+  const div = document.createElement("div");
+  div.className = "user-modern-card";
+
+  let btnHtml = "";
+  if (relation.status === "friends") {
+    btnHtml = `<button class="card-btn-chat" onclick="openChat(${user.id}, '${user.name}')"><i class="fa-solid fa-message"></i></button>`;
+  } else if (relation.status === "pending") {
+    btnHtml = `<button class="card-btn-pending" onclick="cancelModernRequest(${user.id}, this)">Pending</button>`;
+  } else if (relation.status !== "self") {
+    btnHtml = `<button class="card-btn-add" onclick="sendModernRequest(${user.id}, this)">Add</button>`;
+  }
+
+  div.innerHTML = `
+      <img src="${getAvatarSrc(user)}" class="card-avatar">
+      <div class="card-info">
+        <div class="card-name">${user.name}</div>
+        <div class="card-sub">@${user.name.toLowerCase().replace(/\s/g, "")}</div>
+      </div>
+      <div class="card-actions">
+        ${btnHtml}
+      </div>
+    `;
+  return div;
+}
+
+async function sendModernRequest(id, btn) {
+  btn.disabled = true;
+  btn.innerText = "Sending...";
   const res = await fetch("/sendRequest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1277,14 +1544,16 @@ async function sendRequest(id) {
   });
 
   if (res.ok) {
-    showPopup("Friend request sent!");
     socket.emit("friendRequestSent", { receiver: id });
-    // Instantly refresh search view to show "Cancel" button
-    document.getElementById("searchBtn")?.click();
+    btn.className = "card-btn-pending";
+    btn.innerText = "Pending";
+    btn.disabled = false;
+    btn.onclick = () => cancelModernRequest(id, btn);
   }
 }
 
-async function cancelRequest(id) {
+async function cancelModernRequest(id, btn) {
+  btn.disabled = true;
   const res = await fetch("/api/cancelRequest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1293,20 +1562,14 @@ async function cancelRequest(id) {
 
   if (res.ok) {
     socket.emit("cancelFriendRequest", { receiver: id });
-    // Instantly refresh search view to show "Send Request" button
-    document.getElementById("searchBtn")?.click();
+    btn.className = "card-btn-add";
+    btn.innerText = "Add";
+    btn.disabled = false;
+    btn.onclick = () => sendModernRequest(id, btn);
   }
 }
 
 // ================= FRIEND REQUEST =================
-
-const requestModal = document.getElementById("requestModal");
-
-document.getElementById("viewRequestsBtn").onclick = async () => {
-  addFriendModal.style.display = "none";
-  requestModal.style.display = "flex";
-  await loadRequests();
-};
 
 async function acceptRequest(id, senderId = null) {
   const res = await fetch("/acceptRequest", {
@@ -1317,37 +1580,13 @@ async function acceptRequest(id, senderId = null) {
 
   if (res.ok) {
     showPopup("Friend added!");
-    loadFriends();
-    loadRequests();
+    await loadFriends();
+    await loadAddFriendContent();
 
     if (senderId) {
       socket.emit("friendRequestAccepted", { friendId: senderId });
     }
   }
-}
-
-async function loadRequests() {
-  const res = await fetch(`/getRequests/${userId}`);
-  const data = await res.json();
-
-  const list = document.getElementById("requestList");
-  list.innerHTML = "";
-
-  data.requests.forEach((r) => {
-    const div = document.createElement("div");
-    div.className = "request-item";
-
-    const avatarSrc =
-      r.avatar || `https://i.pravatar.cc/150?img=${(r.senderId % 70) + 1}`;
-
-    div.innerHTML = `
-      <img src="${avatarSrc}" style="width:30px; height:30px; border-radius:50%; margin-right:8px;">
-      <span>${r.name}</span>
-      <button onclick="acceptRequest(${r.id}, ${r.senderId})">Accept</button>
-    `;
-
-    list.appendChild(div);
-  });
 }
 
 // ================= CHAT =================
@@ -1784,10 +2023,10 @@ socket.on("messageSeenAll", ({ from, seenAt }) => {
 function timeAgo(date) {
   if (!date) return "";
   let d = new Date(date);
-  
+
   // Fix for SQLite timestamps (UTC) being parsed as local time by browsers
-  if (typeof date === 'string' && !date.includes('Z') && !date.includes('T')) {
-      d = new Date(date.replace(' ', 'T') + 'Z');
+  if (typeof date === "string" && !date.includes("Z") && !date.includes("T")) {
+    d = new Date(date.replace(" ", "T") + "Z");
   }
 
   const seconds = Math.floor((Date.now() - d) / 1000);
@@ -2012,7 +2251,7 @@ function appendMessage(
       ? caption.replace(/</g, "&lt;").replace(/>/g, "&gt;")
       : null;
     const captionHtml = sanitizedCaption
-      ? `<div class="media-caption"></div>`
+      ? `<div class="media-caption">${sanitizedCaption}</div>`
       : "";
 
     if (type === "image") {
@@ -2350,8 +2589,10 @@ document.getElementById("deleteMe").onclick = () => {
         type: "me",
         to: currentFriendId,
       });
+
+      removeSharedItem(parseInt(msgId)); // 🔥 ADD THIS
     });
-    // showPopup("Messages deleted");
+
     toggleSelectionMode(false);
   } else {
     socket.emit("deleteMessage", {
@@ -2359,6 +2600,8 @@ document.getElementById("deleteMe").onclick = () => {
       type: "me",
       to: currentFriendId,
     });
+
+    removeSharedItem(selectedMsgId); // 🔥 ADD THIS
   }
 
   deleteModal.style.display = "none";
@@ -2372,8 +2615,10 @@ document.getElementById("deleteEveryone").onclick = () => {
         type: "everyone",
         to: currentFriendId,
       });
+
+      removeSharedItem(parseInt(msgId)); // 🔥 ADD THIS
     });
-    // showPopup("Messages deleted for everyone");
+
     toggleSelectionMode(false);
   } else {
     socket.emit("deleteMessage", {
@@ -2381,6 +2626,8 @@ document.getElementById("deleteEveryone").onclick = () => {
       type: "everyone",
       to: currentFriendId,
     });
+
+    removeSharedItem(selectedMsgId); // 🔥 ADD THIS
   }
 
   deleteModal.style.display = "none";
@@ -2649,7 +2896,7 @@ sendBtn.onclick = () => {
             msg.msgId,
             msg.status,
             msg.seenAt,
-            capturedMedia.type,
+            msg.type,
             msg.timestamp,
             msg.caption,
             null,
@@ -2865,9 +3112,12 @@ async function loadFriends() {
 // ================= OPEN CHAT =================
 
 function closeAllModals() {
-  document.getElementById("addFriendModal").style.display = "none";
-  document.getElementById("searchModal").style.display = "none";
-  document.getElementById("requestModal").style.display = "none";
+  closeAddFriendPanel();
+  const notifPanel = document.getElementById("notificationPanel");
+  if (notifPanel) {
+    notifPanel.classList.remove("active");
+    isNotificationPanelOpen = false;
+  }
 }
 
 async function openChat(friendId, friendName, friendAvatar = null) {

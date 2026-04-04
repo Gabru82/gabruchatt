@@ -430,14 +430,18 @@ app.post("/api/sendLoginOtp", (req, res) => {
     "SELECT id, name, email FROM users WHERE email=? AND password=?",
     [email, password],
     async (err, row) => {
-      if (err || !row) return res.json({ success: false, message: "Invalid credentials" });
+      if (err || !row)
+        return res.json({ success: false, message: "Invalid credentials" });
 
       const stored = loginOtpStore.get(email);
       if (stored && Date.now() - stored.lastSent < 60000) {
-        return res.json({ success: false, message: "Please wait 60s before resending." });
+        return res.json({
+          success: false,
+          message: "Please wait 60s before resending.",
+        });
       }
       sendLoginOtp(row, res);
-    }
+    },
   );
 });
 
@@ -445,16 +449,19 @@ app.post("/api/verifyLoginOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = loginOtpStore.get(email);
 
-  if (!stored) return res.json({ success: false, message: "Request a new OTP." });
+  if (!stored)
+    return res.json({ success: false, message: "Request a new OTP." });
   if (Date.now() > stored.expires) {
     loginOtpStore.delete(email);
     return res.json({ success: false, message: "OTP expired." });
   }
-  if (stored.otp !== otp) return res.json({ success: false, message: "Invalid OTP." });
+  if (stored.otp !== otp)
+    return res.json({ success: false, message: "Invalid OTP." });
 
   const userAgent = req.headers["user-agent"] || "Unknown Device";
   const ip = req.ip || req.connection.remoteAddress;
-  const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  const sessionToken =
+    Math.random().toString(36).substring(2) + Date.now().toString(36);
 
   db.run(
     "INSERT INTO sessions(user_id, session_token, user_agent, ip_address) VALUES(?,?,?,?)",
@@ -462,8 +469,13 @@ app.post("/api/verifyLoginOtp", (req, res) => {
     (sessErr) => {
       if (sessErr) return res.status(500).json({ success: false });
       loginOtpStore.delete(email);
-      res.json({ success: true, id: stored.userId, name: stored.name, sessionToken: sessionToken });
-    }
+      res.json({
+        success: true,
+        id: stored.userId,
+        name: stored.name,
+        sessionToken: sessionToken,
+      });
+    },
   );
 });
 
@@ -505,7 +517,7 @@ app.post("/login", (req, res) => {
         if (row.tfa_enabled === 1) {
           // Priority 1: Check for active sessions using socket rooms
           const activeSockets = await io.in(`user_${row.id}`).fetchSockets();
-          
+
           if (activeSockets.length > 0) {
             const pendingId = Math.random().toString(36).substring(2, 15);
             db.run(
@@ -801,21 +813,33 @@ app.post("/api/updateProfile", (req, res) => {
   });
 });
 app.post("/searchUser", (req, res) => {
-  const { name, userId } = req.body;
+  const { name, userId, discoverMode } = req.body;
 
-  db.all(
-    `SELECT id, name, avatar FROM users 
+  let query = `SELECT id, name, avatar FROM users 
      WHERE name LIKE ? 
      AND account_status = 1
      AND id != ?
      AND id NOT IN (SELECT blocked FROM blocks WHERE blocker = ?)
-     AND id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`,
-    [`%${name}%`, userId || 0, userId || 0, userId || 0],
-    (err, rows) => {
-      if (err) return res.status(500).json({ users: [] });
-      res.json({ users: rows });
-    },
-  );
+     AND id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`;
+
+  let params = [`%${name}%`, userId || 0, userId || 0, userId || 0];
+
+  if (discoverMode && userId) {
+    query += ` 
+      AND id NOT IN (SELECT user2 FROM friends WHERE user1 = ?)
+      AND id NOT IN (SELECT user1 FROM friends WHERE user2 = ?)
+      AND id NOT IN (SELECT receiver FROM friend_requests WHERE sender = ? AND status = 'pending')
+      AND id NOT IN (SELECT sender FROM friend_requests WHERE receiver = ? AND status = 'pending')`;
+    params.push(userId, userId, userId, userId);
+  }
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error("Search User Error:", err);
+      return res.status(500).json({ users: [] });
+    }
+    res.json({ users: rows });
+  });
 });
 
 app.post("/api/removeFriend", (req, res) => {
