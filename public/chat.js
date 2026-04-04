@@ -458,6 +458,7 @@ setupShareModal();
 // ================= NOTIFICATIONS LOGIC =================
 
 let isNotificationPanelOpen = false;
+let notificationUpdateTimer = null;
 
 window.toggleNotificationPanel = async function() {
     const panel = document.getElementById("notificationPanel");
@@ -473,11 +474,27 @@ window.toggleNotificationPanel = async function() {
 };
 
 async function loadNotifications() {
+    // Debounce to handle rapid notifications and ensure a single UI update
+    if (notificationUpdateTimer) clearTimeout(notificationUpdateTimer);
+    
+    notificationUpdateTimer = setTimeout(async () => {
     const res = await fetch(`/api/getNotifications/${userId}`);
     const data = await res.json();
     const list = document.getElementById("notificationList");
     
-    if (!data.success || data.notifications.length === 0) {
+    if (!data.success) return;
+
+    // Remove duplicate notifications by ID before rendering
+    const uniqueNotifications = [];
+    const seenIds = new Set();
+    (data.notifications || []).forEach(n => {
+        if (!seenIds.has(n.id)) {
+            seenIds.add(n.id);
+            uniqueNotifications.push(n);
+        }
+    });
+
+    if (uniqueNotifications.length === 0) {
         list.innerHTML = `
             <div style="text-align:center; padding:50px 20px; color:#666;">
                 <i class="fa-regular fa-bell" style="font-size:40px; margin-bottom:15px; opacity:0.3;"></i>
@@ -490,28 +507,26 @@ async function loadNotifications() {
     list.innerHTML = "";
     let unreadCount = 0;
 
-    data.notifications.forEach(n => {
+    uniqueNotifications.forEach(n => {
         if (n.status === 'unread') unreadCount++;
         
         const card = document.createElement("div");
         card.className = "notification-card";
+        card.setAttribute("data-id", n.id);
         
         let actionButtons = "";
         let actionText = "";
+        let avatarContent = "";
 
-        if (n.type === 'friend_request') {
-            actionText = "sent you a friend request";
-            actionButtons = `
-                <div style="display:flex; gap:8px; margin-top:10px;">
-                    <button class="save-btn" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'accept', ${n.id})">Accept</button>
-                    <button class="action-btn-outline" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'reject', ${n.id})">Reject</button>
-                </div>`;
-        } else if (n.type === 'request_accepted') {
-            actionText = "accepted your friend request";
-            actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
-        } else if (n.type.startsWith('login_request:')) {
+        // Strict type-based rendering for accurate UI and icons
+        if (n.type.startsWith('login_request:')) {
             const pendingId = n.type.split(':')[1];
             actionText = "is attempting to login from a new device";
+            // Fixed security icon for login requests instead of user avatar
+            avatarContent = `
+                <div style="width: 45px; height: 45px; border-radius: 50%; background: rgba(255, 212, 71, 0.1); display: flex; align-items: center; justify-content: center; color: #ffd447; border: 1px solid rgba(255, 212, 71, 0.3);">
+                    <i class="fa-solid fa-user-secret"></i>
+                </div>`;
             actionButtons = `
                 <div style="background: rgba(255,212,71,0.05); border: 1px solid rgba(255,212,71,0.2); border-radius: 8px; padding: 10px; margin-top: 10px;">
                     <div style="font-size: 11px; color: #eee; margin-bottom: 4px;"><i class="fa-solid fa-mobile-screen-button"></i> ${n.device_info || 'Unknown Device'}</div>
@@ -521,16 +536,32 @@ async function loadNotifications() {
                         <button class="action-btn-outline" style="padding:6px 12px; font-size:11px; flex:1;" onclick="denyLoginRequest('${pendingId}')">Deny</button>
                     </div>
                 </div>`;
+        } else {
+            // Friend-related notifications use actual sender profile image
+            const avatarSrc = n.senderAvatar || `https://i.pravatar.cc/150?img=${(n.sender_id % 70) + 1}`;
+            avatarContent = `<img src="${avatarSrc}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 255, 255, 0.1);">`;
+
+            if (n.type === 'friend_request') {
+            actionText = "sent you a friend request";
+            actionButtons = `
+                <div style="display:flex; gap:8px; margin-top:10px;">
+                    <button class="save-btn" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'accept', ${n.id})">Accept</button>
+                    <button class="action-btn-outline" style="padding:5px 15px; font-size:11px;" onclick="handleNotificationAction(${n.sender_id}, 'reject', ${n.id})">Reject</button>
+                </div>`;
+        } else if (n.type === 'request_accepted') {
+            actionText = "accepted your friend request";
+            actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
+            }
         }
 
         card.innerHTML = `
-            <img src="${getAvatarSrc(n.avatar || n.sender_id)}">
+            ${avatarContent}
             <div style="flex:1;">
                 <div style="font-size:13px;">
-                    <strong style="color:#fff;">${n.name}</strong> 
+                    <strong style="color:#fff;">${n.senderName}</strong> 
                     <span style="color:#aaa;">${actionText}</span>
                 </div>
-                <div style="font-size:10px; color:#666; margin-top:4px;">${timeAgo(n.timestamp)}</div>
+                <div style="font-size:11px; color:#888; margin-top:4px;">${timeAgo(n.timestamp)}</div>
                 ${actionButtons}
             </div>
         `;
@@ -538,6 +569,7 @@ async function loadNotifications() {
     });
 
     updateNotificationBadge(unreadCount);
+    }, 300);
 }
 
 async function handleNotificationAction(senderId, action, notifId) {
@@ -1132,11 +1164,11 @@ socket.on("forcedLogout", () => {
 
 socket.on("newNotification", () => {
     if (canPlaySounds()) messageSound.play().catch(() => {});
-    if (isNotificationPanelOpen) loadNotifications();
-    else {
-        // Fetch unread count to update badge
-        loadNotifications(); 
-    }
+    loadNotifications();
+});
+
+socket.on("newLoginRequest", () => {
+    loadNotifications();
 });
 
 socket.on("newFriendRequest", () => {
@@ -1738,7 +1770,14 @@ socket.on("messageSeenAll", ({ from, seenAt }) => {
 
 function timeAgo(date) {
   if (!date) return "";
-  const seconds = Math.floor((Date.now() - new Date(date)) / 1000);
+  let d = new Date(date);
+  
+  // Fix for SQLite timestamps (UTC) being parsed as local time by browsers
+  if (typeof date === 'string' && !date.includes('Z') && !date.includes('T')) {
+      d = new Date(date.replace(' ', 'T') + 'Z');
+  }
+
+  const seconds = Math.floor((Date.now() - d) / 1000);
 
   if (seconds < 60) return "just now";
   if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";

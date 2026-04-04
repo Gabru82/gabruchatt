@@ -621,7 +621,7 @@ app.get("/api/getNotifications/:userId", (req, res) => {
   const { userId } = req.params;
   // We join with pending_logins for login_request types to get device info
   db.all(
-    `SELECT n.*, u.name, u.avatar, p.device_info, p.ip_address as login_ip
+    `SELECT n.*, u.name AS senderName, u.avatar AS senderAvatar, p.device_info, p.ip_address as login_ip
      FROM notifications n 
      JOIN users u ON n.sender_id = u.id
      LEFT JOIN pending_logins p ON n.type = 'login_request:' || p.id
