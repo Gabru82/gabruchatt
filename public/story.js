@@ -171,6 +171,7 @@
     const delBtn = document.getElementById("deleteStoryBtn");
     const timeEl = document.getElementById("storyTime");
 
+    cancelAnimationFrame(storyTimer);
     avatar.src = story.avatar || getAvatarSrc(story.user_id);
     name.textContent = story.name;
     avatar.dataset.uid = story.user_id;
@@ -197,22 +198,35 @@
 
     const currentFill =
       progress.children[currentStoryIndex].querySelector(".progress-fill");
-    clearTimeout(storyTimer);
 
     let start = null;
-    const duration = 5000;
+    let storyDuration = 20000; // Default 20s for images
+
     function step(timestamp) {
       if (!start) start = timestamp;
-      const progress = timestamp - start;
+      const elapsed = timestamp - start;
       currentFill.style.width =
-        Math.min((progress / duration) * 100, 100) + "%";
-      if (progress < duration) {
+        Math.min((elapsed / storyDuration) * 100, 100) + "%";
+      if (elapsed < storyDuration) {
         storyTimer = requestAnimationFrame(step);
       } else {
         nextStory();
       }
     }
-    storyTimer = requestAnimationFrame(step);
+
+    if (story.type === "video") {
+      const video = document.getElementById("viewerVideo");
+      video.onloadedmetadata = () => {
+        storyDuration = video.duration * 1000;
+        storyTimer = requestAnimationFrame(step);
+      };
+      if (video.readyState >= 1) {
+        storyDuration = video.duration * 1000;
+        storyTimer = requestAnimationFrame(step);
+      }
+    } else {
+      storyTimer = requestAnimationFrame(step);
+    }
 
     // Handle music playback
     playStoryMusic(
@@ -636,43 +650,56 @@
   function playStoryMusic(musicMetadata, isVideoStory) {
     stopStoryMusicPlayback();
 
-    if (!musicMetadata) return;
+    if (!musicMetadata || !musicMetadata.id) {
+      // Ensure volume is restored if muted for previous video
+      const viewerVideo = document.getElementById("viewerVideo");
+      if (viewerVideo) viewerVideo.muted = false;
+      return;
+    }
 
     if (musicMetadata.source === "youtube") {
       const iframe = document.createElement("iframe");
+      const startTime = musicMetadata.startTime || 0;
       iframe.width = "0"; // Hidden
       iframe.height = "0";
-      iframe.src = `https://www.youtube.com/embed/${musicMetadata.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${musicMetadata.startTime || 0}`;
+      iframe.src = `https://www.youtube.com/embed/${musicMetadata.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${startTime}`;
       iframe.allow = "autoplay";
       iframe.style.position = "absolute";
       iframe.style.left = "-9999px";
       iframe.style.top = "-9999px";
+      
+      iframe.onload = () => {
+        // Explicit seek to ensure accurate start
+        iframe.contentWindow.postMessage(
+          `{"event":"command","func":"seekTo","args":[${startTime}, true]}`,
+          "*"
+        );
+      };
+
       document.body.appendChild(iframe);
       currentStoryMusicPlayer = iframe;
-
-      storyMusicStopTimeout = setTimeout(() => {
-        if (currentStoryMusicPlayer && currentStoryMusicPlayer.contentWindow) {
-          currentStoryMusicPlayer.contentWindow.postMessage(
-            '{"event":"command","func":"stopVideo","args":""}',
-            "*",
-          );
-        }
-      }, musicMetadata.duration * 1000);
     } else if (musicMetadata.source === "pixabay") {
       const audio = document.createElement("audio");
       audio.src = musicMetadata.audioUrl;
       audio.autoplay = true;
       audio.controls = false;
-      audio.loop = false; // Don't loop, play only segment
-      audio.currentTime = musicMetadata.startTime || 0;
+      audio.loop = false;
+      
+      // Ensure playback starts from the exact segment
+      audio.oncanplay = () => {
+        audio.currentTime = musicMetadata.startTime || 0;
+        audio.play();
+      };
+
       document.body.appendChild(audio);
       currentStoryMusicPlayer = audio;
-
-      // Stop after duration
-      storyMusicStopTimeout = setTimeout(() => {
-        if (currentStoryMusicPlayer) currentStoryMusicPlayer.pause();
-      }, musicMetadata.duration * 1000);
     }
+
+    // Enforce strict 20s (or specified duration) hard stop
+    const stopDuration = musicMetadata.duration || 20;
+    storyMusicStopTimeout = setTimeout(() => {
+      stopStoryMusicPlayback();
+    }, stopDuration * 1000);
 
     // If it's a video story, mute the story video to hear the music
     if (isVideoStory) {
@@ -694,49 +721,59 @@
       iframe.style.left = "-9999px";
       iframe.style.top = "-9999px";
       document.body.appendChild(iframe);
-      trimPreviewAudioPlayer = iframe;
+      
+      iframe.onload = () => {
+        iframe.contentWindow.postMessage(
+          `{"event":"command","func":"seekTo","args":[${startTime}, true]}`,
+          "*"
+        );
+      };
 
-      trimPreviewStopTimeout = setTimeout(() => {
-        if (trimPreviewAudioPlayer && trimPreviewAudioPlayer.contentWindow) {
-          trimPreviewAudioPlayer.contentWindow.postMessage(
-            '{"event":"command","func":"stopVideo","args":""}',
-            "*",
-          );
-        }
-      }, duration * 1000);
+      trimPreviewAudioPlayer = iframe;
     } else if (song.source === "pixabay") {
       const audio = document.createElement("audio");
       audio.src = song.audioUrl;
       audio.autoplay = true;
       audio.controls = false;
-      audio.currentTime = startTime;
+      audio.oncanplay = () => {
+        audio.currentTime = startTime;
+        audio.play();
+      };
       document.body.appendChild(audio);
       trimPreviewAudioPlayer = audio;
-
-      trimPreviewStopTimeout = setTimeout(() => {
-        if (trimPreviewAudioPlayer) trimPreviewAudioPlayer.pause();
-      }, duration * 1000);
     }
+
+    trimPreviewStopTimeout = setTimeout(() => {
+      stopTrimPreview();
+    }, duration * 1000);
   }
 
   function stopTrimPreview() {
     if (trimPreviewAudioPlayer) {
       if (trimPreviewAudioPlayer.pause) trimPreviewAudioPlayer.pause();
+      else if (trimPreviewAudioPlayer.contentWindow) {
+        trimPreviewAudioPlayer.contentWindow.postMessage(
+          '{"event":"command","func":"stopVideo","args":""}',
+          "*"
+        );
+      }
       trimPreviewAudioPlayer.remove();
       trimPreviewAudioPlayer = null;
-      clearTimeout(trimPreviewStopTimeout);
     }
+    clearTimeout(trimPreviewStopTimeout);
   }
 
   function stopStoryMusicPlayback() {
+    clearTimeout(storyMusicStopTimeout);
     if (currentStoryMusicPlayer) {
-      if (currentStoryMusicPlayer.pause) currentStoryMusicPlayer.pause();
-      else if (currentStoryMusicPlayer.contentWindow)
+      if (currentStoryMusicPlayer.pause) {
+        currentStoryMusicPlayer.pause();
+      } else if (currentStoryMusicPlayer.contentWindow) {
         currentStoryMusicPlayer.contentWindow.postMessage(
           '{"event":"command","func":"stopVideo","args":""}',
-          "*",
+          "*"
         );
-      clearTimeout(storyMusicStopTimeout);
+      }
       currentStoryMusicPlayer.remove();
       currentStoryMusicPlayer = null;
     }
