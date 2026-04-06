@@ -6,6 +6,8 @@
   let currentStoryIndex = 0;
   let storyTimer = null; // For story progression
   let activeStoriesForViewer = []; // Track currently viewing stories
+  let isEditorOpen = false; // Controls playback lifecycle
+  let trimLoopTimeout = null; // For recursive looping of trimmed segment
 
   // Music related variables
   let currentStoryMusic = null; // { source: "youtube" | "pixabay", id, title, thumbnail, audioUrl, startTime }
@@ -14,11 +16,20 @@
   let currentStoryMusicPlayer = null; // Holds YouTube iframe or Audio element for story playback
   let storyMusicStopTimeout = null; // Timeout for stopping story music
 
+  // Advanced Editor Variables
+  let storyOverlays = []; // [{id, type, content, x, y, scale, rotation, styles}]
+  let activeOverlay = null;
+  let currentTextStyles = { font: 'Classic', color: '#fff', size: 32 };
+  let isDraggingOverlay = false;
+  let dragOffset = { x: 0, y: 0 };
+  let lastTouchDist = 0;
+  let lastTouchAngle = 0;
+  let isOverDeleteZone = false;
+
   let trimPreviewAudioPlayer = null; // For playing the trimmed segment
-  let trimPreviewStopTimeout = null; // Timeout for stopping trim preview
 
   const SEGMENT_DURATION = 20; // Fixed 20-second segment
-  let musicPreviewVolume = 0.5;
+  let musicPreviewVolume = 1;
   let musicSearchTimer;
 
   storyFileInput.onchange = (e) => {
@@ -37,17 +48,27 @@
   };
 
   function openStoryEditor() {
+    isEditorOpen = true;
     const modal = document.getElementById("storyEditorModal");
     const preview = document.getElementById("storyMediaPreview");
-    preview.innerHTML =
-      currentStoryMedia.type === "video"
+    const mediaHtml = currentStoryMedia.type === "video"
         ? `<video src="${currentStoryMedia.data}" autoplay muted loop controls></video>`
         : `<img src="${currentStoryMedia.data}">`;
+
+    // Re-inject the media and recreate the overlay container to avoid null reference errors
+    preview.innerHTML = mediaHtml + '<div id="storyOverlayContainer" class="overlay-container"></div>';
+
     modal.style.display = "flex";
     updateSelectedMusicDisplay(); // Update music display in editor
+    if (currentStoryMusic) {
+      playTrimPreview(currentStoryMusic, currentStoryMusic.startTime, SEGMENT_DURATION);
+    }
   }
 
   window.closeStoryEditor = () => {
+    isEditorOpen = false;
+    stopTrimPreview();
+    storyOverlays = [];
     document.getElementById("storyEditorModal").style.display = "none";
     currentStoryMedia = null;
     storyFileInput.value = "";
@@ -62,7 +83,7 @@
         userId,
         media: currentStoryMedia.data,
         type: currentStoryMedia.type,
-        overlays: [],
+        overlays: storyOverlays,
         music: currentStoryMusic
           ? { ...currentStoryMusic, duration: SEGMENT_DURATION }
           : null,
@@ -70,6 +91,8 @@
     });
     const data = await res.json();
     if (data.success) {
+      isEditorOpen = false;
+      stopTrimPreview();
       closeStoryEditor();
       showPopup("Story Added!");
       socket.emit("newStory", { userId });
@@ -185,6 +208,11 @@
         : `<img src="${story.media}">`;
 
     // Progress bars
+    const overlayContainer = document.createElement("div");
+    overlayContainer.className = "overlay-container";
+    viewer.appendChild(overlayContainer);
+    renderOverlaysToContainer(story.overlays ? JSON.parse(story.overlays) : [], overlayContainer);
+
     const progress = document.getElementById("storyProgress");
     progress.innerHTML = activeStoriesForViewer
       .map(
@@ -233,6 +261,256 @@
       story.music ? JSON.parse(story.music) : null,
       story.type === "video",
     );
+  }
+
+  // ================= ADVANCED OVERLAY ENGINE =================
+
+  function createOverlayElement(overlay) {
+    const div = document.createElement("div");
+    div.className = "draggable-overlay";
+    div.id = `ov-${overlay.id}`;
+    div.style.left = `${overlay.x}%`;
+    div.style.top = `${overlay.y}%`;
+    div.style.transform = `translate(-50%, -50%) scale(${overlay.scale}) rotate(${overlay.rotation}deg)`;
+
+    if (overlay.type === "text") {
+      div.textContent = overlay.content;
+      div.style.fontFamily = getFontFamily(overlay.styles.font);
+      div.style.fontSize = `${overlay.styles.size}px`;
+      div.style.color = overlay.styles.color === 'gradient' ? 'transparent' : overlay.styles.color;
+      if (overlay.styles.color === 'gradient') {
+        div.style.backgroundImage = "linear-gradient(45deg, #f09433, #bc1888)";
+        div.style.webkitBackgroundClip = "text";
+      }
+      if (overlay.styles.font === 'Neon') div.classList.add("font-neon");
+    } else if (overlay.type === "location") {
+      div.innerHTML = `<div class="story-tag-location"><i class="fa-solid fa-location-dot"></i> ${overlay.content}</div>`;
+    } else if (overlay.type === "emoji") {
+      div.style.fontSize = "80px";
+      div.textContent = overlay.content;
+    } else if (overlay.type === "sticker") {
+      div.innerHTML = `<img src="${overlay.content}" style="width: 150px;">`;
+    } else if (overlay.type === "time") {
+      div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+    }
+
+    // Interaction Logic
+    div.addEventListener("mousedown", (e) => startDrag(e, overlay));
+    div.addEventListener("touchstart", (e) => startDrag(e, overlay), { passive: false });
+
+    return div;
+  }
+
+  function startDrag(e, overlay) {
+    activeOverlay = overlay;
+    isDraggingOverlay = true;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = document.getElementById(`ov-${overlay.id}`).getBoundingClientRect();
+    dragOffset = { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 };
+    
+    document.getElementById("storyDeleteZone").classList.add("show");
+
+    if (e.touches && e.touches.length === 2) {
+        lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        lastTouchAngle = Math.atan2(e.touches[1].clientY - e.touches[0].clientY, e.touches[1].clientX - e.touches[0].clientX) * 180 / Math.PI;
+    }
+    e.preventDefault();
+  }
+
+  document.addEventListener("mousemove", (e) => handleMove(e));
+  document.addEventListener("touchmove", (e) => handleMove(e), { passive: false });
+
+  function handleMove(e) {
+    if (!isDraggingOverlay || !activeOverlay) return;
+    const container = document.getElementById("storyOverlayContainer");
+    const containerRect = container.getBoundingClientRect();
+    const deleteZone = document.getElementById("storyDeleteZone");
+    const el = document.getElementById(`ov-${activeOverlay.id}`);
+
+    if (e.touches && e.touches.length === 2) {
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const angle = Math.atan2(e.touches[1].clientY - e.touches[0].clientY, e.touches[1].clientX - e.touches[0].clientX) * 180 / Math.PI;
+        activeOverlay.scale *= (dist / lastTouchDist);
+        activeOverlay.rotation += (angle - lastTouchAngle);
+        lastTouchDist = dist;
+        lastTouchAngle = angle;
+    } else {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        activeOverlay.x = ((clientX - containerRect.left) / containerRect.width) * 100;
+        activeOverlay.y = ((clientY - containerRect.top) / containerRect.height) * 100;
+
+        // Collision detection with Delete Zone
+        const dzRect = deleteZone.getBoundingClientRect();
+        isOverDeleteZone = (clientX >= dzRect.left && clientX <= dzRect.right && 
+                            clientY >= dzRect.top && clientY <= dzRect.bottom);
+        
+        if (isOverDeleteZone) deleteZone.classList.add("active");
+        else deleteZone.classList.remove("active");
+    }
+
+    el.style.left = `${activeOverlay.x}%`;
+    el.style.top = `${activeOverlay.y}%`;
+    el.style.transform = `translate(-50%, -50%) scale(${activeOverlay.scale}) rotate(${activeOverlay.rotation}deg)`;
+  }
+
+  function stopDragging() {
+    if (isDraggingOverlay && activeOverlay && isOverDeleteZone) {
+        document.getElementById(`ov-${activeOverlay.id}`).remove();
+        storyOverlays = storyOverlays.filter(o => o.id !== activeOverlay.id);
+    }
+    isDraggingOverlay = false;
+    activeOverlay = null;
+    isOverDeleteZone = false;
+    const dz = document.getElementById("storyDeleteZone");
+    dz.classList.remove("show", "active");
+  }
+
+  document.addEventListener("mouseup", stopDragging);
+  document.addEventListener("touchend", stopDragging);
+
+  window.openStoryTextTool = () => {
+    document.getElementById("storyTextModal").style.display = "flex";
+    document.getElementById("storyTextInput").focus();
+  };
+
+  window.closeStoryTextTool = () => {
+    const text = document.getElementById("storyTextInput").value.trim();
+    if (text) {
+      const overlay = {
+        id: Date.now(),
+        type: "text",
+        content: text,
+        x: 50, y: 50, scale: 1, rotation: 0,
+        styles: { ...currentTextStyles }
+      };
+      storyOverlays.push(overlay);
+      document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+    }
+    document.getElementById("storyTextInput").value = "";
+    document.getElementById("storyTextModal").style.display = "none";
+  };
+
+  window.setStoryFont = (font) => currentTextStyles.font = font;
+  window.setStoryColor = (color) => currentTextStyles.color = color;
+
+  window.openStoryLocationTool = () => {
+    document.getElementById("storyLocationModal").style.display = "flex";
+    const results = document.getElementById("locationResults");
+    results.innerHTML = "";
+    ["New York", "London", "Paris", "Tokyo", "Dubai", "Mumbai"].forEach(loc => {
+        const d = document.createElement("div");
+        d.className = "theme-option";
+        d.textContent = loc;
+        d.onclick = () => {
+            addLocationTag(loc);
+            closeStoryLocationTool();
+        };
+        results.appendChild(d);
+    });
+  };
+
+  function addLocationTag(loc) {
+    const overlay = { id: Date.now(), type: "location", content: loc, x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
+    storyOverlays.push(overlay);
+    document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+  }
+
+  window.closeStoryLocationTool = () => document.getElementById("storyLocationModal").style.display = "none";
+
+  window.addStoryTimeTag = () => {
+    const overlay = { id: Date.now(), type: "time", content: "", x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
+    storyOverlays.push(overlay);
+    document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+  };
+
+  window.openStoryStickerTool = () => {
+    document.getElementById("storyStickerModal").style.display = "flex";
+    switchStickerTab('stickers');
+  };
+
+  window.switchStickerTab = (tab) => {
+    const results = document.getElementById("stickerResults");
+    results.innerHTML = "";
+    if (tab === 'stickers') {
+        const stickerList = ["🔥", "⭐", "📍", "💯", "💖", "✨"]; // Mock URLs or Emojis
+        stickerList.forEach(s => {
+            const d = document.createElement("div");
+            d.style.fontSize = "40px";
+            d.style.cursor = "pointer";
+            d.textContent = s;
+            d.onclick = () => {
+                const overlay = { id: Date.now(), type: "sticker", content: s, x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
+                storyOverlays.push(overlay);
+                document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+                closeStoryStickerTool();
+            };
+            results.appendChild(d);
+        });
+    } else {
+        const emojiList = ["😂", "😍", "🥺", "😎", "😭", "😡", "👍", "👎", "🎉", "🔥", "❤️"];
+        emojiList.forEach(e => {
+            const d = document.createElement("div");
+            d.style.fontSize = "40px";
+            d.style.cursor = "pointer";
+            d.textContent = e;
+            d.onclick = () => {
+                const overlay = { id: Date.now(), type: "emoji", content: e, x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
+                storyOverlays.push(overlay);
+                document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+                closeStoryStickerTool();
+            };
+            results.appendChild(d);
+        });
+    }
+  };
+
+  window.closeStoryStickerTool = () => document.getElementById("storyStickerModal").style.display = "none";
+
+  function getFontFamily(font) {
+    switch(font) {
+      case 'Modern': return 'Helvetica, sans-serif';
+      case 'Typewriter': return 'Courier New, monospace';
+      case 'Elegant': return 'Georgia, serif';
+      case 'Script': return 'Brush Script MT, cursive';
+      case 'Comic': return 'Comic Sans MS, cursive';
+      case 'Stencil': return 'Impact, sans-serif';
+      default: return 'Arial, sans-serif';
+    }
+  }
+
+  function renderOverlaysToContainer(overlays, container) {
+    overlays.forEach(ov => {
+      const div = document.createElement("div");
+      div.className = "draggable-overlay";
+      div.style.left = `${ov.x}%`;
+      div.style.top = `${ov.y}%`;
+      div.style.transform = `translate(-50%, -50%) scale(${ov.scale}) rotate(${ov.rotation}deg)`;
+      div.style.pointerEvents = "none"; // Non-interactive in viewer
+
+      if (ov.type === "text") {
+        div.textContent = ov.content;
+        div.style.fontFamily = getFontFamily(ov.styles.font);
+        div.style.fontSize = `${ov.styles.size}px`;
+        div.style.color = ov.styles.color === 'gradient' ? 'transparent' : ov.styles.color;
+        if (ov.styles.color === 'gradient') {
+          div.style.backgroundImage = "linear-gradient(45deg, #f09433, #bc1888)";
+          div.style.webkitBackgroundClip = "text";
+        }
+        if (ov.styles.font === 'Neon') div.classList.add("font-neon");
+      } else if (ov.type === "location") {
+        div.innerHTML = `<div class="story-tag-location"><i class="fa-solid fa-location-dot"></i> ${ov.content}</div>`;
+      } else if (ov.type === "emoji") {
+        div.style.fontSize = "80px";
+        div.textContent = ov.content;
+      } else if (ov.type === "sticker") {
+        div.innerHTML = `<img src="${ov.content}" style="width: 150px;">`;
+      } else if (ov.type === "time") {
+        div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+      }
+      container.appendChild(div);
+    });
   }
 
   window.nextStory = () => {
@@ -546,11 +824,6 @@
     segmentTotalDurationEl.textContent = formatTime(currentSongDuration);
 
     // Reset trim preview player
-    if (trimPreviewAudioPlayer) {
-      trimPreviewAudioPlayer.pause();
-      trimPreviewAudioPlayer.remove();
-      trimPreviewAudioPlayer = null;
-    }
   }
 
   function updateTrimmerUI() {
@@ -602,7 +875,6 @@
   document.onmouseup = () => {
     isDraggingSlider = false;
     segmentSlider.style.cursor = "grab";
-    stopTrimPreview(); // Stop any ongoing trim preview
   };
 
   trimPreviewPlayPauseBtn.onclick = () => {
@@ -624,7 +896,43 @@
     updateSelectedMusicDisplay();
     closeMusicPicker();
   };
+// TOUCH START (same as mousedown)
+segmentSlider.addEventListener("touchstart", (e) => {
+  isDraggingSlider = true;
+  dragStartX = e.touches[0].clientX;
+  sliderStartLeft = segmentSlider.offsetLeft;
+  segmentSlider.style.cursor = "grabbing";
+});
 
+// TOUCH MOVE (same as mousemove)
+document.addEventListener("touchmove", (e) => {
+  if (!isDraggingSlider) return;
+
+  const dx = e.touches[0].clientX - dragStartX;
+  let newLeft = sliderStartLeft + dx;
+
+  const sliderParentWidth = segmentSlider.parentElement.offsetWidth;
+  const segmentWidth = segmentSlider.offsetWidth;
+
+  // Clamp
+  if (newLeft < 0) newLeft = 0;
+  if (newLeft + segmentWidth > sliderParentWidth)
+    newLeft = sliderParentWidth - segmentWidth;
+
+  currentSegmentStartTime =
+    (newLeft / sliderParentWidth) * currentSongDuration;
+
+  updateTrimmerUI();
+
+  // prevent screen scroll while dragging
+  e.preventDefault();
+}, { passive: false });
+
+// TOUCH END (same as mouseup)
+document.addEventListener("touchend", () => {
+  isDraggingSlider = false;
+  segmentSlider.style.cursor = "grab";
+});
   function updateSelectedMusicDisplay() {
     stopMusicPreview(); // Ensure preview player is stopped
     const display = document.getElementById("selectedMusicDisplay");
@@ -644,6 +952,7 @@
 
   window.removeSelectedMusic = () => {
     currentStoryMusic = null;
+    stopTrimPreview();
     updateSelectedMusicDisplay();
   };
 
@@ -709,58 +1018,86 @@
   }
 
   function playTrimPreview(song, startTime, duration) {
-    stopTrimPreview();
+    clearTimeout(trimLoopTimeout);
+    if (!isEditorOpen || !song) return;
 
-    if (song.source === "youtube") {
-      const iframe = document.createElement("iframe");
-      iframe.width = "0";
-      iframe.height = "0";
-      iframe.src = `https://www.youtube.com/embed/${song.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${startTime}`;
-      iframe.allow = "autoplay";
-      iframe.style.position = "absolute";
-      iframe.style.left = "-9999px";
-      iframe.style.top = "-9999px";
-      document.body.appendChild(iframe);
-      
-      iframe.onload = () => {
-        iframe.contentWindow.postMessage(
-          `{"event":"command","func":"seekTo","args":[${startTime}, true]}`,
-          "*"
-        );
-      };
+    // Verify if existing player matches current song choice to avoid unnecessary destruction
+    const isSameSong = trimPreviewAudioPlayer && 
+                       trimPreviewAudioPlayer.dataset.songId === String(song.id) &&
+                       trimPreviewAudioPlayer.dataset.source === song.source;
 
-      trimPreviewAudioPlayer = iframe;
-    } else if (song.source === "pixabay") {
-      const audio = document.createElement("audio");
-      audio.src = song.audioUrl;
-      audio.autoplay = true;
-      audio.controls = false;
-      audio.oncanplay = () => {
-        audio.currentTime = startTime;
-        audio.play();
-      };
-      document.body.appendChild(audio);
-      trimPreviewAudioPlayer = audio;
+    if (trimPreviewAudioPlayer && !isSameSong) {
+      if (trimPreviewAudioPlayer.pause) trimPreviewAudioPlayer.pause();
+      trimPreviewAudioPlayer.remove();
+      trimPreviewAudioPlayer = null;
     }
 
-    trimPreviewStopTimeout = setTimeout(() => {
-      stopTrimPreview();
-    }, duration * 1000);
+    function runLoop() {
+      if (!isEditorOpen || !currentStoryMusic) {
+        stopTrimPreview();
+        return;
+      }
+
+      const loopStartTime = currentStoryMusic.startTime || 0;
+
+      if (!trimPreviewAudioPlayer) {
+        if (song.source === "youtube") {
+          const iframe = document.createElement("iframe");
+          iframe.width = "0";
+          iframe.height = "0";
+          iframe.src = `https://www.youtube.com/embed/${song.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${loopStartTime}`;
+          iframe.allow = "autoplay";
+          iframe.style.position = "absolute";
+          iframe.style.left = "-9999px";
+          iframe.style.top = "-9999px";
+          iframe.dataset.songId = song.id;
+          iframe.dataset.source = "youtube";
+          document.body.appendChild(iframe);
+          trimPreviewAudioPlayer = iframe;
+          
+          iframe.onload = () => {
+            iframe.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`, "*");
+          };
+        } else if (song.source === "pixabay") {
+          const audio = document.createElement("audio");
+          audio.src = song.audioUrl;
+          audio.autoplay = true;
+          audio.dataset.songId = song.id;
+          audio.dataset.source = "pixabay";
+          audio.oncanplay = () => {
+            audio.currentTime = loopStartTime;
+            audio.play();
+          };
+          document.body.appendChild(audio);
+          trimPreviewAudioPlayer = audio;
+        }
+      } else {
+        // Restart existing player from current startTime
+        if (song.source === "youtube") {
+          trimPreviewAudioPlayer.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`, "*");
+          trimPreviewAudioPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', "*");
+        } else if (song.source === "pixabay") {
+          trimPreviewAudioPlayer.currentTime = loopStartTime;
+          trimPreviewAudioPlayer.play();
+        }
+      }
+
+      trimLoopTimeout = setTimeout(runLoop, duration * 1000);
+    }
+
+    runLoop();
   }
 
   function stopTrimPreview() {
+    clearTimeout(trimLoopTimeout);
     if (trimPreviewAudioPlayer) {
       if (trimPreviewAudioPlayer.pause) trimPreviewAudioPlayer.pause();
       else if (trimPreviewAudioPlayer.contentWindow) {
-        trimPreviewAudioPlayer.contentWindow.postMessage(
-          '{"event":"command","func":"stopVideo","args":""}',
-          "*"
-        );
+        trimPreviewAudioPlayer.contentWindow.postMessage('{"event":"command","func":"stopVideo","args":""}', "*");
       }
       trimPreviewAudioPlayer.remove();
       trimPreviewAudioPlayer = null;
     }
-    clearTimeout(trimPreviewStopTimeout);
   }
 
   function stopStoryMusicPlayback() {

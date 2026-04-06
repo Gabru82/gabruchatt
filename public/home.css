@@ -1381,6 +1381,7 @@ EDIT PROFILE MODAL
 .story-media-preview, .viewer-media-content {
     flex: 1;
     display: flex;
+    position: relative;
     align-items: center;
     justify-content: center;
     overflow: hidden;
@@ -2268,6 +2269,173 @@ EDIT PROFILE MODAL
   transition: 0.2s;
 }
 
+/* Advanced Story Editor Overlays */
+.overlay-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+}
+
+.draggable-overlay {
+    position: absolute;
+    pointer-events: auto;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    transition: transform 0.05s linear;
+}
+
+.draggable-overlay:active { cursor: grabbing; }
+
+.story-tag-location {
+    background: white;
+    color: #007aff;
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    font-size: 18px;
+}
+
+.story-tag-location i { margin-right: 5px; }
+
+.story-tag-time {
+    background: rgba(0,0,0,0.5);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 32px;
+    font-weight: bold;
+    backdrop-filter: blur(10px);
+}
+
+.story-tool-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    padding: 20px;
+}
+
+#storyTextInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 32px;
+    text-align: center;
+    outline: none;
+    resize: none;
+    margin-top: 50px;
+}
+
+.text-tool-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 20px;
+}
+
+.font-selector {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    padding: 10px 0;
+}
+
+.font-selector span {
+    background: rgba(255,255,255,0.1);
+    padding: 8px 15px;
+    border-radius: 20px;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.color-selector {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.color-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid white;
+}
+
+.font-neon {
+    font-family: 'Arial';
+    text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de;
+}
+
+.tool-header {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.tool-header input {
+    flex: 1;
+    background: #222;
+    border: 1px solid #444;
+    color: white;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.tool-results {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.tool-results.grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+}
+
+.sticker-item-img {
+    width: 100%;
+    cursor: pointer;
+}
+
+.story-delete-zone {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%) scale(0);
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.2s;
+    z-index: 150;
+    pointer-events: none;
+}
+
+.story-delete-zone.show { transform: translateX(-50%) scale(1); }
+.story-delete-zone.active {
+    background: rgba(255, 0, 0, 0.8);
+    transform: translateX(-50%) scale(1.3);
+}
 .shared-tab.active {
   color: #ffcc00;
   font-weight: 600;

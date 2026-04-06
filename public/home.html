@@ -458,15 +458,75 @@
         <!-- STORY EDITOR MODAL -->
         <div id="storyEditorModal" class="story-modal">
             <div class="story-editor-container">
-                <div id="storyMediaPreview" class="story-media-preview"></div>
+                <div id="storyMediaPreview" class="story-media-preview">
+                    <!-- Overlays will be appended here -->
+                    <div id="storyOverlayContainer" class="overlay-container"></div>
+                </div>
+
+                <!-- Drag-to-Delete Zone -->
+                <div id="storyDeleteZone" class="story-delete-zone">
+                    <i class="fa-solid fa-trash-can"></i>
+                </div>
 
                 <!-- Editor Tools (UI Placeholders) -->
                 <div class="editor-tools">
-                    <button class="tool-btn"><i class="fa-solid fa-text-height"></i></button>
-                    <button class="tool-btn"><i class="fa-solid fa-note-sticky"></i></button>
+                    <button class="tool-btn" onclick="openStoryTextTool()"><i class="fa-solid fa-font"></i></button>
+                    <button class="tool-btn" onclick="openStoryStickerTool()"><i class="fa-solid fa-note-sticky"></i></button>
                     <button class="tool-btn" onclick="openMusicPicker()"><i class="fa-solid fa-music"></i></button>
-                    <button class="tool-btn"><i class="fa-solid fa-location-dot"></i></button>
+                    <button class="tool-btn" onclick="openStoryLocationTool()"><i class="fa-solid fa-location-dot"></i></button>
+                    <button class="tool-btn" onclick="addStoryTimeTag()"><i class="fa-solid fa-clock"></i></button>
+                </div>
 
+                <!-- Text Tool Modal -->
+                <div id="storyTextModal" class="story-tool-overlay">
+                    <div class="text-tool-header">
+                        <button onclick="closeStoryTextTool()">Done</button>
+                    </div>
+                    <textarea id="storyTextInput" placeholder="Type something..."></textarea>
+                    <div class="text-tool-footer">
+                        <div class="font-selector">
+                            <span onclick="setStoryFont('Classic')" style="font-family: Arial;">Classic</span>
+                            <span onclick="setStoryFont('Modern')" style="font-family: 'Helvetica';">Modern</span>
+                            <span onclick="setStoryFont('Neon')" class="font-neon">Neon</span>
+                            <span onclick="setStoryFont('Typewriter')" style="font-family: 'Courier New';">Type</span>
+                            <span onclick="setStoryFont('Strong')" style="font-weight: 900;">Strong</span>
+                            <span onclick="setStoryFont('Elegant')" style="font-family: 'Georgia';">Elegant</span>
+                            <span onclick="setStoryFont('Script')" style="font-family: 'Brush Script MT';">Script</span>
+                            <span onclick="setStoryFont('Comic')" style="font-family: 'Comic Sans MS';">Comic</span>
+                            <span onclick="setStoryFont('Stencil')" style="font-family: 'Impact';">Impact</span>
+                            <span onclick="setStoryFont('Light')" style="font-weight: 100;">Light</span>
+                        </div>
+                        <div class="color-selector">
+                            <div class="color-dot" style="background: #fff;" onclick="setStoryColor('#fff')"></div>
+                            <div class="color-dot" style="background: #000;" onclick="setStoryColor('#000')"></div>
+                            <div class="color-dot" style="background: #ff4444;" onclick="setStoryColor('#ff4444')"></div>
+                            <div class="color-dot" style="background: #ffcc00;" onclick="setStoryColor('#ffcc00')"></div>
+                            <div class="color-dot" style="background: #00ff55;" onclick="setStoryColor('#00ff55')"></div>
+                            <div class="color-dot" style="background: #007aff;" onclick="setStoryColor('#007aff')"></div>
+                            <div class="color-dot" style="background: linear-gradient(45deg, #f09433, #bc1888);" onclick="setStoryColor('gradient')"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Location Tool Modal -->
+                <div id="storyLocationModal" class="story-tool-overlay">
+                    <div class="tool-header">
+                        <input type="text" id="locationSearchInput" placeholder="Search location...">
+                        <button onclick="closeStoryLocationTool()">Cancel</button>
+                    </div>
+                    <div id="locationResults" class="tool-results"></div>
+                </div>
+
+                <!-- Sticker/Emoji Tool Modal -->
+                <div id="storyStickerModal" class="story-tool-overlay">
+                    <div class="tool-header">
+                        <div class="tab-switcher">
+                            <span onclick="switchStickerTab('stickers')" id="tabStickers" class="active">Stickers</span>
+                            <span onclick="switchStickerTab('emojis')" id="tabEmojis">Emojis</span>
+                        </div>
+                        <button onclick="closeStoryStickerTool()">Close</button>
+                    </div>
+                    <div id="stickerResults" class="tool-results grid"></div>
                 </div>
 
                 <!-- Music Picker Modal -->
