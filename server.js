@@ -253,6 +253,11 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  db.run("ALTER TABLE stories ADD COLUMN music TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("stories music error:", err.message);
+    }
+  });
 });
 // ================= ROUTES =================
 
@@ -1444,7 +1449,7 @@ app.post("/uploadStory", (req, res) => {
     "INSERT INTO stories (user_id, media, type, overlays, music) VALUES (?, ?, ?, ?, ?)",
     [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null],
     function (err) {
-      if (err) return res.json({ success: false });
+      if (err) { console.error("Error uploading story:", err); return res.json({ success: false }); }
       res.json({ success: true, storyId: this.lastID });
     }
   );

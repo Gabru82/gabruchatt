@@ -1280,7 +1280,7 @@ EDIT PROFILE MODAL
     justify-content: center;
     color: white;
     font-size: 10px;
-    z-index: 10;
+    
     pointer-events: auto;
 }
 .story-circle.no-ring {
