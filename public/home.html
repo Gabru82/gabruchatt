@@ -121,7 +121,14 @@
 
             <div class="top-icons">
 
-                <i class="fa-solid fa-magnifying-glass"></i>
+                <div class="inline-search-container" id="inlineSearchContainer">
+                    <i class="fa-solid fa-magnifying-glass" id="openFriendSearchBtn"></i>
+                    <div class="search-input-wrapper" id="friendSearchInputWrapper">
+                        <i class="fa-solid fa-magnifying-glass search-inner-icon"></i>
+                        <input type="text" id="friendSearchInput" placeholder="Search friends...">
+                        <i class="fa-solid fa-xmark" id="closeFriendSearchBtn"></i>
+                    </div>
+                </div>
                 <i id="addFriendBtn" class="fa-solid fa-user-plus"></i>
 
                 <div class="notification-icon-wrapper" onclick="toggleNotificationPanel()">
@@ -131,6 +138,11 @@
 
             </div>
 
+        </div>
+
+        <!-- FRIEND SEARCH DROPDOWN -->
+        <div id="friendSearchDropdown" class="friend-search-dropdown">
+            <div id="friendSearchResults" class="search-results-list"></div>
         </div>
 
         <!-- NOTIFICATION PANEL -->

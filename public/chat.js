@@ -1298,6 +1298,8 @@ function getAvatarSrc(user) {
   return `https://i.pravatar.cc/150?img=1`;
 }
 
+let cachedFriends = [];
+
 let activeChat = null;
 
 function removeFriendFromUI(targetId) {
@@ -3068,6 +3070,9 @@ async function loadFriends() {
   const res = await fetch(`/getFriends/${userId}`);
   const data = await res.json();
 
+  // Cache for searching
+  cachedFriends = data.friends || [];
+
   const chatList = document.querySelector(".chat-list");
   chatList.innerHTML = "";
 
@@ -3104,6 +3109,80 @@ async function loadFriends() {
   });
   updateFriendList();
 }
+
+// ================= INLINE FRIEND SEARCH LOGIC =================
+
+const openFriendSearchBtn = document.getElementById("openFriendSearchBtn");
+const closeFriendSearchBtn = document.getElementById("closeFriendSearchBtn");
+const friendSearchInputWrapper = document.getElementById("friendSearchInputWrapper");
+const friendSearchInput = document.getElementById("friendSearchInput");
+const friendSearchDropdown = document.getElementById("friendSearchDropdown");
+const friendSearchResults = document.getElementById("friendSearchResults");
+let friendSearchDebounce;
+
+if (openFriendSearchBtn) {
+  openFriendSearchBtn.onclick = (e) => {
+    e.stopPropagation();
+    openFriendSearchBtn.classList.add("hidden");
+    friendSearchInputWrapper.classList.add("active");
+    friendSearchInput.focus();
+  };
+}
+
+if (closeFriendSearchBtn) {
+  closeFriendSearchBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideFriendSearch();
+  };
+}
+
+function hideFriendSearch() {
+  openFriendSearchBtn.classList.remove("hidden");
+  friendSearchInputWrapper.classList.remove("active");
+  friendSearchInput.value = "";
+  friendSearchDropdown.classList.remove("active");
+  friendSearchResults.innerHTML = "";
+}
+
+if (friendSearchInput) {
+  friendSearchInput.oninput = (e) => {
+    const query = e.target.value.trim().toLowerCase();
+    clearTimeout(friendSearchDebounce);
+
+    if (query.length > 0) {
+      friendSearchDebounce = setTimeout(() => performFriendSearch(query), 300);
+    } else {
+      friendSearchDropdown.classList.remove("active");
+      friendSearchResults.innerHTML = "";
+    }
+  };
+  friendSearchInput.onclick = (e) => e.stopPropagation();
+}
+
+function performFriendSearch(query) {
+  const filtered = cachedFriends.filter(f => f.name.toLowerCase().includes(query));
+  friendSearchResults.innerHTML = "";
+  if (filtered.length === 0) {
+    friendSearchResults.innerHTML = '<p class="empty-state">No friends found</p>';
+  } else {
+    filtered.forEach(friend => {
+      const div = document.createElement("div");
+      div.className = "search-result-item";
+      div.innerHTML = `<img src="${getAvatarSrc(friend)}"><div class="search-result-info"><div class="search-result-name">${friend.name}</div></div>`;
+      div.onclick = () => { openChat(friend.id, friend.name, friend.avatar); hideFriendSearch(); };
+      friendSearchResults.appendChild(div);
+    });
+  }
+  friendSearchDropdown.classList.add("active");
+}
+
+document.addEventListener("click", (e) => {
+  if (friendSearchInputWrapper && friendSearchInputWrapper.classList.contains("active")) {
+    if (!friendSearchInputWrapper.contains(e.target) && !friendSearchDropdown.contains(e.target)) {
+      hideFriendSearch();
+    }
+  }
+});
 
 // ================= OPEN CHAT =================
 
