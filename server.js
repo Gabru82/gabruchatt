@@ -247,14 +247,8 @@ const regOtpStore = new Map();
 const forgotOtpStore = new Map();
 const loginOtpStore = new Map();
 
-const nodemailer = require("nodemailer");
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "rc82398266@gmail.com",
-    pass: "ntke okux hkas krva", // NOT your normal password
-  },
-});
+const { Resend } = require("resend");
+const resend = new Resend("re_8fUYPKGm_Aex5G7GL6ng2FQHafmpFCDdr"); // paste your key
 
 app.post("/sendRegOtp", (req, res) => {
   const { email } = req.body;
@@ -263,7 +257,6 @@ app.post("/sendRegOtp", (req, res) => {
     return res.json({ success: false, message: "Email required" });
   }
 
-  // ✅ cooldown (IMPORTANT)
   const existing = regOtpStore.get(email);
   if (existing && Date.now() - existing.lastSent < 60000) {
     return res.json({
@@ -280,22 +273,18 @@ app.post("/sendRegOtp", (req, res) => {
     lastSent: Date.now(),
   });
 
-  // ✅ send email in background (NO await)
-  transporter
-    .sendMail({
-      from: '"Gabru Support" <rc82398266@gmail.com>',
-      to: email,
-      subject: "Your OTP Code",
-      text: `Your OTP is: ${otp}`,
-    })
-    .then(() => {
-      console.log("OTP sent:", email);
-    })
-    .catch((err) => {
-      console.error("Mail error:", err);
-    });
+  // ✅ RESEND EMAIL
+  resend.emails.send({
+    from: "onboarding@resend.dev",
+    to: email,
+    subject: "Your OTP Code",
+    text: `Your OTP is: ${otp}`,
+  }).then(() => {
+    console.log("OTP sent:", email);
+  }).catch(err => {
+    console.error("Email error:", err);
+  });
 
-  // ⚡ instant response
   res.json({ success: true, message: "OTP sent" });
 });
 app.post("/verifyRegOtp", (req, res) => {
@@ -318,16 +307,15 @@ app.post("/verifyRegOtp", (req, res) => {
   res.json({ success: true });
 });
 
-app.post("/sendForgotOtp", async (req, res) => {
+app.post("/sendForgotOtp", (req, res) => {
   const { email } = req.body;
 
   if (!email) return res.json({ success: false, message: "Email required" });
 
-  db.get("SELECT id FROM users WHERE email = ?", [email], async (err, row) => {
+  db.get("SELECT id FROM users WHERE email = ?", [email], (err, row) => {
     if (err) return res.json({ success: false, message: "Database error" });
     if (!row) return res.json({ success: false, message: "Email not found" });
 
-    // Cooldown check: 60 seconds
     const stored = forgotOtpStore.get(email);
     if (stored && Date.now() - stored.lastSent < 60000) {
       return res.json({
@@ -345,26 +333,16 @@ app.post("/sendForgotOtp", async (req, res) => {
       verified: false,
     });
 
-    try {
-      // ❌ REMOVE await
-      transporter
-        .sendMail({
-          from: '"Gabru Support" <rc82398266@gmail.com>',
-          to: email,
-          subject: "Password Reset OTP",
-          text: `Your OTP for password reset is: ${otp}`,
-        })
-        .catch((err) => console.error(err));
+    resend.emails.send({
+      from: "onboarding@resend.dev",
+      to: email,
+      subject: "Password Reset OTP",
+      text: `Your OTP is: ${otp}`,
+    }).catch(err => console.error(err));
 
-      // ✅ instant response
-      res.json({ success: true, message: "OTP sent to your email" });
-    } catch (mailErr) {
-      console.error(mailErr);
-      res.json({ success: false, message: "Failed to send OTP" });
-    }
+    res.json({ success: true, message: "OTP sent" });
   });
 });
-
 app.post("/verifyForgotOtp", (req, res) => {
   const { email, otp } = req.body;
   const stored = forgotOtpStore.get(email);
@@ -415,7 +393,7 @@ app.post("/resetPassword", (req, res) => {
   );
 });
 
-async function sendLoginOtp(user, res) {
+function sendLoginOtp(user, res) {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
   loginOtpStore.set(user.email, {
@@ -426,24 +404,16 @@ async function sendLoginOtp(user, res) {
     lastSent: Date.now(),
   });
 
-  try {
-    transporter
-      .sendMail({
-        from: '"Gabru Support" <rc82398266@gmail.com>',
-        to: user.email,
-        subject: "Login Verification Code",
-        text: `Your login verification code is: ${otp}`,
-      })
-      .catch((err) => {
-        console.error("Login OTP Email Error:", err);
-      });
+  resend.emails.send({
+    from: "onboarding@resend.dev",
+    to: user.email,
+    subject: "Login Verification Code",
+    text: `Your login verification code is: ${otp}`,
+  }).catch(err => {
+    console.error("Login OTP Email Error:", err);
+  });
 
-    // ⚡ instant response
-    res.json({ success: true, needsOtp: true, email: user.email });
-  } catch (mailErr) {
-    console.error("Login OTP Email Error:", mailErr);
-    res.json({ success: false, message: "Failed to send login OTP" });
-  }
+  res.json({ success: true, needsOtp: true, email: user.email });
 }
 
 app.post("/sendLoginOtp", (req, res) => {
