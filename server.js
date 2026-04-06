@@ -2,7 +2,7 @@ const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const cors = require("cors");
 const http = require("http");
-
+require("dotenv").config();
 const app = express();
 app.use(express.json({ limit: "100mb" }));
 app.use(cors());
@@ -248,7 +248,7 @@ const forgotOtpStore = new Map();
 const loginOtpStore = new Map();
 
 const { Resend } = require("resend");
-const resend = new Resend("re_8fUYPKGm_Aex5G7GL6ng2FQHafmpFCDdr"); // paste your key
+const resend = new Resend(process.env.RESEND_API_KEY); // paste your key
 
 app.post("/sendRegOtp", (req, res) => {
   const { email } = req.body;
