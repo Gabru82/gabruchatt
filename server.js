@@ -2,6 +2,7 @@ const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const cors = require("cors");
 const http = require("http");
+const axios = require("axios");
 require("dotenv").config();
 const app = express();
 app.use(express.json({ limit: "100mb" }));
@@ -247,12 +248,102 @@ db.serialize(() => {
       user_id INTEGER,
       media TEXT,
       type TEXT,
+      music TEXT, -- Store music metadata as JSON string
       overlays TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 });
 // ================= ROUTES =================
+
+// ================= MUSIC SEARCH API =================
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
+
+app.get("/searchSongs", async (req, res) => {
+  const { query } = req.query;
+
+  if (!query) {
+    return res.status(400).json({ success: false, message: "Query is required" });
+  }
+
+  let youtubeResults = [];
+  let pixabayResults = [];
+
+  // Search YouTube
+  if (YOUTUBE_API_KEY) {
+    try {
+      const youtubeResponse = await axios.get(
+        "https://www.googleapis.com/youtube/v3/search",
+        {
+          params: {
+            part: "snippet",
+            q: query + " song", // Add "song" to improve relevance
+            type: "video",
+            videoEmbeddable: "true",
+            key: YOUTUBE_API_KEY,
+            maxResults: 10,
+          },
+        },
+      );
+
+      youtubeResults = youtubeResponse.data.items.map((item) => ({
+        source: "youtube",
+        id: item.id.videoId,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails.default.url,
+        duration: null, // YouTube API search doesn't provide duration directly
+      }));
+    } catch (error) {
+      console.error("YouTube API error:", error.message);
+      // Optionally, send a specific error or just log and continue
+    }
+  }
+
+  // Search Pixabay (for free audio)
+  if (PIXABAY_API_KEY) {
+    try {
+      const pixabayResponse = await axios.get(
+        "https://pixabay.com/audios/",
+        {
+          params: {
+            key: PIXABAY_API_KEY,
+            q: query,
+            per_page: 10,
+            category: "music", // Focus on music
+          },
+        },
+      );
+
+      pixabayResults = pixabayResponse.data.hits.map((item) => ({
+        source: "pixabay",
+        id: item.id, // Pixabay audio ID
+        title: item.tags, // Pixabay audio uses tags as a description
+        audioUrl: item.previewURL, // Use previewURL for playback
+        thumbnail: null, // Pixabay audio API doesn't provide thumbnails, use a placeholder on frontend
+        duration: item.duration, // Duration in seconds
+      }));
+    } catch (error) {
+      console.error("Pixabay API error:", error.message);
+      // Optionally, send a specific error or just log and continue
+    }
+  }
+
+  const combinedResults = [...youtubeResults, ...pixabayResults];
+
+  if (combinedResults.length === 0) {
+    return res.json({
+      success: true,
+      message: "No songs found for your query.",
+      songs: [],
+    });
+  }
+
+  res.json({
+    success: true,
+    songs: combinedResults,
+  });
+});
 
 // Temporary store for registration OTPs
 const regOtpStore = new Map();
@@ -1348,10 +1439,10 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
 });
 
 app.post("/uploadStory", (req, res) => {
-  const { userId, media, type, overlays } = req.body;
+  const { userId, media, type, overlays, music } = req.body;
   db.run(
-    "INSERT INTO stories (user_id, media, type, overlays) VALUES (?, ?, ?, ?)",
-    [userId, media, type, JSON.stringify(overlays)],
+    "INSERT INTO stories (user_id, media, type, overlays, music) VALUES (?, ?, ?, ?, ?)",
+    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null],
     function (err) {
       if (err) return res.json({ success: false });
       res.json({ success: true, storyId: this.lastID });
@@ -1362,7 +1453,7 @@ app.post("/uploadStory", (req, res) => {
 app.get("/getStories/:userId", (req, res) => {
   const { userId } = req.params;
   // Get stories for user and their friends from last 24h
-  const query = `
+  const query = ` 
     SELECT s.*, u.name, u.avatar 
     FROM stories s
     JOIN users u ON s.user_id = u.id
