@@ -140,6 +140,9 @@
 
         </div>
 
+        <!-- STORY TRAY -->
+        <div id="storyTray" class="story-tray"></div>
+
         <!-- FRIEND SEARCH DROPDOWN -->
         <div id="friendSearchDropdown" class="friend-search-dropdown">
             <div id="friendSearchResults" class="search-results-list"></div>
@@ -287,6 +290,9 @@
 
             <!-- Hidden File Input for Media -->
             <input type="file" id="chatFileInput" hidden>
+
+            <!-- Hidden File Input for Story -->
+            <input type="file" id="storyFileInput" hidden accept="image/*,video/*">
 
             <!-- MEDIA MENU -->
 
@@ -446,6 +452,57 @@
             </div>
 
         </div>
+
+        <!-- STORY EDITOR MODAL -->
+        <div id="storyEditorModal" class="story-modal">
+            <div class="story-editor-container">
+                <div id="storyMediaPreview" class="story-media-preview"></div>
+                
+                <!-- Editor Tools (UI Placeholders) -->
+                <div class="editor-tools">
+                    <button class="tool-btn"><i class="fa-solid fa-text-height"></i></button>
+                    <button class="tool-btn"><i class="fa-solid fa-note-sticky"></i></button>
+                    <button class="tool-btn"><i class="fa-solid fa-music"></i></button>
+                    <button class="tool-btn"><i class="fa-solid fa-location-dot"></i></button>
+                </div>
+
+                <div class="editor-footer">
+                    <button class="action-btn-outline" onclick="closeStoryEditor()">Cancel</button>
+                    <button onclick="publishStory()" class="publish-btn-story">Add Story</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STORY VIEWER MODAL -->
+        <div id="storyViewerModal" class="story-modal">
+            <div class="story-viewer-container">
+                <!-- Progress Bars -->
+                <div id="storyProgress" class="story-progress-container"></div>
+
+                <!-- Header -->
+                <div class="story-header">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <img id="storyUserAvatar" class="story-avatar">
+                        <span id="storyUserName"></span>
+                        <span id="storyTime" class="story-time"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <button id="deleteStoryBtn" class="delete-story-btn" style="display: none;">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                        <button class="close-viewer" onclick="closeStoryViewer()">&times;</button>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div id="storyViewerMedia" class="viewer-media-content"></div>
+
+                <!-- Navigation Areas -->
+                <div class="story-nav left" onclick="prevStory()"></div>
+                <div class="story-nav right" onclick="nextStory()"></div>
+            </div>
+        </div>
+
         <div id="messageMenu">
             <div class="menu-item" data-action="reply"><i class="fa-solid fa-reply"></i> Reply</div>
             <div class="menu-item" data-action="react"><i class="fa-solid fa-face-smile"></i> React</div>
@@ -724,6 +781,7 @@
                         <img id="myAvatarPreview" src="https://i.pravatar.cc/150"
                             onclick="document.getElementById('avatarUpload').click()">
                         <div class="status-indicator"></div>
+
                         <input type="file" id="avatarUpload" hidden accept="image/*">
                     </div>
                 </div>
@@ -1049,6 +1107,7 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="chat.js"></script>
+    <script src="story.js"></script>
 
 </body>
 

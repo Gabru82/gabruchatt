@@ -479,6 +479,7 @@ window.closePasswordModal = function () {
           document.getElementById("pushNotifications").checked = enabled;
           localStorage.setItem("notificationsEnabled", enabled);
         }
+        if (u.avatar) localStorage.setItem("userAvatar", u.avatar);
         
         if (document.getElementById("twoFactorAuth")) {
           document.getElementById("twoFactorAuth").checked = u.tfa_enabled === 1;
@@ -570,6 +571,7 @@ window.closePasswordModal = function () {
     if (data.success) {
       // Update local storage so the chat header/sidebar updates the name
       localStorage.setItem("username", name);
+      localStorage.setItem("userAvatar", avatar);
 
       if (read_receipts !== undefined) {
         localStorage.setItem("readReceipts", read_receipts !== 0);

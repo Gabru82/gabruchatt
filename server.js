@@ -239,6 +239,18 @@ db.serialize(() => {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // ================= STORIES =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS stories(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      media TEXT,
+      type TEXT,
+      overlays TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 });
 // ================= ROUTES =================
 
@@ -400,6 +412,7 @@ function sendLoginOtp(user, res) {
     otp,
     userId: user.id,
     name: user.name,
+    avatar: user.avatar,
     expires: Date.now() + 5 * 60 * 1000,
     lastSent: Date.now(),
   });
@@ -419,7 +432,7 @@ function sendLoginOtp(user, res) {
 app.post("/sendLoginOtp", (req, res) => {
   const { email, password } = req.body;
   db.get(
-    "SELECT id, name, email FROM users WHERE email=? AND password=?",
+    "SELECT id, name, email, avatar FROM users WHERE email=? AND password=?",
     [email, password],
     async (err, row) => {
       if (err || !row)
@@ -465,6 +478,7 @@ app.post("/verifyLoginOtp", (req, res) => {
         success: true,
         id: stored.userId,
         name: stored.name,
+        avatar: stored.avatar,
         sessionToken: sessionToken,
       });
     },
@@ -492,7 +506,7 @@ app.post("/login", (req, res) => {
   const ip = req.ip || req.connection.remoteAddress;
 
   db.get(
-    "SELECT id, name, email, account_status, tfa_enabled FROM users WHERE email=? AND password=?",
+    "SELECT id, name, email, avatar, account_status, tfa_enabled FROM users WHERE email=? AND password=?",
     [email, password],
     async (err, row) => {
       if (err) return res.status(500).json({ success: false });
@@ -549,6 +563,7 @@ app.post("/login", (req, res) => {
               success: true,
               id: row.id,
               name: row.name,
+              avatar: row.avatar,
               sessionToken: sessionToken,
             });
           },
@@ -1332,6 +1347,46 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
   );
 });
 
+app.post("/uploadStory", (req, res) => {
+  const { userId, media, type, overlays } = req.body;
+  db.run(
+    "INSERT INTO stories (user_id, media, type, overlays) VALUES (?, ?, ?, ?)",
+    [userId, media, type, JSON.stringify(overlays)],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true, storyId: this.lastID });
+    }
+  );
+});
+
+app.get("/getStories/:userId", (req, res) => {
+  const { userId } = req.params;
+  // Get stories for user and their friends from last 24h
+  const query = `
+    SELECT s.*, u.name, u.avatar 
+    FROM stories s
+    JOIN users u ON s.user_id = u.id
+    WHERE (s.user_id = ? OR s.user_id IN (
+      SELECT user2 FROM friends WHERE user1 = ?
+      UNION
+      SELECT user1 FROM friends WHERE user2 = ?
+    ))
+    AND s.created_at > datetime('now', '-1 day')
+    ORDER BY s.created_at DESC
+  `;
+  db.all(query, [userId, userId, userId], (err, rows) => {
+    if (err) return res.json({ success: false });
+    res.json({ success: true, stories: rows });
+  });
+});
+
+app.post("/deleteStory", (req, res) => {
+  const { storyId, userId } = req.body;
+  db.run("DELETE FROM stories WHERE id = ? AND user_id = ?", [storyId, userId], (err) => {
+    res.json({ success: !err });
+  });
+});
+
 // This must be after all API routes to ensure they are handled first.
 app.use(express.static("public"));
 // ================= SOCKET =================
@@ -1432,6 +1487,10 @@ io.on("connection", (socket) => {
 
     const now = new Date().toISOString();
     db.run("UPDATE users SET last_seen=? WHERE id=?", [now, id]);
+  });
+
+  socket.on("newStory", (data) => {
+    socket.broadcast.emit("storyUpdate", data);
   });
 
   socket.on("disconnect", () => {
@@ -2315,6 +2374,11 @@ setInterval(() => {
         OR (user1_id = messages.receiver AND user2_id = messages.sender)
       ) AND timer_mode = '24 Hours'
     )
+  `);
+
+  // Cleanup stories older than 24 hours
+  db.run(`
+    DELETE FROM stories WHERE created_at < datetime('now', '-1 day')
   `);
 }, 60000); // Runs every minute
 

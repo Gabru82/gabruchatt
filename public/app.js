@@ -27,6 +27,7 @@ socket.on("loginApproved", (data) => {
   document.getElementById("pendingLoginModal").style.display = "none";
   localStorage.setItem("userId", data.id);
   localStorage.setItem("username", data.name);
+  localStorage.setItem("userAvatar", data.avatar);
   localStorage.setItem("sessionToken", data.sessionToken);
   showPopup("Login Approved!");
   setTimeout(() => window.location.href = "/home.html", 1000);
@@ -364,6 +365,7 @@ document.querySelector("#loginForm button").onclick = async () => {
     }
     localStorage.setItem("userId", data.id);
     localStorage.setItem("username", data.name);
+    localStorage.setItem("userAvatar", data.avatar);
     localStorage.setItem("sessionToken", data.sessionToken);
 
     showPopup("Login Successful!");
@@ -393,6 +395,7 @@ document.getElementById("verifyLoginOtpBtn").onclick = async () => {
   if (data.success) {
     localStorage.setItem("userId", data.id);
     localStorage.setItem("username", data.name);
+    localStorage.setItem("userAvatar", data.avatar);
     localStorage.setItem("sessionToken", data.sessionToken);
     showPopup("Login Successful!");
     setTimeout(() => window.location.href = "/home.html", 1000);
