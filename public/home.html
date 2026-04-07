@@ -724,8 +724,7 @@
                 <div class="story-viewer-footer">
                     <div class="story-reply-container">
                         <input type="text" id="storyReplyInput" placeholder="Send a message...">
-                        <button onclick="sendStoryReply()"><i class="fa-solid fa-paper-plane"></i></button>
-                    </div>
+<button onclick="event.stopPropagation(); sendStoryReply()">Send</button>                    </div>
                     <div class="story-actions-row">
                         <div class="story-views-info" onclick="openViewersList()">
                             <i class="fa-solid fa-eye"></i> <span id="storyViewCount">0</span>

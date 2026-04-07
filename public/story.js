@@ -4,6 +4,7 @@
   let currentStoryMedia = null;
   let storiesData = [];
   let currentStoryIndex = 0;
+  let currentUserStoryGroup = []; // 🔥 ADD THIS
   let storyTimer = null; // For story progression
   let activeStoriesForViewer = []; // Track currently viewing stories
   let isEditorOpen = false; // Controls playback lifecycle
@@ -801,15 +802,21 @@
 
     Object.keys(usersWithStories).forEach((uid) => {
       const user = usersWithStories[uid];
+
+      // 🔥 CHECK IF ALL STORIES SEEN
+      const allSeen = user.stories.every((s) => s.seen == 1);
+
       const item = document.createElement("div");
       item.className = "story-item";
       item.onclick = () => openStoryViewer(uid);
+
       item.innerHTML = `
-                <div class="story-circle">
-                    <img src="${user.avatar || getAvatarSrc(uid)}">
-                </div>
-                <div class="story-user-name">${user.name}</div>
-            `;
+    <div class="story-circle ${allSeen ? "seen-story" : ""}">
+        <img src="${user.avatar || getAvatarSrc(uid)}">
+    </div>
+    <div class="story-user-name">${user.name}</div>
+  `;
+
       tray.appendChild(item);
     });
   }
@@ -945,14 +952,15 @@
     );
   }
 
-  // Viewer Controls
-  const viewerModal = document.getElementById("storyViewerModal");
-  let touchStartX = 0;
-  let touchStartTime = 0;
-  let isHolding = false;
+  const viewer = document.getElementById("storyViewerModal");
 
-  // ✅ Improved Pause Logic for Touch Devices: Don't pause if touching buttons
-  const handleViewerPause = (e) => {
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let isHolding = false;
+  let lastTap = 0;
+
+  viewer.addEventListener("pointerdown", (e) => {
     const isInteractive =
       e.target.closest("button") ||
       e.target.closest("input") ||
@@ -961,60 +969,90 @@
       e.target.closest(".story-views-info");
 
     if (isInteractive) return;
-  };
 
-  viewerModal.addEventListener("mousedown", (e) => {
-    viewerPause = true;
-  });
-
-  viewerModal.addEventListener("mouseup", (e) => {
-    viewerPause = false;
-
-    const screenWidth = window.innerWidth;
-
-    if (e.clientX < screenWidth / 2) {
-      prevStory();
-    } else {
-      nextStory();
-    }
-  });
-
-  viewerModal.addEventListener("touchstart", (e) => {
-    const touch = e.touches[0];
-
-    touchStartX = touch.clientX;
-    touchStartTime = Date.now();
+    startX = e.clientX;
+    startY = e.clientY;
+    startTime = Date.now();
     isHolding = true;
 
-    // Delay for hold detection
+    // HOLD → pause
     setTimeout(() => {
-      if (isHolding) {
-        viewerPause = true; // HOLD → pause
-      }
-    }, 200); // 200ms = hold threshold
+      if (isHolding) viewerPause = true;
+    }, 200);
   });
 
-  viewerModal.addEventListener("touchend", (e) => {
-    const touch = e.changedTouches[0];
+  viewer.addEventListener("pointerup", (e) => {
+    const isInteractive =
+      e.target.closest("button") ||
+      e.target.closest("input") ||
+      e.target.closest(".story-reply-container") ||
+      e.target.closest(".story-reactions-strip") ||
+      e.target.closest(".story-views-info");
 
-    const touchEndX = touch.clientX;
-    const duration = Date.now() - touchStartTime;
+    if (isInteractive) return;
+
+    const endX = e.clientX;
+    const endY = e.clientY;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const duration = Date.now() - startTime;
 
     isHolding = false;
     viewerPause = false;
 
-    // 👉 If short tap → navigate
+    // 🔥 DOUBLE TAP → reaction
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      reactToStory("❤️");
+      showHeartAnimation(e.clientX, e.clientY);
+      return;
+    }
+    lastTap = now;
+
+    // 🔥 SWIPE DOWN → close
+    if (dy > 80 && Math.abs(dx) < 50) {
+      closeStoryViewer();
+      return;
+    }
+
+    // 🔥 TAP → navigation
     if (duration < 200) {
       const screenWidth = window.innerWidth;
 
-      if (touchEndX < screenWidth / 2) {
-        prevStory(); // LEFT TAP
-      } else {
-        nextStory(); // RIGHT TAP
+      const edgeSize = screenWidth * 0.25; // 25% edge zones
+
+      // 👉 LEFT EDGE
+      if (endX < edgeSize) {
+        prevStory();
+        return;
       }
+
+      // 👉 RIGHT EDGE
+      if (endX > screenWidth - edgeSize) {
+        nextStory();
+        return;
+      }
+
+      // 👉 CENTER AREA → DO NOTHING (safe zone)
     }
   });
+  function showHeartAnimation(x, y) {
+    const heart = document.createElement("div");
+    heart.innerHTML = "❤️";
 
+    heart.style.position = "fixed";
+    heart.style.left = x + "px";
+    heart.style.top = y + "px";
+    heart.style.fontSize = "40px";
+    heart.style.transform = "translate(-50%, -50%)";
+    heart.style.pointerEvents = "none";
+    heart.style.zIndex = "999999";
+    heart.style.animation = "heartPop 0.8s ease forwards";
+
+    document.body.appendChild(heart);
+
+    setTimeout(() => heart.remove(), 800);
+  }
   window.openViewersList = async () => {
     const story = activeStoriesForViewer[currentStoryIndex];
     if (!story || story.user_id != userId) return;
@@ -1048,33 +1086,93 @@
       list.innerHTML = "Error loading viewers";
     }
   };
-
   window.reactToStory = async (emoji) => {
     const story = activeStoriesForViewer[currentStoryIndex];
+    if (!story) return;
+
+    // ✅ Step 1: mark viewed
+    markStoryViewed(story.id);
+
+    // ✅ Step 2: save reaction (existing API)
     await fetch("/reactToStory", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId: story.id, emoji }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        storyId: story.id,
+        emoji,
+      }),
     });
-    showPopup(`Reacted ${emoji}`);
-  };
 
-  window.sendStoryReply = () => {
-    const text = document.getElementById("storyReplyInput").value.trim();
-    if (!text) return;
-    const story = activeStoriesForViewer[currentStoryIndex];
-
+    // 🔥 Step 3: SEND MESSAGE TO CHAT
     socket.emit("sendMessage", {
       to: story.user_id,
-      message: `Replied to your story: ${text}`,
-      type: "text",
-      caption: story.media, // Optional: reference the story
+
+      message: `${emoji} reacted to your story`,
+      type: "story_reaction",
+
+      // 🔥 VERY IMPORTANT
+      caption: JSON.stringify({
+        storyMedia: story.media,
+        storyType: story.type,
+      }),
+    });
+
+    showPopup(`Reacted ${emoji}`);
+  };
+  const sendBtn = document.querySelector(".story-reply-container button");
+
+  sendBtn.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    sendStoryReply();
+  });
+  window.sendStoryReply = () => {
+    console.log("Sending socket...");
+    const input = document.getElementById("storyReplyInput");
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    const story = activeStoriesForViewer[currentStoryIndex];
+    if (!story) return;
+
+    // ✅ mark viewed
+    markStoryViewed(story.id);
+
+    // 🔥 SEND CORRECT FORMAT
+    socket.emit("sendMessage", {
+      to: story.user_id,
+
+      message: text,
+      type: "story_reply", // 🔥 IMPORTANT FIX
+
+      caption: JSON.stringify({
+        storyMedia: story.media,
+        storyType: story.type,
+      }),
     });
 
     showPopup("Reply sent!");
-    document.getElementById("storyReplyInput").value = "";
+    input.value = "";
   };
-
+  async function markStoryViewed(storyId) {
+    try {
+      await fetch("/markStoryViewed", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          storyId,
+          userId: localStorage.getItem("userId"),
+        }),
+      });
+    } catch (e) {
+      console.error("View mark failed", e);
+    }
+  }
   // ================= ADVANCED OVERLAY ENGINE =================
 
   function createOverlayElement(overlay) {
@@ -1684,31 +1782,49 @@
       container.appendChild(div);
     });
   }
+let isNavigating = false;
+window.nextStory = () => {
+  if (isNavigating) return; // 🔥 BLOCK MULTIPLE CALLS
+  isNavigating = true;
 
-  window.nextStory = () => {
-    if (currentStoryIndex < activeStoriesForViewer.length - 1) {
-      currentStoryIndex++;
-      displayStory();
-    } else if (currentUserDeckIndex < groupedStories.length - 1) {
-      // Move to next user's stories
-      currentUserDeckIndex++;
-      activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
-      currentStoryIndex = 0;
-      displayStory();
-    } else {
-      closeStoryViewer();
-    }
-  };
+  if (currentStoryIndex < activeStoriesForViewer.length - 1) {
+    currentStoryIndex++;
+    displayStory();
+  } else if (currentUserDeckIndex < groupedStories.length - 1) {
+    currentUserDeckIndex++;
+    activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
+    currentStoryIndex = 0;
+    displayStory();
+  } else {
+    closeStoryViewer();
+  }
 
-  window.prevStory = () => {
-    if (currentStoryIndex > 0) {
-      currentStoryIndex--;
-      displayStory();
-    } else {
-      displayStory();
-    }
-  };
+  setTimeout(() => {
+    isNavigating = false;
+  }, 300); // 🔥 delay to prevent double tap
+};
 
+window.prevStory = () => {
+  if (isNavigating) return;
+  isNavigating = true;
+
+  if (currentStoryIndex > 0) {
+    currentStoryIndex--;
+    displayStory();
+  } else if (currentUserDeckIndex > 0) {
+    currentUserDeckIndex--;
+
+    activeStoriesForViewer =
+      groupedStories[currentUserDeckIndex].stories;
+
+    currentStoryIndex = activeStoriesForViewer.length - 1;
+    displayStory();
+  }
+
+  setTimeout(() => {
+    isNavigating = false;
+  }, 300);
+};
   window.closeStoryViewer = () => {
     cancelAnimationFrame(storyTimer);
     stopStoryMusicPlayback();

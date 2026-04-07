@@ -2259,6 +2259,42 @@ function appendMessage(
           ${captionHtml}
         </div>
       `;
+    } else if (type === "story_reaction") {
+      let data = {};
+      try {
+        data = JSON.parse(caption || "{}");
+      } catch (e) {}
+
+      const preview =
+        data.storyType === "video"
+          ? `<video src="${data.storyMedia}" class="chat-story-preview" muted></video>`
+          : `<img src="${data.storyMedia}" class="chat-story-preview">`;
+
+      contentHtml = `
+    <div class="chat-story-box">
+      <div class="chat-story-label">Reacted to your story</div>
+      ${preview}
+      <div class="message-text">${message}</div>
+    </div>
+  `;
+    } else if (type === "story_reply") {
+      let data = {};
+      try {
+        data = JSON.parse(caption || "{}");
+      } catch (e) {}
+
+      const preview =
+        data.storyType === "video"
+          ? `<video src="${data.storyMedia}" class="chat-story-preview" muted></video>`
+          : `<img src="${data.storyMedia}" class="chat-story-preview">`;
+
+      contentHtml = `
+    <div class="chat-story-box">
+      <div class="chat-story-label">Replied to your story</div>
+      ${preview}
+      <div class="message-text">${message}</div>
+    </div>
+  `;
     } else if (type === "audio") {
       div.classList.add("audio-message");
       contentHtml = `
@@ -3114,7 +3150,9 @@ async function loadFriends() {
 
 const openFriendSearchBtn = document.getElementById("openFriendSearchBtn");
 const closeFriendSearchBtn = document.getElementById("closeFriendSearchBtn");
-const friendSearchInputWrapper = document.getElementById("friendSearchInputWrapper");
+const friendSearchInputWrapper = document.getElementById(
+  "friendSearchInputWrapper",
+);
 const friendSearchInput = document.getElementById("friendSearchInput");
 const friendSearchDropdown = document.getElementById("friendSearchDropdown");
 const friendSearchResults = document.getElementById("friendSearchResults");
@@ -3160,16 +3198,22 @@ if (friendSearchInput) {
 }
 
 function performFriendSearch(query) {
-  const filtered = cachedFriends.filter(f => f.name.toLowerCase().includes(query));
+  const filtered = cachedFriends.filter((f) =>
+    f.name.toLowerCase().includes(query),
+  );
   friendSearchResults.innerHTML = "";
   if (filtered.length === 0) {
-    friendSearchResults.innerHTML = '<p class="empty-state">No friends found</p>';
+    friendSearchResults.innerHTML =
+      '<p class="empty-state">No friends found</p>';
   } else {
-    filtered.forEach(friend => {
+    filtered.forEach((friend) => {
       const div = document.createElement("div");
       div.className = "search-result-item";
       div.innerHTML = `<img src="${getAvatarSrc(friend)}"><div class="search-result-info"><div class="search-result-name">${friend.name}</div></div>`;
-      div.onclick = () => { openChat(friend.id, friend.name, friend.avatar); hideFriendSearch(); };
+      div.onclick = () => {
+        openChat(friend.id, friend.name, friend.avatar);
+        hideFriendSearch();
+      };
       friendSearchResults.appendChild(div);
     });
   }
@@ -3177,8 +3221,14 @@ function performFriendSearch(query) {
 }
 
 document.addEventListener("click", (e) => {
-  if (friendSearchInputWrapper && friendSearchInputWrapper.classList.contains("active")) {
-    if (!friendSearchInputWrapper.contains(e.target) && !friendSearchDropdown.contains(e.target)) {
+  if (
+    friendSearchInputWrapper &&
+    friendSearchInputWrapper.classList.contains("active")
+  ) {
+    if (
+      !friendSearchInputWrapper.contains(e.target) &&
+      !friendSearchDropdown.contains(e.target)
+    ) {
       hideFriendSearch();
     }
   }

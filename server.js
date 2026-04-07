@@ -1505,11 +1505,29 @@ app.post("/uploadStory", (req, res) => {
 
 app.get("/getStories/:userId", (req, res) => {
   const { userId } = req.params;
+
   const query = ` 
-    SELECT s.*, u.name, u.avatar,
-    (SELECT COUNT(*) FROM story_views WHERE story_id = s.id) as view_count
+    SELECT 
+      s.*, 
+      u.name, 
+      u.avatar,
+
+      (SELECT COUNT(*) FROM story_views WHERE story_id = s.id) as view_count,
+
+      -- 🔥 ADD THIS (IMPORTANT)
+      CASE 
+        WHEN sv.user_id IS NOT NULL THEN 1 
+        ELSE 0 
+      END as seen
+
     FROM stories s
+
     JOIN users u ON s.user_id = u.id
+
+    -- 🔥 JOIN FOR SEEN STATUS
+    LEFT JOIN story_views sv 
+      ON s.id = sv.story_id AND sv.user_id = ?
+
     WHERE (
       s.user_id = ? 
       OR (s.privacy = 'public')
@@ -1519,10 +1537,13 @@ app.get("/getStories/:userId", (req, res) => {
         SELECT user1 FROM friends WHERE user2 = ?
       ))
     )
+
     AND s.created_at > datetime('now', '-1 day')
+
     ORDER BY s.created_at DESC
   `;
-  db.all(query, [userId, userId, userId], (err, rows) => {
+
+  db.all(query, [userId, userId, userId, userId], (err, rows) => {
     if (err) return res.json({ success: false });
     res.json({ success: true, stories: rows });
   });
@@ -1530,9 +1551,18 @@ app.get("/getStories/:userId", (req, res) => {
 
 app.post("/markStoryViewed", (req, res) => {
   const { storyId, userId } = req.body;
-  db.run("INSERT OR IGNORE INTO story_views (story_id, user_id) VALUES (?, ?)", [storyId, userId], (err) => {
-    res.json({ success: !err });
-  });
+
+  db.run(
+    `INSERT OR IGNORE INTO story_views (story_id, user_id) VALUES (?, ?)`,
+    [storyId, userId],
+    (err) => {
+      if (err) {
+        console.error(err);
+        return res.json({ success: false });
+      }
+      res.json({ success: true });
+    }
+  );
 });
 
 app.get("/getStoryViewers/:storyId", (req, res) => {

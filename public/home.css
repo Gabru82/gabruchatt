@@ -1393,7 +1393,42 @@ EDIT PROFILE MODAL
     max-height: 100%;
     object-fit: contain;
 }
+.story-circle.seen-story {
+  border: 2px solid gray !important;
+  opacity: 0.6;
+}
+.chat-story-box {
+  background: #111;
+  border-radius: 12px;
+  padding: 8px;
+  max-width: 220px;
+}
 
+.chat-story-label {
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 5px;
+}
+
+.chat-story-preview {
+  width: 100%;
+  border-radius: 10px;
+  margin-bottom: 5px;
+}
+@keyframes heartPop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -120%) scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -200%) scale(1);
+    opacity: 0;
+  }
+}
 .story-header {
     position: absolute;
     top: 20px;
