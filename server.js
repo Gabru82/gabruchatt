@@ -350,6 +350,37 @@ app.get("/searchSongs", async (req, res) => {
   });
 });
 
+// ================= LOCATION SEARCH API =================
+app.get("/searchLocations", async (req, res) => {
+  const { query } = req.query;
+
+  if (!query) {
+    return res.json({ success: true, locations: [] });
+  }
+
+  try {
+    const response = await axios.get(`https://nominatim.openstreetmap.org/search`, {
+      params: {
+        q: query,
+        format: "json",
+        addressdetails: 1,
+        limit: 10
+      },
+      headers: { 'User-Agent': 'GabruuChatApp/1.0' }
+    });
+
+    const locations = response.data.map(item => ({
+      name: item.display_name,
+      shortName: item.name || item.display_name.split(',')[0]
+    }));
+
+    res.json({ success: true, locations });
+  } catch (error) {
+    console.error("Location search error:", error.message);
+    res.json({ success: false, locations: [] });
+  }
+});
+
 // Temporary store for registration OTPs
 const regOtpStore = new Map();
 const forgotOtpStore = new Map();

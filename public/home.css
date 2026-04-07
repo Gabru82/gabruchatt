@@ -1403,14 +1403,16 @@ EDIT PROFILE MODAL
     display: flex;
     align-items: center;
     gap: 10px;
-    z-index: 10;
+    z-index: 99999;
     color: #fff;
 }
 
 .story-avatar { width: 32px; height: 32px; border-radius: 50%; }
-.story-time { font-size: 12px; color: #ccc; }
-.close-viewer { margin-left: auto; background: none; border: none; color: #fff; font-size: 30px; cursor: pointer; }
-
+.story-time { font-size: 12px; color: #ccc; text-shadow: 0 0 5px #000000;}
+.close-viewer { margin-left: auto; background: none; border: none; color: #fff; text-shadow: 0 0 5px #000000; font-size: 30px; cursor: pointer; }
+#storyUserName{
+  text-shadow: 0 0 5px #000000;
+}
 .story-progress-container {
     position: absolute;
     top: 10px;
@@ -2279,6 +2281,42 @@ EDIT PROFILE MODAL
     pointer-events: none;
     z-index: 50;
 }
+.selected-overlay {
+    outline: 2px solid #ffcc00;
+    outline-offset: 4px;
+    border-radius: 8px;
+    background: rgba(255, 204, 0, 0.1);
+}
+
+.story-scale-control {
+    position: absolute;
+    bottom: 100px;
+    left: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    padding: 10px 20px;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 1000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.story-scale-control input[type="range"] {
+    flex: 1;
+    accent-color: #ffcc00;
+    cursor: pointer;
+}
+
+.story-scale-control button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+}
 
 .draggable-overlay {
     position: absolute;
@@ -2291,11 +2329,18 @@ EDIT PROFILE MODAL
     align-items: center;
     justify-content: center;
     padding: 10px;
-    transition: transform 0.05s linear;
+    transition: transform 0.05s linear, outline 0.2s ease, background 0.2s ease;
+    width: 100%;
 }
 
 .draggable-overlay:active { cursor: grabbing; }
-
+.draggable-overlay {
+  white-space: pre-wrap;   /* preserve line breaks */
+  word-break: break-word;  /* break long words */
+  overflow-wrap: break-word;
+  max-width: 80%;          /* prevent going outside screen */
+  text-align: center;
+}
 .story-tag-location {
     background: white;
     color: #007aff;
@@ -2329,7 +2374,8 @@ EDIT PROFILE MODAL
 }
 
 #storyTextInput {
-    flex: 1;
+    width: 90%;
+    max-width: 90%;
     background: transparent;
     border: none;
     color: white;
@@ -2337,7 +2383,10 @@ EDIT PROFILE MODAL
     text-align: center;
     outline: none;
     resize: none;
-    margin-top: 50px;
+    overflow: hidden;
+    padding: 10px;
+    height: auto;
+    min-height: 50px;
 }
 
 .text-tool-footer {
@@ -2360,6 +2409,16 @@ EDIT PROFILE MODAL
     border-radius: 20px;
     white-space: nowrap;
     font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.font-selector span.active {
+    background: #fff !important;
+    color: #000 !important;
+    transform: scale(1.1) translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    font-weight: bold;
 }
 
 .color-selector {
@@ -2378,6 +2437,27 @@ EDIT PROFILE MODAL
 .font-neon {
     font-family: 'Arial';
     text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de;
+}
+    .stickerclose {
+        border: 1px solid #444;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        background: transparent;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+    }
+.draggable-overlay {
+    position: absolute;
+    /* width: auto; */
+    max-width: 90%;
+    text-align: center;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    user-select: none;
+    z-index: 60;
+    pointer-events: auto;
 }
 
 .tool-header {

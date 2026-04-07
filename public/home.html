@@ -463,6 +463,13 @@
                     <div id="storyOverlayContainer" class="overlay-container"></div>
                 </div>
 
+                <!-- Size Control for Emojis/Stickers -->
+                <div id="storyScaleControl" class="story-scale-control" style="display: none;">
+                    <button onclick="changeOverlayScale(-0.2)"><i class="fa-solid fa-minus"></i></button>
+                    <input type="range" id="storyOverlayScaleInp" min="0.5" max="8" step="0.1" oninput="updateOverlayScale(this.value)">
+                    <button onclick="changeOverlayScale(0.2)"><i class="fa-solid fa-plus"></i></button>
+                </div>
+
                 <!-- Drag-to-Delete Zone -->
                 <div id="storyDeleteZone" class="story-delete-zone">
                     <i class="fa-solid fa-trash-can"></i>
@@ -479,22 +486,26 @@
 
                 <!-- Text Tool Modal -->
                 <div id="storyTextModal" class="story-tool-overlay">
-                    <div class="text-tool-header">
-                        <button onclick="closeStoryTextTool()">Done</button>
+                    <div class="tool-header" style="justify-content: space-between; align-items: center; background: none; border: none; padding: 10px 20px;">
+                        <button class="tool-btn" onclick="toggleTextStyle()" style="background: rgba(255,255,255,0.2);"><i class="fa-solid fa-font"></i></button>
+                        <button onclick="closeStoryTextTool()" style="background: white; color: black; border: none; padding: 8px 25px; border-radius: 20px; font-weight: bold; cursor: pointer;">Done</button>
                     </div>
-                    <textarea id="storyTextInput" placeholder="Type something..."></textarea>
+                    <div style="flex: 1; display: flex; align-items: center; justify-content: center; position: relative; width: 100%;">
+                        <textarea id="storyTextInput" placeholder="Type something..." oninput="updateLiveTextStyle()"></textarea>
+                        <input type="range" id="storyFontSizeInp" min="12" max="100" value="32" orient="vertical" style="position: absolute; left: 20px; height: 200px; width: 4px; appearance: slider-vertical; -webkit-appearance: slider-vertical; cursor: pointer;" oninput="updateLiveTextStyle()">
+                    </div>
                     <div class="text-tool-footer">
                         <div class="font-selector">
-                            <span onclick="setStoryFont('Classic')" style="font-family: Arial;">Classic</span>
-                            <span onclick="setStoryFont('Modern')" style="font-family: 'Helvetica';">Modern</span>
-                            <span onclick="setStoryFont('Neon')" class="font-neon">Neon</span>
-                            <span onclick="setStoryFont('Typewriter')" style="font-family: 'Courier New';">Type</span>
-                            <span onclick="setStoryFont('Strong')" style="font-weight: 900;">Strong</span>
-                            <span onclick="setStoryFont('Elegant')" style="font-family: 'Georgia';">Elegant</span>
-                            <span onclick="setStoryFont('Script')" style="font-family: 'Brush Script MT';">Script</span>
-                            <span onclick="setStoryFont('Comic')" style="font-family: 'Comic Sans MS';">Comic</span>
-                            <span onclick="setStoryFont('Stencil')" style="font-family: 'Impact';">Impact</span>
-                            <span onclick="setStoryFont('Light')" style="font-weight: 100;">Light</span>
+                            <span onclick="setStoryFont('Classic')" data-font="Classic" style="font-family: Arial;">Classic</span>
+                            <span onclick="setStoryFont('Modern')" data-font="Modern" style="font-family: 'Helvetica';">Modern</span>
+                            <span onclick="setStoryFont('Neon')" data-font="Neon" class="font-neon">Neon</span>
+                            <span onclick="setStoryFont('Typewriter')" data-font="Typewriter" style="font-family: 'Courier New';">Type</span>
+                            <span onclick="setStoryFont('Strong')" data-font="Strong" style="font-weight: 900;">Strong</span>
+                            <span onclick="setStoryFont('Elegant')" data-font="Elegant" style="font-family: 'Georgia';">Elegant</span>
+                            <span onclick="setStoryFont('Script')" data-font="Script" style="font-family: 'Brush Script MT';">Script</span>
+                            <span onclick="setStoryFont('Comic')" data-font="Comic" style="font-family: 'Comic Sans MS';">Comic</span>
+                            <span onclick="setStoryFont('Stencil')" data-font="Stencil" style="font-family: 'Impact';">Impact</span>
+                            <span onclick="setStoryFont('Light')" data-font="Light" style="font-weight: 100;">Light</span>
                         </div>
                         <div class="color-selector">
                             <div class="color-dot" style="background: #fff;" onclick="setStoryColor('#fff')"></div>
@@ -520,11 +531,14 @@
                 <!-- Sticker/Emoji Tool Modal -->
                 <div id="storyStickerModal" class="story-tool-overlay">
                     <div class="tool-header">
-                        <div class="tab-switcher">
-                            <span onclick="switchStickerTab('stickers')" id="tabStickers" class="active">Stickers</span>
-                            <span onclick="switchStickerTab('emojis')" id="tabEmojis">Emojis</span>
+                        <div style="flex: 1; position: relative; margin-right: 15px;">
+                            <input type="text" id="stickerSearchInput" placeholder="Search emojis/stickers..." style="width: 100%; background: #222; border: 1px solid #444; color: white; padding: 10px 10px 10px 35px; border-radius: 10px; font-size: 14px;">
+                            <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #888; font-size: 13px;"></i>
                         </div>
-                        <button onclick="closeStoryStickerTool()">Close</button>
+                        <div class="tab-switcher">
+                            <span onclick="switchStickerTab('emojis')" id="tabEmojis"></span>
+                        </div>
+                        <button class="stickerclose" onclick="closeStoryStickerTool()">Close</button>
                     </div>
                     <div id="stickerResults" class="tool-results grid"></div>
                 </div>
@@ -642,7 +656,7 @@
 
             <!-- Header -->
             <div class="story-header">
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div  style="display: flex; align-items: center; gap: 10px; border: 1px solid #1c190e; border-radius: 20px; background-color: rgba(246, 255, 0, 0.479); padding: 5px 10px;">
                     <img id="storyUserAvatar" class="story-avatar">
                     <span id="storyUserName"></span>
                     <span id="storyTime" class="story-time"></span>

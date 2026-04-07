@@ -19,22 +19,622 @@
   // Advanced Editor Variables
   let storyOverlays = []; // [{id, type, content, x, y, scale, rotation, styles}]
   let activeOverlay = null;
-  let currentTextStyles = { font: 'Classic', color: '#fff', size: 32 };
+  let selectedOverlayId = null;
+  let currentTextStyles = {
+    font: "Classic",
+    color: "#fff",
+    size: 32,
+    mode: "normal",
+  };
   let isDraggingOverlay = false;
   let dragOffset = { x: 0, y: 0 };
   let lastTouchDist = 0;
   let lastTouchAngle = 0;
   let isOverDeleteZone = false;
+  let editingOverlayId = null;
+  let hasMovedDuringDrag = false;
+  let locationSearchTimer;
 
   let trimPreviewAudioPlayer = null; // For playing the trimmed segment
 
   const SEGMENT_DURATION = 20; // Fixed 20-second segment
+  const emojiCategories = {
+    Smileys: [
+      "😀",
+      "😃",
+      "😄",
+      "😁",
+      "😆",
+      "😅",
+      "😂",
+      "🤣",
+      "😊",
+      "😇",
+      "🙂",
+      "🙃",
+      "😉",
+      "😌",
+      "😍",
+      "🥰",
+      "😘",
+      "😗",
+      "😙",
+      "😚",
+      "😋",
+      "😛",
+      "😝",
+      "😜",
+      "🤪",
+      "🤨",
+      "🧐",
+      "🤓",
+      "😎",
+      "🤩",
+      "🥳",
+      "😏",
+      "😒",
+      "😞",
+      "😔",
+      "😟",
+      "😕",
+      "🙁",
+      "☹️",
+      "😣",
+      "😖",
+      "😫",
+      "😩",
+      "🥺",
+      "😢",
+      "😭",
+      "😤",
+      "😠",
+      "😡",
+      "🤬",
+      "🤯",
+      "😳",
+      "🥵",
+      "🥶",
+      "😱",
+      "😨",
+      "😰",
+      "😥",
+      "😓",
+      "🤗",
+      "🤔",
+      "🤭",
+      "🤫",
+      "🤥",
+      "😶",
+      "😐",
+      "😑",
+      "😬",
+      "🙄",
+      "😯",
+      "😦",
+      "😧",
+      "😮",
+      "😲",
+      "🥱",
+      "😴",
+      "🤤",
+      "😪",
+      "😵",
+      "🤐",
+      "🥴",
+      "🤢",
+      "🤮",
+      "🤧",
+      "😷",
+      "🤒",
+      "🤕",
+      "🤑",
+      "🤠",
+      "😈",
+      "👿",
+      "👹",
+      "👺",
+      "🤡",
+      "💩",
+      "👻",
+      "💀",
+      "☠️",
+      "👽",
+      "👾",
+      "🤖",
+      "🎃",
+      "😺",
+      "😸",
+      "😻",
+      "😼",
+      "😽",
+      "🙀",
+      "😿",
+      "😾",
+    ],
+    Animals: [
+      "🐶",
+      "🐱",
+      "🐭",
+      "🐹",
+      "🐰",
+      "🦊",
+      "🐻",
+      "🐼",
+      "🐨",
+      "🐯",
+      "🦁",
+      "🐮",
+      "🐷",
+      "🐸",
+      "🐵",
+      "🐔",
+      "🐧",
+      "🐦",
+      "🐤",
+      "🦆",
+      "🦅",
+      "🦉",
+      "🦇",
+      "🐺",
+      "🐗",
+      "🐴",
+      "🦄",
+      "🐝",
+      "🐛",
+      "🦋",
+      "🐌",
+      "🐞",
+      "🐜",
+      "🦟",
+      "🦗",
+      "🕷",
+      "🕸",
+      "🦂",
+      "🐢",
+      "🐍",
+      "🦎",
+      "🦖",
+      "🦕",
+      "🐙",
+      "🦑",
+      "🦐",
+      "🦞",
+      "🦀",
+      "🐡",
+      "🐠",
+      "🐟",
+      "🐬",
+      "🐳",
+      "🐋",
+      "🦈",
+      "🐊",
+      "🐅",
+      "🐆",
+      "🦓",
+      "🦍",
+      "🐘",
+      "🦏",
+      "🦛",
+      "🐪",
+      "🐫",
+      "🦒",
+      "🦘",
+      "🐃",
+      "🐂",
+      "🐄",
+      "🐎",
+      "🐖",
+      "🐏",
+      "🐑",
+      "🐐",
+      "🦌",
+      "🐕",
+      "🐩",
+      "🐈",
+      "🐓",
+      "🦃",
+      "🕊",
+      "🐇",
+      "🐁",
+      "🐀",
+      "🐿",
+      "🦔",
+      "🐾",
+      "🐉",
+      "🐲",
+    ],
+    Food: [
+      "🍏",
+      "🍎",
+      "🍐",
+      "🍊",
+      "🍋",
+      "🍌",
+      "🍉",
+      "🍇",
+      "🍓",
+      "🍈",
+      "🍒",
+      "🍑",
+      "🥭",
+      "🍍",
+      "🥥",
+      "🥝",
+      "🍅",
+      "🍆",
+      "🥑",
+      "🥦",
+      "🥬",
+      "🥒",
+      "🌶",
+      "🌽",
+      "🥕",
+      "🥔",
+      "🍠",
+      "🥐",
+      "🥯",
+      "🍞",
+      "🥖",
+      "🧀",
+      "🥚",
+      "🍳",
+      "🥞",
+      "🥓",
+      "🥩",
+      "🍗",
+      "🍖",
+      "🌭",
+      "🍔",
+      "🍟",
+      "🍕",
+      "🥪",
+      "🥙",
+      "🌮",
+      "🌯",
+      "🥗",
+      "🥘",
+      "🥣",
+      "🍝",
+      "🍜",
+      "🍲",
+      "🍛",
+      "🍣",
+      "🍱",
+      "🥟",
+      "🍤",
+      "🍙",
+      "🍚",
+      "🍘",
+      "🍥",
+      "🥠",
+      "🥮",
+      "🍢",
+      "🍡",
+      "🍧",
+      "🍨",
+      "🍦",
+      "🥧",
+      "🍰",
+      "🎂",
+      "🍮",
+      "🍭",
+      "🍬",
+      "🍫",
+      "🍿",
+      "🧂",
+      "🍩",
+      "🍪",
+      "🌰",
+      "🥜",
+      "🍯",
+      "🥛",
+      "☕️",
+      "🍵",
+      "🥤",
+      "🍶",
+      "🍺",
+      "🍻",
+      "🥂",
+      "🍷",
+      "🥃",
+      "🍸",
+      "🍹",
+      "🍾",
+    ],
+    Activities: [
+      "⚽️",
+      "🏀",
+      "🏈",
+      "⚾️",
+      "🥎",
+      "🎾",
+      "🏐",
+      "🏉",
+      "🎱",
+      "🏓",
+      "🏸",
+      "🥅",
+      "🏒",
+      "🏑",
+      "🏏",
+      "⛳️",
+      "🏹",
+      "🎣",
+      "🥊",
+      "🥋",
+      "⛸",
+      "🎿",
+      "🛷",
+      "🛹",
+      "🛼",
+      "🛶",
+      "🏊‍♂️",
+      "🏄‍♂️",
+      "🏇",
+      "🚴‍♂️",
+      "🚵‍♂️",
+      "🧗‍♂️",
+      "🧘‍♂️",
+      "🏌️‍♂️",
+      "🏊‍♀️",
+      "🏄‍♀️",
+      "🏇",
+      "🚴‍♀️",
+      "🚵‍♀️",
+      "🧗‍♀️",
+      "🧘‍♀️",
+      "🏌️‍♀️",
+      "🏆",
+      "🥇",
+      "🥈",
+      "🥉",
+      "🏅",
+      "🎖",
+      "🎫",
+      "🎟",
+      "🎭",
+      "🎨",
+      "🎬",
+      "🎤",
+      "🎧",
+      "🎼",
+      "🎹",
+      "🥁",
+      "🎷",
+      "🎺",
+      "🎸",
+      "🎻",
+      "🎲",
+      "🎯",
+      "🎳",
+      "🎮",
+      "🎰",
+    ],
+    Travel: [
+      "🚗",
+      "🚕",
+      "🚙",
+      "🚌",
+      "🚎",
+      "🏎",
+      "🚓",
+      "🚑",
+      "🚒",
+      "🚐",
+      "🚚",
+      "🚛",
+      "🚜",
+      "🚲",
+      "🛴",
+      "🛵",
+      "🏍",
+      "🚨",
+      "🚔",
+      "🚍",
+      "🚘",
+      "🚖",
+      "🚡",
+      "🚠",
+      "🚟",
+      "🚃",
+      "🚋",
+      "🚞",
+      "🚝",
+      "🚄",
+      "🚅",
+      "🚈",
+      "🚂",
+      "🚆",
+      "🚇",
+      "🚊",
+      "🚉",
+      "🚁",
+      "🛩",
+      "✈️",
+      "🛫",
+      "🛬",
+      "⛵️",
+      "🛥",
+      "🚤",
+      "⛴",
+      "🛳",
+      "🚀",
+      "🛰",
+      "💺",
+      "🛶",
+      "⚓️",
+      "🚧",
+      "⛽️",
+      "🚏",
+      "🗺",
+      "🗿",
+      "🗽",
+      "🗼",
+      "🏰",
+      "🏟",
+      "🎡",
+      "🎢",
+      "🎠",
+      "⛲️",
+      "⛱",
+      "🏖",
+      "🏝",
+      "🏜",
+      "🌋",
+      "⛰",
+      "🏔",
+      "🗻",
+      "🏕",
+      "⛺️",
+      "🏠",
+      "🏡",
+      "🏢",
+      "🏣",
+      "🏤",
+      "🏥",
+      "🏦",
+      "🏨",
+      "🏩",
+      "🏪",
+      "🏫",
+      "🏬",
+      "🏭",
+      "🏯",
+      "🏰",
+      "💒",
+      "⛪️",
+      "🕌",
+      "🕍",
+      "⛩",
+      "🕋",
+    ],
+    Symbols: [
+      "💘",
+      "💝",
+      "💖",
+      "💗",
+      "💓",
+      "💞",
+      "💕",
+      "💌",
+      "❣️",
+      "💔",
+      "❤️",
+      "🧡",
+      "💛",
+      "💚",
+      "💙",
+      "💜",
+      "🖤",
+      "💟",
+      "💤",
+      "💢",
+      "💣",
+      "💥",
+      "💦",
+      "💨",
+      "💫",
+      "💬",
+      "🗨",
+      "🗯",
+      "💭",
+      "♨️",
+      "🛑",
+      "🕛",
+      "🕧",
+      "🕐",
+      "🕜",
+      "🕑",
+      "🕝",
+      "🕒",
+      "🕞",
+      "🕓",
+      "🕟",
+      "🕔",
+      "🕠",
+      "🕕",
+      "🕡",
+      "🕖",
+      "🕢",
+      "🕗",
+      "🕣",
+      "🕘",
+      "🕤",
+      "🕙",
+      "🕥",
+      "🕚",
+      "🕦",
+      "🌀",
+      "♠️",
+      "♥️",
+      "♦️",
+      "♣️",
+      "🃏",
+      "🀄️",
+      "🎴",
+      "🔇",
+      "🔈",
+      "🔉",
+      "🔊",
+      "🔔",
+      "🔕",
+      "💹",
+      "🏧",
+      "🚮",
+      "🚰",
+      "♿️",
+      "🚹",
+      "🚺",
+      "🚻",
+      "🚼",
+      "🚾",
+      "⚠️",
+      "🚸",
+      "⛔️",
+      "🚫",
+      "🚳",
+      "🚭",
+      "🚯",
+      "🚱",
+      "🚷",
+      "📵",
+      "🔞",
+      "☢️",
+      "☣️",
+      "⬆️",
+      "↗️",
+      "➡️",
+      "↘️",
+      "⬇️",
+      "↙️",
+      "⬅️",
+      "↖️",
+      "↕️",
+      "↔️",
+      "↩️",
+      "↪️",
+      "⤴️",
+      "⤵️",
+      "🔃",
+      "🔄",
+      "🔙",
+      "🔚",
+      "🔛",
+      "🔜",
+      "🔝",
+    ],
+  };
+
   let musicPreviewVolume = 1;
   let musicSearchTimer;
 
   storyFileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // 🔥 RESET EVERYTHING FOR NEW STORY
+    currentStoryMusic = null; // ❗ FIX MAIN ISSUE
+    stopTrimPreview(); // stop any previous preview
+    stopMusicPreview();
     const reader = new FileReader();
     reader.onload = (ev) => {
       currentStoryMedia = {
@@ -49,24 +649,44 @@
 
   function openStoryEditor() {
     isEditorOpen = true;
+    selectedOverlayId = null;
     const modal = document.getElementById("storyEditorModal");
     const preview = document.getElementById("storyMediaPreview");
-    const mediaHtml = currentStoryMedia.type === "video"
+    const mediaHtml =
+      currentStoryMedia.type === "video"
         ? `<video src="${currentStoryMedia.data}" autoplay muted loop controls></video>`
         : `<img src="${currentStoryMedia.data}">`;
 
     // Re-inject the media and recreate the overlay container to avoid null reference errors
-    preview.innerHTML = mediaHtml + '<div id="storyOverlayContainer" class="overlay-container"></div>';
+    preview.innerHTML =
+      mediaHtml +
+      '<div id="storyOverlayContainer" class="overlay-container"></div>';
+
+    // Add background click to deselect
+    preview.onclick = (e) => {
+      if (
+        e.target.id === "storyOverlayContainer" ||
+        e.target.tagName === "IMG" ||
+        e.target.tagName === "VIDEO"
+      ) {
+        deselectOverlay();
+      }
+    };
 
     modal.style.display = "flex";
     updateSelectedMusicDisplay(); // Update music display in editor
     if (currentStoryMusic) {
-      playTrimPreview(currentStoryMusic, currentStoryMusic.startTime, SEGMENT_DURATION);
+      playTrimPreview(
+        currentStoryMusic,
+        currentStoryMusic.startTime,
+        SEGMENT_DURATION,
+      );
     }
   }
 
   window.closeStoryEditor = () => {
     isEditorOpen = false;
+    deselectOverlay();
     stopTrimPreview();
     storyOverlays = [];
     document.getElementById("storyEditorModal").style.display = "none";
@@ -211,7 +831,10 @@
     const overlayContainer = document.createElement("div");
     overlayContainer.className = "overlay-container";
     viewer.appendChild(overlayContainer);
-    renderOverlaysToContainer(story.overlays ? JSON.parse(story.overlays) : [], overlayContainer);
+    renderOverlaysToContainer(
+      story.overlays ? JSON.parse(story.overlays) : [],
+      overlayContainer,
+    );
 
     const progress = document.getElementById("storyProgress");
     progress.innerHTML = activeStoriesForViewer
@@ -274,80 +897,155 @@
     div.style.transform = `translate(-50%, -50%) scale(${overlay.scale}) rotate(${overlay.rotation}deg)`;
 
     if (overlay.type === "text") {
-      div.textContent = overlay.content;
+      div.innerHTML = overlay.content.replace(/\n/g, "<br>");
       div.style.fontFamily = getFontFamily(overlay.styles.font);
       div.style.fontSize = `${overlay.styles.size}px`;
-      div.style.color = overlay.styles.color === 'gradient' ? 'transparent' : overlay.styles.color;
-      if (overlay.styles.color === 'gradient') {
-        div.style.backgroundImage = "linear-gradient(45deg, #f09433, #bc1888)";
-        div.style.webkitBackgroundClip = "text";
-      }
-      if (overlay.styles.font === 'Neon') div.classList.add("font-neon");
+      applyVisualStyles(div, overlay.styles);
+      if (overlay.styles.font === "Neon") div.classList.add("font-neon");
     } else if (overlay.type === "location") {
       div.innerHTML = `<div class="story-tag-location"><i class="fa-solid fa-location-dot"></i> ${overlay.content}</div>`;
     } else if (overlay.type === "emoji") {
       div.style.fontSize = "80px";
-      div.textContent = overlay.content;
+      div.innerHTML = overlay.content.replace(/\n/g, "<br>");
     } else if (overlay.type === "sticker") {
       div.innerHTML = `<img src="${overlay.content}" style="width: 150px;">`;
     } else if (overlay.type === "time") {
-      div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+      div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>`;
     }
 
     // Interaction Logic
     div.addEventListener("mousedown", (e) => startDrag(e, overlay));
-    div.addEventListener("touchstart", (e) => startDrag(e, overlay), { passive: false });
+    div.addEventListener("touchstart", (e) => startDrag(e, overlay), {
+      passive: false,
+    });
 
     return div;
+  }
+
+  function applyVisualStyles(el, styles) {
+    el.style.color = styles.color === "gradient" ? "transparent" : styles.color;
+    el.style.background = "transparent";
+    el.style.padding = "0";
+    el.style.borderRadius = "0";
+    el.style.textShadow = "none";
+    el.style.backgroundImage = "none";
+    el.style.webkitBackgroundClip = "initial";
+
+    if (styles.color === "gradient") {
+      el.style.backgroundImage = "linear-gradient(45deg, #f09433, #bc1888)";
+      el.style.webkitBackgroundClip = "text";
+    }
+
+    if (styles.mode === "bg") {
+      const isDark = styles.color === "#fff" || styles.color === "gradient";
+      el.style.background = isDark ? "rgba(0,0,0,0.8)" : "#fff";
+      el.style.color =
+        styles.color === "gradient" && isDark
+          ? "transparent"
+          : isDark
+            ? "#fff"
+            : styles.color;
+      if (styles.color === "gradient" && isDark)
+        el.style.webkitBackgroundClip = "text";
+      el.style.borderRadius = "12px";
+      el.style.display = "inline-block";
+    } else if (styles.mode === "shadow") {
+      el.style.textShadow = "2px 2px 8px rgba(0,0,0,0.8)";
+    }
   }
 
   function startDrag(e, overlay) {
     activeOverlay = overlay;
     isDraggingOverlay = true;
+    hasMovedDuringDrag = false;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const rect = document.getElementById(`ov-${overlay.id}`).getBoundingClientRect();
-    dragOffset = { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 };
-    
+    const rect = document
+      .getElementById(`ov-${overlay.id}`)
+      .getBoundingClientRect();
+    dragOffset = {
+      x: clientX - rect.left - rect.width / 2,
+      y: clientY - rect.top - rect.height / 2,
+    };
+
     document.getElementById("storyDeleteZone").classList.add("show");
 
+    // Hide scale control while dragging to prevent screen clutter
+    const scaleControl = document.getElementById("storyScaleControl");
+    if (scaleControl) scaleControl.style.display = "none";
+
     if (e.touches && e.touches.length === 2) {
-        lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        lastTouchAngle = Math.atan2(e.touches[1].clientY - e.touches[0].clientY, e.touches[1].clientX - e.touches[0].clientX) * 180 / Math.PI;
+      lastTouchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      );
+      lastTouchAngle =
+        (Math.atan2(
+          e.touches[1].clientY - e.touches[0].clientY,
+          e.touches[1].clientX - e.touches[0].clientX,
+        ) *
+          180) /
+        Math.PI;
     }
     e.preventDefault();
   }
 
   document.addEventListener("mousemove", (e) => handleMove(e));
-  document.addEventListener("touchmove", (e) => handleMove(e), { passive: false });
+  document.addEventListener("touchmove", (e) => handleMove(e), {
+    passive: false,
+  });
 
   function handleMove(e) {
     if (!isDraggingOverlay || !activeOverlay) return;
+    hasMovedDuringDrag = true;
     const container = document.getElementById("storyOverlayContainer");
     const containerRect = container.getBoundingClientRect();
     const deleteZone = document.getElementById("storyDeleteZone");
     const el = document.getElementById(`ov-${activeOverlay.id}`);
 
     if (e.touches && e.touches.length === 2) {
-        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        const angle = Math.atan2(e.touches[1].clientY - e.touches[0].clientY, e.touches[1].clientX - e.touches[0].clientX) * 180 / Math.PI;
-        activeOverlay.scale *= (dist / lastTouchDist);
-        activeOverlay.rotation += (angle - lastTouchAngle);
-        lastTouchDist = dist;
-        lastTouchAngle = angle;
-    } else {
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        activeOverlay.x = ((clientX - containerRect.left) / containerRect.width) * 100;
-        activeOverlay.y = ((clientY - containerRect.top) / containerRect.height) * 100;
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      );
+      const angle =
+        (Math.atan2(
+          e.touches[1].clientY - e.touches[0].clientY,
+          e.touches[1].clientX - e.touches[0].clientX,
+        ) *
+          180) /
+        Math.PI;
+      activeOverlay.scale = Math.min(
+        Math.max(activeOverlay.scale * (dist / lastTouchDist), 0.5),
+        8,
+      );
+      activeOverlay.rotation += angle - lastTouchAngle;
+      lastTouchDist = dist;
+      lastTouchAngle = angle;
 
-        // Collision detection with Delete Zone
-        const dzRect = deleteZone.getBoundingClientRect();
-        isOverDeleteZone = (clientX >= dzRect.left && clientX <= dzRect.right && 
-                            clientY >= dzRect.top && clientY <= dzRect.bottom);
-        
-        if (isOverDeleteZone) deleteZone.classList.add("active");
-        else deleteZone.classList.remove("active");
+      // Keep slider in sync with pinch gesture
+      if (selectedOverlayId === activeOverlay.id) {
+        const scaleInp = document.getElementById("storyOverlayScaleInp");
+        if (scaleInp) scaleInp.value = activeOverlay.scale;
+      }
+    } else {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      activeOverlay.x =
+        ((clientX - containerRect.left) / containerRect.width) * 100;
+      activeOverlay.y =
+        ((clientY - containerRect.top) / containerRect.height) * 100;
+
+      // Collision detection with Delete Zone
+      const dzRect = deleteZone.getBoundingClientRect();
+      isOverDeleteZone =
+        clientX >= dzRect.left &&
+        clientX <= dzRect.right &&
+        clientY >= dzRect.top &&
+        clientY <= dzRect.bottom;
+
+      if (isOverDeleteZone) deleteZone.classList.add("active");
+      else deleteZone.classList.remove("active");
     }
 
     el.style.left = `${activeOverlay.x}%`;
@@ -356,9 +1054,30 @@
   }
 
   function stopDragging() {
-    if (isDraggingOverlay && activeOverlay && isOverDeleteZone) {
+    if (isDraggingOverlay && activeOverlay) {
+      if (isOverDeleteZone) {
         document.getElementById(`ov-${activeOverlay.id}`).remove();
-        storyOverlays = storyOverlays.filter(o => o.id !== activeOverlay.id);
+        storyOverlays = storyOverlays.filter((o) => o.id !== activeOverlay.id);
+        if (selectedOverlayId === activeOverlay.id) deselectOverlay();
+      } else if (!hasMovedDuringDrag && activeOverlay.type === "text") {
+        openStoryTextTool(activeOverlay);
+      } else if (
+        !hasMovedDuringDrag &&
+        (activeOverlay.type === "emoji" || activeOverlay.type === "sticker")
+      ) {
+        selectOverlay(activeOverlay);
+      } else if (
+        selectedOverlayId === activeOverlay.id &&
+        (activeOverlay.type === "emoji" || activeOverlay.type === "sticker")
+      ) {
+        // Show scale control again if it was already selected and just moved
+        const scaleControl = document.getElementById("storyScaleControl");
+        const scaleInp = document.getElementById("storyOverlayScaleInp");
+        if (scaleControl && scaleInp) {
+          scaleInp.value = activeOverlay.scale;
+          scaleControl.style.display = "flex";
+        }
+      }
     }
     isDraggingOverlay = false;
     activeOverlay = null;
@@ -370,118 +1089,386 @@
   document.addEventListener("mouseup", stopDragging);
   document.addEventListener("touchend", stopDragging);
 
-  window.openStoryTextTool = () => {
-    document.getElementById("storyTextModal").style.display = "flex";
-    document.getElementById("storyTextInput").focus();
-  };
+  window.selectOverlay = (overlay) => {
+    if (selectedOverlayId === overlay.id) return;
+    deselectOverlay();
 
-  window.closeStoryTextTool = () => {
-    const text = document.getElementById("storyTextInput").value.trim();
-    if (text) {
-      const overlay = {
-        id: Date.now(),
-        type: "text",
-        content: text,
-        x: 50, y: 50, scale: 1, rotation: 0,
-        styles: { ...currentTextStyles }
-      };
-      storyOverlays.push(overlay);
-      document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+    selectedOverlayId = overlay.id;
+    const el = document.getElementById(`ov-${overlay.id}`);
+    if (el) el.classList.add("selected-overlay");
+
+    if (overlay.type === "emoji" || overlay.type === "sticker") {
+      const scaleControl = document.getElementById("storyScaleControl");
+      const scaleInp = document.getElementById("storyOverlayScaleInp");
+      if (scaleControl && scaleInp) {
+        scaleInp.value = overlay.scale;
+        scaleControl.style.display = "flex";
+      }
     }
-    document.getElementById("storyTextInput").value = "";
-    document.getElementById("storyTextModal").style.display = "none";
   };
 
-  window.setStoryFont = (font) => currentTextStyles.font = font;
-  window.setStoryColor = (color) => currentTextStyles.color = color;
+  window.deselectOverlay = () => {
+    if (selectedOverlayId) {
+      const el = document.getElementById(`ov-${selectedOverlayId}`);
+      if (el) el.classList.remove("selected-overlay");
+    }
+    selectedOverlayId = null;
+    const scaleControl = document.getElementById("storyScaleControl");
+    if (scaleControl) scaleControl.style.display = "none";
+  };
 
-  window.openStoryLocationTool = () => {
-    document.getElementById("storyLocationModal").style.display = "flex";
-    const results = document.getElementById("locationResults");
-    results.innerHTML = "";
-    ["New York", "London", "Paris", "Tokyo", "Dubai", "Mumbai"].forEach(loc => {
-        const d = document.createElement("div");
-        d.className = "theme-option";
-        d.textContent = loc;
-        d.onclick = () => {
-            addLocationTag(loc);
-            closeStoryLocationTool();
-        };
-        results.appendChild(d);
+  window.updateOverlayScale = (val) => {
+    if (!selectedOverlayId) return;
+    const overlay = storyOverlays.find((o) => o.id === selectedOverlayId);
+    if (overlay) {
+      overlay.scale = parseFloat(val);
+      const el = document.getElementById(`ov-${overlay.id}`);
+      if (el) {
+        el.style.transform = `translate(-50%, -50%) scale(${overlay.scale}) rotate(${overlay.rotation}deg)`;
+      }
+    }
+  };
+
+  window.changeOverlayScale = (delta) => {
+    const scaleInp = document.getElementById("storyOverlayScaleInp");
+    if (!scaleInp) return;
+    let newVal = parseFloat(scaleInp.value) + delta;
+    newVal = Math.min(Math.max(newVal, 0.5), 8); // Clamp between 0.5x and 8x
+    scaleInp.value = newVal;
+    updateOverlayScale(newVal);
+  };
+
+  window.openStoryTextTool = (editingOverlay = null) => {
+    deselectOverlay();
+    const input = document.getElementById("storyTextInput");
+
+    if (editingOverlay) {
+      editingOverlayId = editingOverlay.id;
+      input.value = editingOverlay.content;
+      currentTextStyles = JSON.parse(JSON.stringify(editingOverlay.styles));
+      document.getElementById("storyFontSizeInp").value =
+        currentTextStyles.size;
+
+      // Hide the overlay while editing
+      const el = document.getElementById(`ov-${editingOverlay.id}`);
+      if (el) el.style.opacity = "0";
+    } else {
+      editingOverlayId = null;
+      input.value = "";
+      currentTextStyles = {
+        font: "Classic",
+        color: "#fff",
+        size: 32,
+        mode: "normal",
+      };
+      document.getElementById("storyFontSizeInp").value = 32;
+    }
+
+    updateLiveTextStyle();
+    document.getElementById("storyTextModal").style.display = "flex";
+    input.focus();
+  };
+
+  window.updateLiveTextStyle = () => {
+    const input = document.getElementById("storyTextInput");
+    const size = document.getElementById("storyFontSizeInp").value;
+    currentTextStyles.size = size;
+    input.style.fontFamily = getFontFamily(currentTextStyles.font);
+    input.style.fontSize = `${size}px`;
+
+    // Auto-resize textarea
+    input.style.height = "auto";
+    input.style.height = input.scrollHeight + "px";
+
+    applyVisualStyles(input, currentTextStyles);
+    if (currentTextStyles.font === "Neon") input.classList.add("font-neon");
+    else input.classList.remove("font-neon");
+
+    // Update font selector highlighting
+    document.querySelectorAll(".font-selector span").forEach((span) => {
+      if (span.getAttribute("data-font") === currentTextStyles.font) {
+        span.classList.add("active");
+      } else {
+        span.classList.remove("active");
+      }
     });
   };
 
+  window.closeStoryTextTool = () => {
+    const input = document.getElementById("storyTextInput");
+    const text = input.value.trim();
+    const container = document.getElementById("storyOverlayContainer");
+
+    if (text) {
+      if (editingOverlayId) {
+        const overlay = storyOverlays.find((o) => o.id === editingOverlayId);
+        if (overlay) {
+          overlay.content = text;
+          overlay.styles = JSON.parse(JSON.stringify(currentTextStyles));
+          const el = document.getElementById(`ov-${overlay.id}`);
+          if (el) {
+            el.textContent = text;
+            el.style.fontFamily = getFontFamily(overlay.styles.font);
+            el.style.fontSize = `${overlay.styles.size}px`;
+            applyVisualStyles(el, overlay.styles);
+            el.style.opacity = "1";
+            if (overlay.styles.font === "Neon") el.classList.add("font-neon");
+            else el.classList.remove("font-neon");
+          }
+        }
+      } else {
+        const overlay = {
+          id: Date.now(),
+          type: "text",
+          content: text,
+          x: 50,
+          y: 50,
+          scale: 1,
+          rotation: 0,
+          styles: JSON.parse(JSON.stringify(currentTextStyles)),
+        };
+        storyOverlays.push(overlay);
+        container.appendChild(createOverlayElement(overlay));
+      }
+    } else if (editingOverlayId) {
+      // Removed text, so delete overlay
+      storyOverlays = storyOverlays.filter((o) => o.id !== editingOverlayId);
+      const el = document.getElementById(`ov-${editingOverlayId}`);
+      if (el) el.remove();
+    }
+
+    editingOverlayId = null;
+    input.value = "";
+    document.getElementById("storyTextModal").style.display = "none";
+  };
+
+  window.setStoryFont = (font) => {
+    currentTextStyles.font = font;
+    updateLiveTextStyle();
+  };
+  window.setStoryColor = (color) => {
+    currentTextStyles.color = color;
+    updateLiveTextStyle();
+  };
+  window.toggleTextStyle = () => {
+    const modes = ["normal", "bg", "shadow"];
+    const currentIdx = modes.indexOf(currentTextStyles.mode || "normal");
+    currentTextStyles.mode = modes[(currentIdx + 1) % modes.length];
+    updateLiveTextStyle();
+  };
+
+  window.openStoryLocationTool = () => {
+    deselectOverlay();
+    document.getElementById("storyLocationModal").style.display = "flex";
+    const input = document.getElementById("locationSearchInput");
+    const results = document.getElementById("locationResults");
+    results.innerHTML =
+      '<p style="text-align:center; color:#888; padding:20px;">Start typing to search globally...</p>';
+    input.value = "";
+    input.focus();
+
+    input.oninput = (e) => {
+      const query = e.target.value.trim();
+      clearTimeout(locationSearchTimer);
+      if (query.length < 2) {
+        results.innerHTML =
+          '<p style="text-align:center; color:#888; padding:20px;">Type at least 2 characters...</p>';
+        return;
+      }
+      locationSearchTimer = setTimeout(async () => {
+        results.innerHTML =
+          '<p style="text-align:center; color:#888; padding:20px;">Searching...</p>';
+        const res = await fetch(
+          `/searchLocations?query=${encodeURIComponent(query)}`,
+        );
+        const data = await res.json();
+        results.innerHTML = "";
+        if (data.locations && data.locations.length > 0) {
+          data.locations.forEach((loc) => {
+            const d = document.createElement("div");
+            d.className = "theme-option";
+            d.style.textAlign = "left";
+            d.style.padding = "12px 20px";
+            d.innerHTML = `
+              <div style="font-weight:bold; color:#fff; font-size:14px;">${loc.shortName}</div>
+              <div style="font-size:11px; color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">${loc.name}</div>
+            `;
+            d.onclick = () => {
+              addLocationTag(loc.shortName);
+              closeStoryLocationTool();
+            };
+            results.appendChild(d);
+          });
+        } else {
+          results.innerHTML =
+            '<p style="text-align:center; color:#888; padding:20px;">No locations found.</p>';
+        }
+      }, 500);
+    };
+  };
+
   function addLocationTag(loc) {
-    const overlay = { id: Date.now(), type: "location", content: loc, x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
+    const overlay = {
+      id: Date.now(),
+      type: "location",
+      content: loc,
+      x: 50,
+      y: 50,
+      scale: 1,
+      rotation: 0,
+      styles: {},
+    };
     storyOverlays.push(overlay);
-    document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+    document
+      .getElementById("storyOverlayContainer")
+      .appendChild(createOverlayElement(overlay));
   }
 
-  window.closeStoryLocationTool = () => document.getElementById("storyLocationModal").style.display = "none";
+  window.closeStoryLocationTool = () =>
+    (document.getElementById("storyLocationModal").style.display = "none");
 
   window.addStoryTimeTag = () => {
-    const overlay = { id: Date.now(), type: "time", content: "", x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
+    deselectOverlay();
+    const overlay = {
+      id: Date.now(),
+      type: "time",
+      content: "",
+      x: 50,
+      y: 50,
+      scale: 1,
+      rotation: 0,
+      styles: {},
+    };
     storyOverlays.push(overlay);
-    document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
+    document
+      .getElementById("storyOverlayContainer")
+      .appendChild(createOverlayElement(overlay));
   };
 
   window.openStoryStickerTool = () => {
+    deselectOverlay();
     document.getElementById("storyStickerModal").style.display = "flex";
-    switchStickerTab('stickers');
+    document.getElementById("stickerSearchInput").value = "";
+    switchStickerTab("emojis");
+  };
+
+  document.getElementById("stickerSearchInput").oninput = (e) => {
+    const query = e.target.value.trim().toLowerCase();
+    const results = document.getElementById("stickerResults");
+    if (!query) {
+      switchStickerTab("emojis");
+      return;
+    }
+    results.innerHTML = "";
+    results.style.display = "grid";
+    results.style.gridTemplateColumns = "repeat(6, 1fr)";
+
+    Object.values(emojiCategories)
+      .flat()
+      .forEach((e) => {
+        if (e.includes(query)) {
+          const d = document.createElement("div");
+          d.style.fontSize = "40px";
+          d.style.cursor = "pointer";
+          d.style.textAlign = "center";
+          d.textContent = e;
+          d.onclick = () => {
+            const overlay = {
+              id: Date.now(),
+              type: "emoji",
+              content: e,
+              x: 50,
+              y: 50,
+              scale: 2.5,
+              rotation: 0,
+              styles: {},
+            };
+            storyOverlays.push(overlay);
+            document
+              .getElementById("storyOverlayContainer")
+              .appendChild(createOverlayElement(overlay));
+            selectOverlay(overlay);
+            closeStoryStickerTool();
+          };
+          results.appendChild(d);
+        }
+      });
   };
 
   window.switchStickerTab = (tab) => {
     const results = document.getElementById("stickerResults");
+    const tabEmojis = document.getElementById("tabEmojis");
     results.innerHTML = "";
-    if (tab === 'stickers') {
-        const stickerList = ["🔥", "⭐", "📍", "💯", "💖", "✨"]; // Mock URLs or Emojis
-        stickerList.forEach(s => {
-            const d = document.createElement("div");
-            d.style.fontSize = "40px";
-            d.style.cursor = "pointer";
-            d.textContent = s;
-            d.onclick = () => {
-                const overlay = { id: Date.now(), type: "sticker", content: s, x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
-                storyOverlays.push(overlay);
-                document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
-                closeStoryStickerTool();
+     if (tab === "emojis") {
+      tabEmojis.classList.add("active");
+      results.style.display = "block";
+
+      Object.keys(emojiCategories).forEach((cat) => {
+        const header = document.createElement("div");
+        header.style.cssText =
+          "font-size:12px; color:#aaa; text-transform:uppercase; padding:15px 10px 10px; border-bottom:1px solid #333; margin-bottom:10px; font-weight:bold;";
+        header.textContent = cat;
+        results.appendChild(header);
+
+        const grid = document.createElement("div");
+        grid.style.cssText =
+          "display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin-bottom:20px; padding:0 10px;";
+
+        emojiCategories[cat].forEach((e) => {
+          const d = document.createElement("div");
+          d.style.fontSize = "38px";
+          d.style.cursor = "pointer";
+          d.style.textAlign = "center";
+          d.textContent = e;
+          d.onclick = () => {
+            const overlay = {
+              id: Date.now(),
+              type: "emoji",
+              content: e,
+              x: 50,
+              y: 50,
+              scale: 2.5,
+              rotation: 0,
+              styles: {},
             };
-            results.appendChild(d);
+            storyOverlays.push(overlay);
+            document
+              .getElementById("storyOverlayContainer")
+              .appendChild(createOverlayElement(overlay));
+            selectOverlay(overlay);
+            closeStoryStickerTool();
+          };
+          grid.appendChild(d);
         });
-    } else {
-        const emojiList = ["😂", "😍", "🥺", "😎", "😭", "😡", "👍", "👎", "🎉", "🔥", "❤️"];
-        emojiList.forEach(e => {
-            const d = document.createElement("div");
-            d.style.fontSize = "40px";
-            d.style.cursor = "pointer";
-            d.textContent = e;
-            d.onclick = () => {
-                const overlay = { id: Date.now(), type: "emoji", content: e, x: 50, y: 50, scale: 1, rotation: 0, styles: {} };
-                storyOverlays.push(overlay);
-                document.getElementById("storyOverlayContainer").appendChild(createOverlayElement(overlay));
-                closeStoryStickerTool();
-            };
-            results.appendChild(d);
-        });
+        results.appendChild(grid);
+      });
     }
   };
 
-  window.closeStoryStickerTool = () => document.getElementById("storyStickerModal").style.display = "none";
+  window.closeStoryStickerTool = () =>
+    (document.getElementById("storyStickerModal").style.display = "none");
 
   function getFontFamily(font) {
-    switch(font) {
-      case 'Modern': return 'Helvetica, sans-serif';
-      case 'Typewriter': return 'Courier New, monospace';
-      case 'Elegant': return 'Georgia, serif';
-      case 'Script': return 'Brush Script MT, cursive';
-      case 'Comic': return 'Comic Sans MS, cursive';
-      case 'Stencil': return 'Impact, sans-serif';
-      default: return 'Arial, sans-serif';
+    switch (font) {
+      case "Modern":
+        return "Helvetica, sans-serif";
+      case "Typewriter":
+        return "Courier New, monospace";
+      case "Elegant":
+        return "Georgia, serif";
+      case "Script":
+        return "Brush Script MT, cursive";
+      case "Comic":
+        return "Comic Sans MS, cursive";
+      case "Stencil":
+        return "Impact, sans-serif";
+      default:
+        return "Arial, sans-serif";
     }
   }
 
   function renderOverlaysToContainer(overlays, container) {
-    overlays.forEach(ov => {
+    overlays.forEach((ov) => {
       const div = document.createElement("div");
       div.className = "draggable-overlay";
       div.style.left = `${ov.x}%`;
@@ -493,12 +1480,8 @@
         div.textContent = ov.content;
         div.style.fontFamily = getFontFamily(ov.styles.font);
         div.style.fontSize = `${ov.styles.size}px`;
-        div.style.color = ov.styles.color === 'gradient' ? 'transparent' : ov.styles.color;
-        if (ov.styles.color === 'gradient') {
-          div.style.backgroundImage = "linear-gradient(45deg, #f09433, #bc1888)";
-          div.style.webkitBackgroundClip = "text";
-        }
-        if (ov.styles.font === 'Neon') div.classList.add("font-neon");
+        applyVisualStyles(div, ov.styles);
+        if (ov.styles.font === "Neon") div.classList.add("font-neon");
       } else if (ov.type === "location") {
         div.innerHTML = `<div class="story-tag-location"><i class="fa-solid fa-location-dot"></i> ${ov.content}</div>`;
       } else if (ov.type === "emoji") {
@@ -507,7 +1490,7 @@
       } else if (ov.type === "sticker") {
         div.innerHTML = `<img src="${ov.content}" style="width: 150px;">`;
       } else if (ov.type === "time") {
-        div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+        div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>`;
       }
       container.appendChild(div);
     });
@@ -554,6 +1537,7 @@
 
   // ================= MUSIC PICKER LOGIC =================
   window.openMusicPicker = () => {
+    deselectOverlay();
     document.getElementById("musicPickerModal").style.display = "flex";
     document.getElementById("musicSearchInput").value = "";
     document.getElementById("musicResultsList").innerHTML =
@@ -614,7 +1598,7 @@
 
         data.songs.forEach((song) => {
           const item = document.createElement("div");
-          item.className = "music-result-item"; 
+          item.className = "music-result-item";
           item.style.cssText = `
                     display:flex;
                     align-items:center;
@@ -896,43 +1880,47 @@
     updateSelectedMusicDisplay();
     closeMusicPicker();
   };
-// TOUCH START (same as mousedown)
-segmentSlider.addEventListener("touchstart", (e) => {
-  isDraggingSlider = true;
-  dragStartX = e.touches[0].clientX;
-  sliderStartLeft = segmentSlider.offsetLeft;
-  segmentSlider.style.cursor = "grabbing";
-});
+  // TOUCH START (same as mousedown)
+  segmentSlider.addEventListener("touchstart", (e) => {
+    isDraggingSlider = true;
+    dragStartX = e.touches[0].clientX;
+    sliderStartLeft = segmentSlider.offsetLeft;
+    segmentSlider.style.cursor = "grabbing";
+  });
 
-// TOUCH MOVE (same as mousemove)
-document.addEventListener("touchmove", (e) => {
-  if (!isDraggingSlider) return;
+  // TOUCH MOVE (same as mousemove)
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!isDraggingSlider) return;
 
-  const dx = e.touches[0].clientX - dragStartX;
-  let newLeft = sliderStartLeft + dx;
+      const dx = e.touches[0].clientX - dragStartX;
+      let newLeft = sliderStartLeft + dx;
 
-  const sliderParentWidth = segmentSlider.parentElement.offsetWidth;
-  const segmentWidth = segmentSlider.offsetWidth;
+      const sliderParentWidth = segmentSlider.parentElement.offsetWidth;
+      const segmentWidth = segmentSlider.offsetWidth;
 
-  // Clamp
-  if (newLeft < 0) newLeft = 0;
-  if (newLeft + segmentWidth > sliderParentWidth)
-    newLeft = sliderParentWidth - segmentWidth;
+      // Clamp
+      if (newLeft < 0) newLeft = 0;
+      if (newLeft + segmentWidth > sliderParentWidth)
+        newLeft = sliderParentWidth - segmentWidth;
 
-  currentSegmentStartTime =
-    (newLeft / sliderParentWidth) * currentSongDuration;
+      currentSegmentStartTime =
+        (newLeft / sliderParentWidth) * currentSongDuration;
 
-  updateTrimmerUI();
+      updateTrimmerUI();
 
-  // prevent screen scroll while dragging
-  e.preventDefault();
-}, { passive: false });
+      // prevent screen scroll while dragging
+      e.preventDefault();
+    },
+    { passive: false },
+  );
 
-// TOUCH END (same as mouseup)
-document.addEventListener("touchend", () => {
-  isDraggingSlider = false;
-  segmentSlider.style.cursor = "grab";
-});
+  // TOUCH END (same as mouseup)
+  document.addEventListener("touchend", () => {
+    isDraggingSlider = false;
+    segmentSlider.style.cursor = "grab";
+  });
   function updateSelectedMusicDisplay() {
     stopMusicPreview(); // Ensure preview player is stopped
     const display = document.getElementById("selectedMusicDisplay");
@@ -976,12 +1964,12 @@ document.addEventListener("touchend", () => {
       iframe.style.position = "absolute";
       iframe.style.left = "-9999px";
       iframe.style.top = "-9999px";
-      
+
       iframe.onload = () => {
         // Explicit seek to ensure accurate start
         iframe.contentWindow.postMessage(
           `{"event":"command","func":"seekTo","args":[${startTime}, true]}`,
-          "*"
+          "*",
         );
       };
 
@@ -993,7 +1981,7 @@ document.addEventListener("touchend", () => {
       audio.autoplay = true;
       audio.controls = false;
       audio.loop = false;
-      
+
       // Ensure playback starts from the exact segment
       audio.oncanplay = () => {
         audio.currentTime = musicMetadata.startTime || 0;
@@ -1022,9 +2010,10 @@ document.addEventListener("touchend", () => {
     if (!isEditorOpen || !song) return;
 
     // Verify if existing player matches current song choice to avoid unnecessary destruction
-    const isSameSong = trimPreviewAudioPlayer && 
-                       trimPreviewAudioPlayer.dataset.songId === String(song.id) &&
-                       trimPreviewAudioPlayer.dataset.source === song.source;
+    const isSameSong =
+      trimPreviewAudioPlayer &&
+      trimPreviewAudioPlayer.dataset.songId === String(song.id) &&
+      trimPreviewAudioPlayer.dataset.source === song.source;
 
     if (trimPreviewAudioPlayer && !isSameSong) {
       if (trimPreviewAudioPlayer.pause) trimPreviewAudioPlayer.pause();
@@ -1054,9 +2043,12 @@ document.addEventListener("touchend", () => {
           iframe.dataset.source = "youtube";
           document.body.appendChild(iframe);
           trimPreviewAudioPlayer = iframe;
-          
+
           iframe.onload = () => {
-            iframe.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`, "*");
+            iframe.contentWindow.postMessage(
+              `{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`,
+              "*",
+            );
           };
         } else if (song.source === "pixabay") {
           const audio = document.createElement("audio");
@@ -1074,8 +2066,14 @@ document.addEventListener("touchend", () => {
       } else {
         // Restart existing player from current startTime
         if (song.source === "youtube") {
-          trimPreviewAudioPlayer.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`, "*");
-          trimPreviewAudioPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', "*");
+          trimPreviewAudioPlayer.contentWindow.postMessage(
+            `{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`,
+            "*",
+          );
+          trimPreviewAudioPlayer.contentWindow.postMessage(
+            '{"event":"command","func":"playVideo","args":""}',
+            "*",
+          );
         } else if (song.source === "pixabay") {
           trimPreviewAudioPlayer.currentTime = loopStartTime;
           trimPreviewAudioPlayer.play();
@@ -1093,7 +2091,10 @@ document.addEventListener("touchend", () => {
     if (trimPreviewAudioPlayer) {
       if (trimPreviewAudioPlayer.pause) trimPreviewAudioPlayer.pause();
       else if (trimPreviewAudioPlayer.contentWindow) {
-        trimPreviewAudioPlayer.contentWindow.postMessage('{"event":"command","func":"stopVideo","args":""}', "*");
+        trimPreviewAudioPlayer.contentWindow.postMessage(
+          '{"event":"command","func":"stopVideo","args":""}',
+          "*",
+        );
       }
       trimPreviewAudioPlayer.remove();
       trimPreviewAudioPlayer = null;
@@ -1108,7 +2109,7 @@ document.addEventListener("touchend", () => {
       } else if (currentStoryMusicPlayer.contentWindow) {
         currentStoryMusicPlayer.contentWindow.postMessage(
           '{"event":"command","func":"stopVideo","args":""}',
-          "*"
+          "*",
         );
       }
       currentStoryMusicPlayer.remove();
