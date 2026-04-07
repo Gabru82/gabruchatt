@@ -479,6 +479,8 @@
                 <!-- Editor Tools (UI Placeholders) -->
                 <div class="editor-tools">
                     <button class="tool-btn" onclick="openStoryTextTool()"><i class="fa-solid fa-font"></i></button>
+                    <button class="tool-btn" onclick="openStoryMentionTool()"><i class="fa-solid fa-at"></i></button>
+
                     <button class="tool-btn" onclick="openStoryStickerTool()"><i
                             class="fa-solid fa-note-sticky"></i></button>
                     <button class="tool-btn" onclick="openMusicPicker()"><i class="fa-solid fa-music"></i></button>
@@ -673,6 +675,58 @@
                     </div>
                 </div>
 
+                <!-- Mention Tool Modal -->
+                <div id="storyMentionModal" class="story-tool-overlay">
+                    <div class="tool-header">
+                        <input type="text" id="mentionSearchInput" placeholder="Search users to mention...">
+                        <button onclick="closeStoryMentionTool()">Cancel</button>
+                    </div>
+                    <div id="mentionResults" class="tool-results"></div>
+                </div>
+
+                <!-- Share Story Modal -->
+                <div id="shareStoryModal" class="theme-popup">
+                    <div class="theme-popup-content"
+                        style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+                        <button class="close-btn" onclick="closeShareStoryModal()"
+                            style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                        <h3 style="margin-bottom: 10px;">Share Story to...</h3>
+                        <div id="shareStoryFriendList"
+                            style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
+                        </div>
+                        <div style="display: flex; justify-content: center; padding-top: 10px;">
+                            <button id="confirmShareStoryBtn" class="save-btn"
+                                style="width: auto; padding: 12px 60px; display: none;">Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mention Tool Modal -->
+                <div id="storyMentionModal" class="story-tool-overlay">
+                    <div class="tool-header">
+                        <input type="text" id="mentionSearchInput" placeholder="Search users to mention...">
+                        <button onclick="closeStoryMentionTool()">Cancel</button>
+                    </div>
+                    <div id="mentionResults" class="tool-results"></div>
+                </div>
+
+                <!-- Share Story Modal -->
+                <div id="shareStoryModal" class="theme-popup">
+                    <div class="theme-popup-content"
+                        style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+                        <button class="close-btn" onclick="closeShareStoryModal()"
+                            style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                        <h3 style="margin-bottom: 10px;">Share Story to...</h3>
+                        <div id="shareStoryFriendList"
+                            style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
+                        </div>
+                        <div style="display: flex; justify-content: center; padding-top: 10px;">
+                            <button id="confirmShareStoryBtn" class="save-btn"
+                                style="width: auto; padding: 12px 60px; display: none;">Send</button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- 🔐 Password Popup -->
@@ -696,7 +750,7 @@
                 <!-- Progress Bars -->
                 <div id="storyProgress" class="story-progress-container"></div>
 
-            
+
                 <!-- Header -->
                 <div class="story-header">
                     <div
@@ -724,9 +778,13 @@
                 <div class="story-viewer-footer">
                     <div class="story-reply-container">
                         <input type="text" id="storyReplyInput" placeholder="Send a message...">
-<button onclick="event.stopPropagation(); sendStoryReply()">Send</button>                    </div>
+                        <button onclick="event.stopPropagation(); sendStoryReply()">Send</button>
+                    </div>
                     <div class="story-actions-row">
                         <div class="story-views-info" onclick="openViewersList()">
+                            <i class="fa-solid fa-share-nodes" onclick="event.stopPropagation(); shareCurrentStory()"></i>
+                            <i class="fa-solid fa-plus" id="addStoryToMyStoryBtn" style="display:none;" onclick="event.stopPropagation(); addCurrentStoryToMyStory()"></i>
+
                             <i class="fa-solid fa-eye"></i> <span id="storyViewCount">0</span>
                         </div>
                         <div class="story-reactions-strip">
@@ -739,25 +797,25 @@
                 </div>
             </div>
         </div>
-    <!-- STORY VIEWERS MODAL -->
-                <div id="storymod" class="story-viewers-modal">
+        <!-- STORY VIEWERS MODAL -->
+        <div id="storymod" class="story-viewers-modal">
 
-                    <div class="story-viewers-container">
+            <div class="story-viewers-container">
 
-                        <div class="story-viewers-header">
-                            <button class="story-viewers-close-btn"
-                                onclick="document.getElementById('storymod').style.display='none'">
-                                ✕
-                            </button>
-                        </div>
-
-                        <h2 class="story-viewers-title">Viewers</h2>
-
-                        <div id="storyViewersList" class="story-viewers-list"></div>
-
-                    </div>
-
+                <div class="story-viewers-header">
+                    <button class="story-viewers-close-btn"
+                        onclick="document.getElementById('storymod').style.display='none'">
+                        ✕
+                    </button>
                 </div>
+
+                <h2 class="story-viewers-title">Viewers</h2>
+
+                <div id="storyViewersList" class="story-viewers-list"></div>
+
+            </div>
+
+        </div>
         <div id="messageMenu">
             <div class="menu-item" data-action="reply"><i class="fa-solid fa-reply"></i> Reply</div>
             <div class="menu-item" data-action="react"><i class="fa-solid fa-face-smile"></i> React</div>

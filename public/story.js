@@ -37,6 +37,7 @@
   let isOverDeleteZone = false;
   let editingOverlayId = null;
   let hasMovedDuringDrag = false;
+  let selectedShareFriendId = null; // For sharing stories to chat
   let locationSearchTimer;
 
   let trimPreviewAudioPlayer = null; // For playing the trimmed segment
@@ -141,6 +142,7 @@
       "💩",
       "👻",
       "💀",
+      "😂",
       "☠️",
       "👽",
       "👾",
@@ -716,6 +718,24 @@
     });
     const data = await res.json();
     if (data.success) {
+      // Notify mentioned users via DM
+      storyOverlays.forEach((ov) => {
+        if (ov.type === "mention") {
+          const mentionMsgData = {
+            storyId: data.storyId,
+            storyMedia: currentStoryMedia.data,
+            storyType: currentStoryMedia.type,
+            ownerId: userId,
+            ownerName: localStorage.getItem("username") || "Someone",
+            ownerAvatar: localStorage.getItem("userAvatar") || "",
+          };
+          socket.emit("sendMessage", {
+            to: ov.userId,
+            message: JSON.stringify(mentionMsgData),
+            type: "story_share",
+          });
+        }
+      });
       isEditorOpen = false;
       stopTrimPreview();
       closeStoryEditor();
@@ -845,9 +865,16 @@
     const replyContainer = document.querySelector(".story-reply-container");
     const reactionsStrip = document.querySelector(".story-reactions-strip");
     const viewsInfo = document.querySelector(".story-views-info");
+    const addStoryToMyStoryBtn = document.getElementById(
+      "addStoryToMyStoryBtn",
+    );
+    const viewCountIcon = viewsInfo ? viewsInfo.querySelector(".fa-eye") : null;
+    const viewCountSpan = document.getElementById("storyViewCount");
 
-    document.getElementById("storyViewCount").textContent =
-      story.view_count || 0;
+    if (viewCountSpan) {
+      viewCountSpan.textContent = story.view_count || 0;
+    }
+
     document.getElementById("storyReplyInput").value = "";
     cancelAnimationFrame(storyTimer);
 
@@ -859,15 +886,24 @@
         : `https://i.pravatar.cc/150?img=${(story.user_id % 70) + 1}`);
     avatar.src = avatarUrl;
 
-    // ✅ Ownership logic: Hide interactions on own story, show views info
+    // ✅ Ownership logic
+    if (viewsInfo) viewsInfo.style.display = "flex"; // Always show the action bar
+
     if (story.user_id == userId) {
       if (replyContainer) replyContainer.style.display = "none";
       if (reactionsStrip) reactionsStrip.style.display = "none";
-      if (viewsInfo) viewsInfo.style.display = "flex";
+      // Owner: Show view count, hide "Add to Story"
+      if (viewCountIcon) viewCountIcon.style.display = "inline-block";
+      if (viewCountSpan) viewCountSpan.style.display = "inline-block";
+      if (addStoryToMyStoryBtn) addStoryToMyStoryBtn.style.display = "none";
     } else {
       if (replyContainer) replyContainer.style.display = "flex";
       if (reactionsStrip) reactionsStrip.style.display = "flex";
-      if (viewsInfo) viewsInfo.style.display = "none";
+      // Viewer: Hide view count, show "Add to Story"
+      if (viewCountIcon) viewCountIcon.style.display = "none";
+      if (viewCountSpan) viewCountSpan.style.display = "none";
+      if (addStoryToMyStoryBtn)
+        addStoryToMyStoryBtn.style.display = "inline-block";
     }
 
     name.textContent = story.name;
@@ -1054,11 +1090,14 @@
     setTimeout(() => heart.remove(), 800);
   }
   window.openViewersList = async () => {
+    // Pause story playback when viewers list is open
+    viewerPause = true;
+    const modal = document.getElementById("storymod");
+    modal.style.display = "flex";
+
     const story = activeStoriesForViewer[currentStoryIndex];
     if (!story || story.user_id != userId) return;
 
-    viewerPause = true; // Keep story paused
-    const modal = document.getElementById("storymod");
     const list = document.getElementById("storyViewersList");
     modal.style.display = "flex";
     list.innerHTML = "<p style='color:#888; text-align:center;'>Loading...</p>";
@@ -1087,6 +1126,10 @@
     }
   };
   window.reactToStory = async (emoji) => {
+    if (activeStoriesForViewer[currentStoryIndex].user_id == userId) {
+      showPopup("Cannot react to your own story.");
+      return;
+    }
     const story = activeStoriesForViewer[currentStoryIndex];
     if (!story) return;
 
@@ -1122,12 +1165,14 @@
     showPopup(`Reacted ${emoji}`);
   };
   const sendBtn = document.querySelector(".story-reply-container button");
+  if (sendBtn) {
+    sendBtn.addEventListener("pointerup", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      sendStoryReply();
+    });
+  }
 
-  sendBtn.addEventListener("pointerup", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    sendStoryReply();
-  });
   window.sendStoryReply = () => {
     console.log("Sending socket...");
     const input = document.getElementById("storyReplyInput");
@@ -1174,6 +1219,21 @@
     }
   }
   // ================= ADVANCED OVERLAY ENGINE =================
+  function getFontFamily(font) {
+    const fontMap = {
+      Classic: "Arial, sans-serif",
+      Modern: "Helvetica, sans-serif",
+      Neon: "Arial, sans-serif", // Neon effect is CSS-based, font can be simple
+      Typewriter: "'Courier New', monospace",
+      Elegant: "Georgia, serif",
+      Script: "'Brush Script MT', cursive",
+      Comic: "'Comic Sans MS', cursive",
+      Stencil: "Impact, sans-serif",
+      Strong: "Arial, sans-serif", // Boldness is CSS-based
+      Light: "Arial, sans-serif", // Lightness is CSS-based
+    };
+    return fontMap[font] || "Arial, sans-serif";
+  }
 
   function createOverlayElement(overlay) {
     const div = document.createElement("div");
@@ -1193,11 +1253,41 @@
       div.innerHTML = `<div class="story-tag-location"><i class="fa-solid fa-location-dot"></i> ${overlay.content}</div>`;
     } else if (overlay.type === "emoji") {
       div.style.fontSize = "80px";
-      div.innerHTML = overlay.content.replace(/\n/g, "<br>");
+      div.textContent = overlay.content;
+    } else if (overlay.type === "mention") {
+      div.style.fontSize = "24px";
+      div.style.fontWeight = "bold";
+      div.style.color = "#4facfe";
+      div.style.textShadow = "0 0 5px rgba(0,0,0,0.5)";
+      div.textContent = overlay.content || `@${overlay.name}`;
+      div.onclick = (e) => {
+        e.stopPropagation();
+        if (!isEditorOpen) {
+          closeStoryViewer();
+          openChat(overlay.content.userId, overlay.content.name);
+        }
+      };
     } else if (overlay.type === "sticker") {
       div.innerHTML = `<img src="${overlay.content}" style="width: 150px;">`;
     } else if (overlay.type === "time") {
       div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>`;
+    } else if (overlay.type === "credit") {
+      div.style.fontSize = "16px";
+      div.style.color = "#fff";
+      div.style.background = "rgba(0,0,0,0.6)";
+      div.style.padding = "8px 12px";
+      div.style.borderRadius = "20px";
+      div.style.display = "flex";
+      div.style.alignItems = "center";
+      div.style.gap = "8px";
+      div.innerHTML = `<img src="${overlay.content.ownerAvatar}" style="width:24px; height:24px; border-radius:50%;"> @${overlay.content.ownerName}`;
+      div.onclick = (e) => {
+        e.stopPropagation();
+        if (!isEditorOpen) {
+          closeStoryViewer();
+          openChat(overlay.content.ownerId, overlay.content.ownerName);
+        }
+      };
     }
 
     // Interaction Logic
@@ -1472,6 +1562,14 @@
     else input.classList.remove("font-neon");
 
     // Update font selector highlighting
+    document
+      .querySelectorAll(".font-selector span")
+      .forEach((span) => span.classList.remove("active"));
+    const activeFontSpan = document.querySelector(
+      `.font-selector span[data-font="${currentTextStyles.font}"]`,
+    );
+    if (activeFontSpan) activeFontSpan.classList.add("active");
+
     document.querySelectorAll(".font-selector span").forEach((span) => {
       if (span.getAttribute("data-font") === currentTextStyles.font) {
         span.classList.add("active");
@@ -1614,6 +1712,86 @@
   window.closeStoryLocationTool = () =>
     (document.getElementById("storyLocationModal").style.display = "none");
 
+  // ================= MENTION TOOL LOGIC =================
+  window.openStoryMentionTool = () => {
+    deselectOverlay();
+    document.getElementById("storyMentionModal").style.display = "flex";
+    const input = document.getElementById("mentionSearchInput");
+    const results = document.getElementById("mentionResults");
+    results.innerHTML =
+      '<p style="text-align:center; color:#888; padding:20px;">Search for friends to mention.</p>';
+    input.value = "";
+    input.focus();
+
+    input.oninput = (e) => {
+      const query = e.target.value.trim();
+      clearTimeout(locationSearchTimer); // Reuse timer for debounce
+      if (query.length < 2) {
+        results.innerHTML =
+          '<p style="text-align:center; color:#888; padding:20px;">Type at least 2 characters...</p>';
+        return;
+      }
+      locationSearchTimer = setTimeout(async () => {
+        results.innerHTML =
+          '<p style="text-align:center; color:#888; padding:20px;">Searching...</p>';
+        const res = await fetch("/searchUser", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: query, userId, discoverMode: false }), // Only search friends/known users
+        });
+        const data = await res.json();
+        results.innerHTML = "";
+        if (data.users && data.users.length > 0) {
+          data.users.forEach((user) => {
+            const d = document.createElement("div");
+            d.className = "theme-option"; // Reuse existing style
+            d.style.textAlign = "left";
+            d.style.padding = "12px 20px";
+            d.innerHTML = `
+              <div style="font-weight:bold; color:#fff; font-size:14px;">@${user.name}</div>
+              <div style="font-size:11px; color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">${user.name}</div>
+            `;
+            d.onclick = () => {
+              addMentionOverlay(user);
+              closeStoryMentionTool();
+            };
+            results.appendChild(d);
+          });
+        } else {
+          results.innerHTML =
+            '<p style="text-align:center; color:#888; padding:20px;">No users found.</p>';
+        }
+      }, 500);
+    };
+  };
+
+  function addMentionOverlay(user) {
+    const overlay = {
+      id: Date.now(),
+      type: "mention",
+
+      content: `@${user.name}`, // ✅ FIX
+      userId: user.id,
+      name: user.name,
+
+      x: 50,
+      y: 50,
+      scale: 1,
+      rotation: 0,
+      styles: {},
+    };
+
+    storyOverlays.push(overlay);
+
+    document
+      .getElementById("storyOverlayContainer")
+      .appendChild(createOverlayElement(overlay));
+  }
+
+  window.closeStoryMentionTool = () => {
+    document.getElementById("storyMentionModal").style.display = "none";
+  };
+
   window.addStoryTimeTag = () => {
     deselectOverlay();
     const overlay = {
@@ -1682,78 +1860,6 @@
       });
   };
 
-  window.switchStickerTab = (tab) => {
-    const results = document.getElementById("stickerResults");
-    const tabEmojis = document.getElementById("tabEmojis");
-    results.innerHTML = "";
-    if (tab === "emojis") {
-      tabEmojis.classList.add("active");
-      results.style.display = "block";
-
-      Object.keys(emojiCategories).forEach((cat) => {
-        const header = document.createElement("div");
-        header.style.cssText =
-          "font-size:12px; color:#aaa; text-transform:uppercase; padding:15px 10px 10px; border-bottom:1px solid #333; margin-bottom:10px; font-weight:bold;";
-        header.textContent = cat;
-        results.appendChild(header);
-
-        const grid = document.createElement("div");
-        grid.style.cssText =
-          "display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin-bottom:20px; padding:0 10px;";
-
-        emojiCategories[cat].forEach((e) => {
-          const d = document.createElement("div");
-          d.style.fontSize = "38px";
-          d.style.cursor = "pointer";
-          d.style.textAlign = "center";
-          d.textContent = e;
-          d.onclick = () => {
-            const overlay = {
-              id: Date.now(),
-              type: "emoji",
-              content: e,
-              x: 50,
-              y: 50,
-              scale: 2.5,
-              rotation: 0,
-              styles: {},
-            };
-            storyOverlays.push(overlay);
-            document
-              .getElementById("storyOverlayContainer")
-              .appendChild(createOverlayElement(overlay));
-            selectOverlay(overlay);
-            closeStoryStickerTool();
-          };
-          grid.appendChild(d);
-        });
-        results.appendChild(grid);
-      });
-    }
-  };
-
-  window.closeStoryStickerTool = () =>
-    (document.getElementById("storyStickerModal").style.display = "none");
-
-  function getFontFamily(font) {
-    switch (font) {
-      case "Modern":
-        return "Helvetica, sans-serif";
-      case "Typewriter":
-        return "Courier New, monospace";
-      case "Elegant":
-        return "Georgia, serif";
-      case "Script":
-        return "Brush Script MT, cursive";
-      case "Comic":
-        return "Comic Sans MS, cursive";
-      case "Stencil":
-        return "Impact, sans-serif";
-      default:
-        return "Arial, sans-serif";
-    }
-  }
-
   function renderOverlaysToContainer(overlays, container) {
     overlays.forEach((ov) => {
       const div = document.createElement("div");
@@ -1761,14 +1867,26 @@
       div.style.left = `${ov.x}%`;
       div.style.top = `${ov.y}%`;
       div.style.transform = `translate(-50%, -50%) scale(${ov.scale}) rotate(${ov.rotation}deg)`;
-      div.style.pointerEvents = "none"; // Non-interactive in viewer
-
+      div.style.pointerEvents = ov.type === "mention" ? "auto" : "none";
       if (ov.type === "text") {
         div.textContent = ov.content;
         div.style.fontFamily = getFontFamily(ov.styles.font);
         div.style.fontSize = `${ov.styles.size}px`;
         applyVisualStyles(div, ov.styles);
         if (ov.styles.font === "Neon") div.classList.add("font-neon");
+      } else if (ov.type === "mention") {
+        div.style.fontSize = "24px";
+        div.style.fontWeight = "bold";
+        div.style.color = "#4facfe";
+        div.style.textShadow = "0 0 5px rgba(0,0,0,0.5)";
+        div.textContent = ov.content || `@${ov.name}`;
+        div.onclick = (e) => {
+          e.stopPropagation();
+          if (!isEditorOpen) {
+            closeStoryViewer();
+            openChat(ov.userId, ov.name);
+          }
+        };
       } else if (ov.type === "location") {
         div.innerHTML = `<div class="story-tag-location"><i class="fa-solid fa-location-dot"></i> ${ov.content}</div>`;
       } else if (ov.type === "emoji") {
@@ -1778,53 +1896,237 @@
         div.innerHTML = `<img src="${ov.content}" style="width: 150px;">`;
       } else if (ov.type === "time") {
         div.innerHTML = `<div class="story-tag-time">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>`;
+      } else if (ov.type === "credit") {
+        div.style.fontSize = "16px";
+        div.style.color = "#fff";
+        div.style.background = "rgba(0,0,0,0.6)";
+        div.style.padding = "8px 12px";
+        div.style.borderRadius = "20px";
+        div.style.display = "flex";
+        div.style.alignItems = "center";
+        div.style.gap = "8px";
+        div.innerHTML = `<img src="${ov.content.ownerAvatar}" style="width:24px; height:24px; border-radius:50%;"> @${ov.content.ownerName}`;
+        div.onclick = (e) => {
+          e.stopPropagation();
+          if (!isEditorOpen) {
+            closeStoryViewer();
+            openChat(ov.content.ownerId, ov.content.ownerName);
+          }
+        };
       }
       container.appendChild(div);
     });
   }
-let isNavigating = false;
-window.nextStory = () => {
-  if (isNavigating) return; // 🔥 BLOCK MULTIPLE CALLS
-  isNavigating = true;
 
-  if (currentStoryIndex < activeStoriesForViewer.length - 1) {
-    currentStoryIndex++;
-    displayStory();
-  } else if (currentUserDeckIndex < groupedStories.length - 1) {
-    currentUserDeckIndex++;
-    activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
-    currentStoryIndex = 0;
-    displayStory();
-  } else {
+  // ================= SHARE STORY TO CHAT LOGIC =================
+  window.shareCurrentStory = async () => {
+    const currentStory = activeStoriesForViewer[currentStoryIndex];
+    if (!currentStory) return;
+
+    const modal = document.getElementById("shareStoryModal");
+    const list = document.getElementById("shareStoryFriendList");
+    const confirmBtn = document.getElementById("confirmShareStoryBtn");
+
+    list.innerHTML =
+      '<p style="text-align:center; color:#888;">Loading friends...</p>';
+    modal.style.display = "flex";
+    confirmBtn.style.display = "none";
+
+    const res = await fetch(`/getFriends/${userId}`);
+    const data = await res.json();
+    list.innerHTML = "";
+
+    data.friends.forEach((friend) => {
+      const item = document.createElement("div");
+      item.className = "forward-friend-item"; // Reuse style
+      item.onclick = () => {
+        document
+          .querySelectorAll(".forward-friend-item")
+          .forEach((i) => i.classList.remove("selected"));
+        item.classList.add("selected");
+        selectedShareFriendId = friend.id;
+        confirmBtn.style.display = "block";
+      };
+
+      item.innerHTML = `
+        <img src="${friend.avatar || getAvatarSrc(friend)}">
+        <div class="forward-friend-info">
+            <div class="forward-friend-name">${friend.name}</div>
+        </div>
+        <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
+      `;
+      list.appendChild(item);
+    });
+
+    confirmBtn.onclick = () => {
+      if (!selectedShareFriendId) return;
+
+      const captionData = {
+        storyId: currentStory.id,
+        storyMedia: currentStory.media,
+        storyType: currentStory.type,
+        ownerId: currentStory.user_id,
+        ownerName: currentStory.name,
+        ownerAvatar: currentStory.avatar,
+      };
+
+      socket.emit("sendMessage", {
+        to: selectedShareFriendId,
+        message: JSON.stringify(captionData), // Store data in message for story_share
+        type: "story_share",
+      });
+
+      showPopup(
+        `Story shared to ${data.friends.find((f) => f.id === selectedShareFriendId)?.name || "chat"}!`,
+      );
+      closeShareStoryModal();
+    };
+  };
+
+  window.closeShareStoryModal = () => {
+    document.getElementById("shareStoryModal").style.display = "none";
+    selectedShareFriendId = null;
+  };
+
+  // ================= ADD TO MY STORY LOGIC =================
+  window.addCurrentStoryToMyStory = () => {
+    const currentStory = activeStoriesForViewer[currentStoryIndex];
+    if (!currentStory || currentStory.user_id == userId) return;
+
+    // Set media for the editor
+    currentStoryMedia = {
+      data: currentStory.media,
+      type: currentStory.type,
+    };
+
+    // Also copy the music from the original story
+    if (currentStory.music) {
+      currentStoryMusic = JSON.parse(currentStory.music);
+    }
+
+    // Create credit overlay
+    const creditOverlay = {
+      id: Date.now(),
+      type: "credit",
+      content: {
+        ownerId: currentStory.user_id,
+        ownerName: currentStory.name,
+        ownerAvatar: currentStory.avatar || getAvatarSrc(currentStory.user_id),
+      },
+      x: 50, // Position at bottom center
+      y: 90,
+      scale: 1,
+      rotation: 0,
+      styles: {},
+    };
+
+    // Add existing overlays from the original story, ensuring credit is added
+    storyOverlays = currentStory.overlays
+      ? JSON.parse(currentStory.overlays)
+      : [];
+    storyOverlays.push(creditOverlay);
+
+    // Close viewer and open editor
     closeStoryViewer();
-  }
+    openStoryEditor();
+  };
 
-  setTimeout(() => {
-    isNavigating = false;
-  }, 300); // 🔥 delay to prevent double tap
-};
+  // ================= VIEW SHARED STORY FROM CHAT =================
+  window.viewSharedStory = (
+    ownerId,
+    storyMedia,
+    storyType,
+    storyId,
+    ownerName,
+    ownerAvatar,
+  ) => {
+    // Temporarily create a story object to display
+    const tempStory = {
+      id: storyId,
+      user_id: ownerId,
+      name: ownerName,
+      avatar: ownerAvatar,
+      media: storyMedia,
+      type: storyType,
+      created_at: new Date().toISOString(),
+      overlays: "[]", // No overlays for shared story preview
+      music: null,
+      privacy: "public",
+      view_count: 0,
+      seen: 0,
+    };
 
-window.prevStory = () => {
-  if (isNavigating) return;
-  isNavigating = true;
+    // Set activeStoriesForViewer to just this one story
+    activeStoriesForViewer = [tempStory];
+    currentStoryIndex = 0;
 
-  if (currentStoryIndex > 0) {
-    currentStoryIndex--;
+    // Find or create a temporary groupedStories entry for the owner
+    let ownerGroupIndex = groupedStories.findIndex((g) => g.user_id == ownerId);
+    if (ownerGroupIndex === -1) {
+      groupedStories.push({
+        user_id: ownerId,
+        name: ownerName,
+        avatar: ownerAvatar,
+        stories: [tempStory],
+      });
+      ownerGroupIndex = groupedStories.length - 1;
+    } else {
+      // Ensure the temp story is in the owner's group if it's not already
+      if (
+        !groupedStories[ownerGroupIndex].stories.some((s) => s.id === storyId)
+      ) {
+        groupedStories[ownerGroupIndex].stories.unshift(tempStory); // Add to beginning
+      }
+    }
+    currentUserDeckIndex = ownerGroupIndex;
+
+    const modal = document.getElementById("storyViewerModal");
+    modal.style.display = "flex";
     displayStory();
-  } else if (currentUserDeckIndex > 0) {
-    currentUserDeckIndex--;
+  };
 
-    activeStoriesForViewer =
-      groupedStories[currentUserDeckIndex].stories;
+  let isNavigating = false;
+  window.nextStory = () => {
+    if (isNavigating) return; // 🔥 BLOCK MULTIPLE CALLS
+    isNavigating = true;
 
-    currentStoryIndex = activeStoriesForViewer.length - 1;
-    displayStory();
-  }
+    if (currentStoryIndex < activeStoriesForViewer.length - 1) {
+      currentStoryIndex++;
+      displayStory();
+    } else if (currentUserDeckIndex < groupedStories.length - 1) {
+      currentUserDeckIndex++;
+      activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
+      currentStoryIndex = 0;
+      displayStory();
+    } else {
+      closeStoryViewer();
+    }
 
-  setTimeout(() => {
-    isNavigating = false;
-  }, 300);
-};
+    setTimeout(() => {
+      isNavigating = false;
+    }, 300); // 🔥 delay to prevent double tap
+  };
+
+  window.prevStory = () => {
+    if (isNavigating) return;
+    isNavigating = true;
+
+    if (currentStoryIndex > 0) {
+      currentStoryIndex--;
+      displayStory();
+    } else if (currentUserDeckIndex > 0) {
+      currentUserDeckIndex--;
+
+      activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
+
+      currentStoryIndex = activeStoriesForViewer.length - 1;
+      displayStory();
+    }
+
+    setTimeout(() => {
+      isNavigating = false;
+    }, 300);
+  };
   window.closeStoryViewer = () => {
     cancelAnimationFrame(storyTimer);
     stopStoryMusicPlayback();

@@ -1415,6 +1415,11 @@ EDIT PROFILE MODAL
   border-radius: 10px;
   margin-bottom: 5px;
 }
+.share-story-preview {
+  width: 100%;
+  border-radius: 10px;
+  margin-bottom: 5px;
+}
 @keyframes heartPop {
   0% {
     transform: translate(-50%, -50%) scale(0.5);
@@ -1428,6 +1433,12 @@ EDIT PROFILE MODAL
     transform: translate(-50%, -200%) scale(1);
     opacity: 0;
   }
+}
+.story-share-preview {
+    background: #111;
+    border-radius: 12px;
+    padding: 8px;
+    max-width: 220px;
 }
 .story-header {
     position: absolute;

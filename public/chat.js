@@ -2338,8 +2338,34 @@ function appendMessage(
       `;
       // Check relation after a tiny delay so the element is in the DOM
       setTimeout(() => checkShareRelation(sharedData.sharedUserId, msgId), 50);
+    } else if (type === "story_share") {
+      const sharedStoryData = JSON.parse(message);
+      contentHtml = `
+        <div class="story-share-card">
+          <div class="story-share-preview">
+            ${
+              sharedStoryData.storyType === "video"
+                ? `<video src="${sharedStoryData.storyMedia}" class="share-story-preview" muted loop></video>`
+                : `<img src="${sharedStoryData.storyMedia} " class="share-story-preview">`
+            }
+          </div>
+          <div class="story-share-info">
+            <div class="story-share-owner">Story by ${
+              sharedStoryData.ownerName
+            }</div>
+            <button class="story-share-view-btn" onclick="viewSharedStory(${
+              sharedStoryData.ownerId
+            }, '${sharedStoryData.storyMedia}', '${
+              sharedStoryData.storyType
+            }', '${sharedStoryData.storyId}', '${
+              sharedStoryData.ownerName
+            }', '${sharedStoryData.ownerAvatar}')">
+              View Story
+            </button>
+          </div>
+        </div>
+      `;
     } else {
-      // Default to text
       const sanitizedMessage = message
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
