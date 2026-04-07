@@ -1473,7 +1473,8 @@ EDIT PROFILE MODAL
   background: #ff4444;
   color: white;
 }
-.call-modal {sition: absolute;
+.call-modal {
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
