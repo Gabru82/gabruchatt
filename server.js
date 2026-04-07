@@ -258,6 +258,23 @@ db.serialize(() => {
       console.error("stories music error:", err.message);
     }
   });
+  db.run("ALTER TABLE stories ADD COLUMN privacy TEXT DEFAULT 'friends'", (err) => {
+    if (err && !err.message.includes("duplicate column")) console.error(err);
+  });
+  db.run("ALTER TABLE stories ADD COLUMN reactions TEXT DEFAULT '{}'", (err) => {
+    if (err && !err.message.includes("duplicate column")) console.error(err);
+  });
+
+  // ================= STORY VIEWS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS story_views(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      story_id INTEGER,
+      user_id INTEGER,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(story_id, user_id)
+    )
+  `);
 });
 // ================= ROUTES =================
 
@@ -1475,10 +1492,10 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
 });
 
 app.post("/uploadStory", (req, res) => {
-  const { userId, media, type, overlays, music } = req.body;
+  const { userId, media, type, overlays, music, privacy } = req.body;
   db.run(
-    "INSERT INTO stories (user_id, media, type, overlays, music) VALUES (?, ?, ?, ?, ?)",
-    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null],
+    "INSERT INTO stories (user_id, media, type, overlays, music, privacy) VALUES (?, ?, ?, ?, ?, ?)",
+    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null, privacy || 'friends'],
     function (err) {
       if (err) { console.error("Error uploading story:", err); return res.json({ success: false }); }
       res.json({ success: true, storyId: this.lastID });
@@ -1488,22 +1505,59 @@ app.post("/uploadStory", (req, res) => {
 
 app.get("/getStories/:userId", (req, res) => {
   const { userId } = req.params;
-  // Get stories for user and their friends from last 24h
   const query = ` 
-    SELECT s.*, u.name, u.avatar 
+    SELECT s.*, u.name, u.avatar,
+    (SELECT COUNT(*) FROM story_views WHERE story_id = s.id) as view_count
     FROM stories s
     JOIN users u ON s.user_id = u.id
-    WHERE (s.user_id = ? OR s.user_id IN (
-      SELECT user2 FROM friends WHERE user1 = ?
-      UNION
-      SELECT user1 FROM friends WHERE user2 = ?
-    ))
+    WHERE (
+      s.user_id = ? 
+      OR (s.privacy = 'public')
+      OR (s.privacy = 'friends' AND s.user_id IN (
+        SELECT user2 FROM friends WHERE user1 = ?
+        UNION
+        SELECT user1 FROM friends WHERE user2 = ?
+      ))
+    )
     AND s.created_at > datetime('now', '-1 day')
     ORDER BY s.created_at DESC
   `;
   db.all(query, [userId, userId, userId], (err, rows) => {
     if (err) return res.json({ success: false });
     res.json({ success: true, stories: rows });
+  });
+});
+
+app.post("/markStoryViewed", (req, res) => {
+  const { storyId, userId } = req.body;
+  db.run("INSERT OR IGNORE INTO story_views (story_id, user_id) VALUES (?, ?)", [storyId, userId], (err) => {
+    res.json({ success: !err });
+  });
+});
+
+app.get("/getStoryViewers/:storyId", (req, res) => {
+  const { storyId } = req.params;
+  db.all(
+    `SELECT u.id, u.name, u.avatar FROM story_views v 
+     JOIN users u ON v.user_id = u.id 
+     WHERE v.story_id = ? ORDER BY v.timestamp DESC`,
+    [storyId],
+    (err, rows) => {
+      if (err) return res.json({ success: false });
+      res.json({ success: true, viewers: rows });
+    }
+  );
+});
+
+app.post("/reactToStory", (req, res) => {
+  const { storyId, emoji } = req.body;
+  db.get("SELECT reactions FROM stories WHERE id = ?", [storyId], (err, row) => {
+    if (err || !row) return res.json({ success: false });
+    let reactions = JSON.parse(row.reactions || "{}");
+    reactions[emoji] = (reactions[emoji] || 0) + 1;
+    db.run("UPDATE stories SET reactions = ? WHERE id = ?", [JSON.stringify(reactions), storyId], (err) => {
+      res.json({ success: !err, reactions });
+    });
   });
 });
 

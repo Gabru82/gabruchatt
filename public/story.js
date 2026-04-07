@@ -15,6 +15,9 @@
   let currentMusicPreviewPlayerType = null; // 'youtube' or 'pixabay'
   let currentStoryMusicPlayer = null; // Holds YouTube iframe or Audio element for story playback
   let storyMusicStopTimeout = null; // Timeout for stopping story music
+  let viewerPause = false;
+  let groupedStories = []; // Stories grouped by user for sequential playback
+  let currentUserDeckIndex = 0; // Index of the user in the tray
 
   // Advanced Editor Variables
   let storyOverlays = []; // [{id, type, content, x, y, scale, rotation, styles}]
@@ -707,6 +710,7 @@
         music: currentStoryMusic
           ? { ...currentStoryMusic, duration: SEGMENT_DURATION }
           : null,
+        privacy: document.getElementById("storyPrivacyInp").value,
       }),
     });
     const data = await res.json();
@@ -725,6 +729,22 @@
     const data = await res.json();
     if (!data.success) return;
     storiesData = data.stories;
+
+    // Group stories by user
+    const groups = {};
+    storiesData.forEach((s) => {
+      if (!groups[s.user_id]) {
+        groups[s.user_id] = {
+          user_id: s.user_id,
+          name: s.name,
+          avatar: s.avatar,
+          stories: [],
+        };
+      }
+      groups[s.user_id].stories.push(s);
+    });
+    groupedStories = Object.values(groups);
+
     renderStoryTray();
   }
 
@@ -795,10 +815,12 @@
   }
 
   function openStoryViewer(selectedUserId) {
-    const userStories = storiesData.filter((s) => s.user_id == selectedUserId);
-    if (userStories.length === 0) return;
+    currentUserDeckIndex = groupedStories.findIndex(
+      (g) => g.user_id == selectedUserId,
+    );
+    if (currentUserDeckIndex === -1) return;
 
-    activeStoriesForViewer = userStories;
+    activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
     currentStoryIndex = 0;
     const modal = document.getElementById("storyViewerModal");
     modal.style.display = "flex";
@@ -813,15 +835,47 @@
     const name = document.getElementById("storyUserName");
     const delBtn = document.getElementById("deleteStoryBtn");
     const timeEl = document.getElementById("storyTime");
+    const replyContainer = document.querySelector(".story-reply-container");
+    const reactionsStrip = document.querySelector(".story-reactions-strip");
+    const viewsInfo = document.querySelector(".story-views-info");
 
+    document.getElementById("storyViewCount").textContent =
+      story.view_count || 0;
+    document.getElementById("storyReplyInput").value = "";
     cancelAnimationFrame(storyTimer);
-    avatar.src = story.avatar || getAvatarSrc(story.user_id);
+
+    // Use global helper for avatar if available
+    const avatarUrl =
+      story.avatar ||
+      (window.getAvatarSrc
+        ? window.getAvatarSrc(story.user_id)
+        : `https://i.pravatar.cc/150?img=${(story.user_id % 70) + 1}`);
+    avatar.src = avatarUrl;
+
+    // ✅ Ownership logic: Hide interactions on own story, show views info
+    if (story.user_id == userId) {
+      if (replyContainer) replyContainer.style.display = "none";
+      if (reactionsStrip) reactionsStrip.style.display = "none";
+      if (viewsInfo) viewsInfo.style.display = "flex";
+    } else {
+      if (replyContainer) replyContainer.style.display = "flex";
+      if (reactionsStrip) reactionsStrip.style.display = "flex";
+      if (viewsInfo) viewsInfo.style.display = "none";
+    }
+
     name.textContent = story.name;
     avatar.dataset.uid = story.user_id;
     timeEl.textContent = timeAgo(story.created_at);
     delBtn.style.display = story.user_id == userId ? "block" : "none";
     delBtn.onclick = () => deleteStory(story.id);
-
+    // Interaction: Mark viewed
+    if (story.user_id != userId) {
+      fetch("/markStoryViewed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storyId: story.id, userId }),
+      });
+    }
     viewer.innerHTML =
       story.type === "video"
         ? `<video id="viewerVideo" src="${story.media}" autoplay muted></video>`
@@ -854,6 +908,11 @@
     let storyDuration = 20000; // Default 20s for images
 
     function step(timestamp) {
+      if (viewerPause) {
+        start = null;
+        storyTimer = requestAnimationFrame(step);
+        return;
+      }
       if (!start) start = timestamp;
       const elapsed = timestamp - start;
       currentFill.style.width =
@@ -885,6 +944,136 @@
       story.type === "video",
     );
   }
+
+  // Viewer Controls
+  const viewerModal = document.getElementById("storyViewerModal");
+  let touchStartX = 0;
+  let touchStartTime = 0;
+  let isHolding = false;
+
+  // ✅ Improved Pause Logic for Touch Devices: Don't pause if touching buttons
+  const handleViewerPause = (e) => {
+    const isInteractive =
+      e.target.closest("button") ||
+      e.target.closest("input") ||
+      e.target.closest(".story-reply-container") ||
+      e.target.closest(".story-reactions-strip") ||
+      e.target.closest(".story-views-info");
+
+    if (isInteractive) return;
+  };
+
+  viewerModal.addEventListener("mousedown", (e) => {
+    viewerPause = true;
+  });
+
+  viewerModal.addEventListener("mouseup", (e) => {
+    viewerPause = false;
+
+    const screenWidth = window.innerWidth;
+
+    if (e.clientX < screenWidth / 2) {
+      prevStory();
+    } else {
+      nextStory();
+    }
+  });
+
+  viewerModal.addEventListener("touchstart", (e) => {
+    const touch = e.touches[0];
+
+    touchStartX = touch.clientX;
+    touchStartTime = Date.now();
+    isHolding = true;
+
+    // Delay for hold detection
+    setTimeout(() => {
+      if (isHolding) {
+        viewerPause = true; // HOLD → pause
+      }
+    }, 200); // 200ms = hold threshold
+  });
+
+  viewerModal.addEventListener("touchend", (e) => {
+    const touch = e.changedTouches[0];
+
+    const touchEndX = touch.clientX;
+    const duration = Date.now() - touchStartTime;
+
+    isHolding = false;
+    viewerPause = false;
+
+    // 👉 If short tap → navigate
+    if (duration < 200) {
+      const screenWidth = window.innerWidth;
+
+      if (touchEndX < screenWidth / 2) {
+        prevStory(); // LEFT TAP
+      } else {
+        nextStory(); // RIGHT TAP
+      }
+    }
+  });
+
+  window.openViewersList = async () => {
+    const story = activeStoriesForViewer[currentStoryIndex];
+    if (!story || story.user_id != userId) return;
+
+    viewerPause = true; // Keep story paused
+    const modal = document.getElementById("storymod");
+    const list = document.getElementById("storyViewersList");
+    modal.style.display = "flex";
+    list.innerHTML = "<p style='color:#888; text-align:center;'>Loading...</p>";
+
+    try {
+      const res = await fetch(`/getStoryViewers/${story.id}`);
+      const data = await res.json();
+      if (!data.success || !data.viewers.length) {
+        list.innerHTML =
+          "<p style='color:#888; text-align:center;'>No views yet</p>";
+        return;
+      }
+      list.innerHTML = "";
+      data.viewers.forEach((v) => {
+        const div = document.createElement("div");
+        div.className = "friend-item-mini"; // Reuse existing styles
+        div.style.marginBottom = "10px";
+        div.innerHTML = `
+          <img src="${v.avatar || (window.getAvatarSrc ? window.getAvatarSrc(v.id) : `https://i.pravatar.cc/150?img=${(v.id % 70) + 1}`)}">
+          <div style="flex:1; text-align:left;"><div style="font-weight:600; color:white;">${v.name}</div></div>
+        `;
+        list.appendChild(div);
+      });
+    } catch (e) {
+      list.innerHTML = "Error loading viewers";
+    }
+  };
+
+  window.reactToStory = async (emoji) => {
+    const story = activeStoriesForViewer[currentStoryIndex];
+    await fetch("/reactToStory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId: story.id, emoji }),
+    });
+    showPopup(`Reacted ${emoji}`);
+  };
+
+  window.sendStoryReply = () => {
+    const text = document.getElementById("storyReplyInput").value.trim();
+    if (!text) return;
+    const story = activeStoriesForViewer[currentStoryIndex];
+
+    socket.emit("sendMessage", {
+      to: story.user_id,
+      message: `Replied to your story: ${text}`,
+      type: "text",
+      caption: story.media, // Optional: reference the story
+    });
+
+    showPopup("Reply sent!");
+    document.getElementById("storyReplyInput").value = "";
+  };
 
   // ================= ADVANCED OVERLAY ENGINE =================
 
@@ -1399,7 +1588,7 @@
     const results = document.getElementById("stickerResults");
     const tabEmojis = document.getElementById("tabEmojis");
     results.innerHTML = "";
-     if (tab === "emojis") {
+    if (tab === "emojis") {
       tabEmojis.classList.add("active");
       results.style.display = "block";
 
@@ -1499,6 +1688,12 @@
   window.nextStory = () => {
     if (currentStoryIndex < activeStoriesForViewer.length - 1) {
       currentStoryIndex++;
+      displayStory();
+    } else if (currentUserDeckIndex < groupedStories.length - 1) {
+      // Move to next user's stories
+      currentUserDeckIndex++;
+      activeStoriesForViewer = groupedStories[currentUserDeckIndex].stories;
+      currentStoryIndex = 0;
       displayStory();
     } else {
       closeStoryViewer();
