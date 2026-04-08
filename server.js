@@ -744,6 +744,18 @@ app.post("/deactivateAccount", (req, res) => {
   });
 });
 
+app.post("/updateMentions", (req, res) => {
+  const { storyId, userId, mentions } = req.body;
+  db.run(
+    "UPDATE stories SET mentions = ? WHERE id = ? AND user_id = ?",
+    [JSON.stringify(mentions), storyId, userId],
+    function (err) {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true });
+    },
+  );
+});
+
 app.post("/toggle2FA", (req, res) => {
   const { userId, enabled, password } = req.body;
   db.get("SELECT password FROM users WHERE id=?", [userId], (err, row) => {

@@ -724,49 +724,6 @@
                     <div id="mentionResults" class="tool-results"></div>
                 </div>
 
-                <!-- Share Story Modal -->
-                <div id="shareStoryModal" class="theme-popup">
-                    <div class="theme-popup-content"
-                        style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
-                        <button class="close-btn" onclick="closeShareStoryModal()"
-                            style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
-                        <h3 style="margin-bottom: 10px;">Share Story to...</h3>
-                        <div id="shareStoryFriendList"
-                            style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
-                        </div>
-                        <div style="display: flex; justify-content: center; padding-top: 10px;">
-                            <button id="confirmShareStoryBtn" class="save-btn"
-                                style="width: auto; padding: 12px 60px; display: none;">Send</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Mention Tool Modal -->
-                <div id="storyMentionModal" class="story-tool-overlay">
-                    <div class="tool-header">
-                        <input type="text" id="mentionSearchInput" placeholder="Search users to mention...">
-                        <button onclick="closeStoryMentionTool()">Cancel</button>
-                    </div>
-                    <div id="mentionResults" class="tool-results"></div>
-                </div>
-
-                <!-- Share Story Modal -->
-                <div id="shareStoryModal" class="theme-popup">
-                    <div class="theme-popup-content"
-                        style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
-                        <button class="close-btn" onclick="closeShareStoryModal()"
-                            style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
-                        <h3 style="margin-bottom: 10px;">Share Story to...</h3>
-                        <div id="shareStoryFriendList"
-                            style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
-                        </div>
-                        <div style="display: flex; justify-content: center; padding-top: 10px;">
-                            <button id="confirmShareStoryBtn" class="save-btn"
-                                style="width: auto; padding: 12px 60px; display: none;">Send</button>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
             <!-- 🔐 Password Popup -->
@@ -790,6 +747,23 @@
             </div>
         </div>
 
+        <!-- Share Story Modal -->
+        <div id="shareStoryModal" class="theme-popup" style="z-index: 20000;">
+            <div class="theme-popup-content"
+                style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+                <button class="close-btn" onclick="closeShareStoryModal()"
+                    style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                <h3 style="margin-bottom: 10px;">Share Story to...</h3>
+                <div id="shareStoryFriendList"
+                    style="flex: 1; overflow-y: auto; margin: 15px 0; text-align: left; padding-right: 5px;">
+                </div>
+                <div style="display: flex; justify-content: center; padding-top: 10px;">
+                    <button id="confirmShareStoryBtn" class="save-btn"
+                        style="width: auto; padding: 12px 60px; display: none;">Send</button>
+                </div>
+            </div>
+        </div>
+
         <!-- STORY VIEWER MODAL -->
         <div id="storyViewerModal" class="story-modal">
             <div class="story-viewer-container">
@@ -806,6 +780,9 @@
                         <span id="storyTime" class="story-time"></span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 15px;">
+                        <button id="postMentionBtn" class="delete-story-btn" style="display: none; color: #4facfe; margin-left: 0; margin-right: -5px;">
+                            <i class="fa-solid fa-at"></i>
+                        </button>
                         <button id="deleteStoryBtn" class="delete-story-btn" style="display: none;">
                             <i class="fa-solid fa-trash"></i>
                         </button>

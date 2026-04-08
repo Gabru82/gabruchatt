@@ -42,7 +42,7 @@
   let isOverDeleteZone = false;
   let editingOverlayId = null;
   let hasMovedDuringDrag = false;
-  let selectedShareFriendId = null; // For sharing stories to chat
+  let selectedShareFriendIds = new Set();
   let locationSearchTimer;
 
   function animationStep(timestamp) {
@@ -966,6 +966,7 @@
     const avatar = document.getElementById("storyUserAvatar");
     const name = document.getElementById("storyUserName");
     const delBtn = document.getElementById("deleteStoryBtn");
+    const postMentionBtn = document.getElementById("postMentionBtn");
     const timeEl = document.getElementById("storyTime");
     const replyContainer = document.querySelector(".story-reply-container");
     const reactionsStrip = document.querySelector(".story-reactions-strip");
@@ -998,11 +999,19 @@
       if (viewCountIcon) viewCountIcon.style.display = "inline-block";
       if (viewCountSpan) viewCountSpan.style.display = "inline-block";
       if (addMentionedToStory) addMentionedToStory.style.display = "none";
+      if (postMentionBtn) {
+        postMentionBtn.style.display = "block";
+        postMentionBtn.onclick = (e) => { 
+          e.stopPropagation(); 
+          openShareModalGeneric('mention', story); 
+        };
+      }
     } else {
       if (replyContainer) replyContainer.style.display = "flex";
       if (reactionsStrip) reactionsStrip.style.display = "flex";
       if (viewCountIcon) viewCountIcon.style.display = "none";
       if (viewCountSpan) viewCountSpan.style.display = "none";
+      if (postMentionBtn) postMentionBtn.style.display = "none";
 
       if (addMentionedToStory) {
         if (!!story.isMentioned) {
@@ -2175,79 +2184,93 @@
   }
 
   // ================= SHARE STORY TO CHAT LOGIC =================
-  window.shareCurrentStory = async () => {
-    const currentStory = activeStoriesForViewer[currentStoryIndex];
-    if (!currentStory) return;
+  window.shareCurrentStory = () => {
+    const story = activeStoriesForViewer[currentStoryIndex];
+    if (story) openShareModalGeneric('share', story);
+  };
 
+  function openShareModalGeneric(mode, story) {
     const modal = document.getElementById("shareStoryModal");
     const list = document.getElementById("shareStoryFriendList");
     const confirmBtn = document.getElementById("confirmShareStoryBtn");
+    const title = modal.querySelector('h3');
 
-    list.innerHTML =
-      '<p style="text-align:center; color:#888;">Loading friends...</p>';
+    title.textContent = mode === 'mention' ? "Mention friends..." : "Share Story to...";
+    list.innerHTML = '<p style="text-align:center; color:#888;">Loading friends...</p>';
     modal.style.display = "flex";
     confirmBtn.style.display = "none";
+    selectedShareFriendIds.clear();
 
-    const res = await fetch(`/getFriends/${userId}`);
-    const data = await res.json();
-    list.innerHTML = "";
-
-    data.friends.forEach((friend) => {
-      const item = document.createElement("div");
-      item.className = "forward-friend-item"; // Reuse style
-      item.onclick = () => {
-        document
-          .querySelectorAll(".forward-friend-item")
-          .forEach((i) => i.classList.remove("selected"));
-        item.classList.add("selected");
-        selectedShareFriendId = friend.id;
-        confirmBtn.style.display = "block";
-      };
-
-      item.innerHTML = `
-        <img src="${friend.avatar || getAvatarSrc(friend)}">
-        <div class="forward-friend-info">
-            <div class="forward-friend-name">${friend.name}</div>
-        </div>
-        <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
-      `;
-      list.appendChild(item);
-    });
-
-    confirmBtn.onclick = () => {
-      if (!selectedShareFriendId) return;
-
-      const captionData = {
-        storyId: currentStory.id,
-        storyMedia: currentStory.media,
-        storyType: currentStory.type,
-        ownerId: currentStory.user_id,
-        ownerName: currentStory.name,
-        ownerAvatar: currentStory.avatar,
-        senderId: userId,
-        receiverId: selectedShareFriendId,
-        isMentioned: false,
-        overlays: currentStory.overlays ? JSON.parse(currentStory.overlays) : [],
-        music: currentStory.music ? JSON.parse(currentStory.music) : null,
-        timestamp: currentStory.created_at
-      };
-
-      socket.emit("sendMessage", {
-        to: selectedShareFriendId,
-        message: JSON.stringify(captionData), // Store data in message for story_share
-        type: "story_share",
+    fetch(`/getFriends/${userId}`).then(res => res.json()).then(data => {
+      list.innerHTML = "";
+      data.friends.forEach(friend => {
+        const item = document.createElement("div");
+        item.className = "forward-friend-item";
+        item.onclick = () => {
+          if (selectedShareFriendIds.has(friend.id)) {
+            selectedShareFriendIds.delete(friend.id);
+            item.classList.remove("selected");
+          } else {
+            selectedShareFriendIds.add(friend.id);
+            item.classList.add("selected");
+          }
+          confirmBtn.style.display = selectedShareFriendIds.size > 0 ? "block" : "none";
+        };
+        item.innerHTML = `
+          <img src="${friend.avatar || (window.getAvatarSrc ? window.getAvatarSrc(friend) : '')}">
+          <div class="forward-friend-info">
+              <div class="forward-friend-name">${friend.name}</div>
+          </div>
+          <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
+        `;
+        list.appendChild(item);
       });
-//
-      showPopup(
-        `Story shared to ${data.friends.find((f) => f.id === selectedShareFriendId)?.name || "chat"}!`,
-      );
-      closeShareStoryModal();
-    };
-  };
+
+      confirmBtn.onclick = () => {
+        const isMention = mode === 'mention';
+        const basePayload = {
+          storyId: story.id,
+          storyMedia: story.media,
+          storyType: story.type,
+          ownerId: story.user_id,
+          ownerName: story.name,
+          ownerAvatar: story.avatar,
+          senderId: userId,
+          isMentioned: isMention,
+          timestamp: story.created_at
+        };
+
+        if (isMention) {
+          basePayload.overlays = story.overlays ? JSON.parse(story.overlays) : [];
+          basePayload.music = story.music ? JSON.parse(story.music) : null;
+          
+          const existingMentions = JSON.parse(story.mentions || "[]");
+          const newMentions = Array.from(selectedShareFriendIds);
+          const combined = Array.from(new Set([...existingMentions, ...newMentions]));
+          
+          fetch("/updateMentions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storyId: story.id, userId, mentions: combined })
+          });
+        }
+
+        selectedShareFriendIds.forEach(fid => {
+          socket.emit("sendMessage", {
+            to: fid,
+            message: JSON.stringify(basePayload),
+            type: "story_share"
+          });
+        });
+
+        showPopup(isMention ? "Mentions sent!" : "Story shared!");
+        modal.style.display = "none";
+      };
+    });
+  }
 
   window.closeShareStoryModal = () => {
     document.getElementById("shareStoryModal").style.display = "none";
-    selectedShareFriendId = null;
   };
 
   // ================= ADD TO MY STORY LOGIC =================
@@ -2317,6 +2340,11 @@
     };
     storyOverlays = (data.overlays || []).concat(creditOverlay);
     openStoryEditor();
+  };
+
+  window.handleViewSharedStory = (storyId) => {
+    const data = window.storyShareData ? window.storyShareData[storyId] : null;
+    if (data) viewSharedStory(data.ownerId, data.storyMedia, data.storyType, data.storyId, data.ownerName, data.ownerAvatar);
   };
 
   // ================= VIEW SHARED STORY FROM CHAT =================

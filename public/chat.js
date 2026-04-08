@@ -67,7 +67,7 @@ function setupCustomPopup() {
   }, 2000);
 }
 
-function showPopup(message) {
+window.showPopup = function (message) {
   const popup = document.getElementById("customPopup");
   const popupMessage = document.getElementById("customPopupMessage");
 
@@ -79,7 +79,7 @@ function showPopup(message) {
     }, 2000);
   }
 }
-
+const showPopup = window.showPopup;
 setupCustomPopup();
 
 // ================= FULL SCREEN IMAGE MODAL =================
@@ -1309,7 +1309,7 @@ setupProfileTabs();
 
 // ================= SOCKET =================
 // Helper for avatar
-function getAvatarSrc(user) {
+window.getAvatarSrc = function (user) {
   if (user && user.avatar) return user.avatar;
   if (user && user.id)
     return `https://i.pravatar.cc/150?img=${(user.id % 70) + 1}`;
@@ -1318,7 +1318,7 @@ function getAvatarSrc(user) {
     return `https://i.pravatar.cc/150?img=${(user % 70) + 1}`;
   return `https://i.pravatar.cc/150?img=1`;
 }
-
+const getAvatarSrc = window.getAvatarSrc;
 let cachedFriends = [];
 
 let activeChat = null;
@@ -2046,7 +2046,7 @@ socket.on("messageSeenAll", ({ from, seenAt }) => {
 // ================= MESSAGE UI =================
 // ================= TIME FORMAT =================
 
-function timeAgo(date) {
+window.timeAgo = function (date) {
   if (!date) return "";
   let d = new Date(date);
 
@@ -2063,7 +2063,7 @@ function timeAgo(date) {
 
   return Math.floor(seconds / 86400) + "d ago";
 }
-
+const timeAgo = window.timeAgo;
 // 🔥 AUTO UPDATE "Seen 2m ago"
 setInterval(() => {
   document.querySelectorAll(".seen-time").forEach((el) => {
@@ -2395,9 +2395,15 @@ function appendMessage(
               sharedStoryData.ownerName
             }</div>
             ${!isMe ? `
-              <button class="story-share-view-btn" onclick="handleAddStoryFromMention(${sharedStoryData.storyId})">
-                Add Story
-              </button>
+              ${sharedStoryData.isMentioned ? `
+                <button class="story-share-view-btn" onclick="handleAddStoryFromMention(${sharedStoryData.storyId})">
+                  Add Story
+                </button>
+              ` : `
+                <button class="story-share-view-btn" onclick="handleViewSharedStory(${sharedStoryData.storyId})">
+                  View Story
+                </button>
+              `}
             ` : ''}
           </div>
         </div>
@@ -3340,7 +3346,7 @@ function closeAllModals() {
   }
 }
 
-async function openChat(friendId, friendName, friendAvatar = null) {
+window.openChat = async function (friendId, friendName, friendAvatar = null) {
   isChatOpen = true;
   loadMuteState();
   closeAllModals();
