@@ -2597,6 +2597,54 @@ EDIT PROFILE MODAL
     pointer-events: none;
 }
 
+/* Music Card Overlay Styles */
+.music-card-overlay {
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    min-width: 180px;
+    max-width: 250px;
+    height: 70px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    justify-content: center;
+}
+
+.music-card-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+}
+
+.music-card-info {
+  display: flex;
+  flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    text-align: left;
+}
+
+.music-card-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.music-card-source {
+    font-size: 10px;
+    color: #ffcc00;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
 .custom-privacy-selector {
     position: relative;
 }

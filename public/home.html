@@ -471,6 +471,46 @@
                     <button onclick="changeOverlayScale(0.2)"><i class="fa-solid fa-plus"></i></button>
                 </div>
 
+                <!-- Mention Styling Toolbox -->
+                <div id="mentionStyleToolbox" class="story-scale-control" style="display: none; flex-direction: column; bottom: 85px; padding: 12px; gap: 12px; height: auto; width: 90%; left: 5%; transform: none; border-radius: 20px;">
+                    <div style="display: flex; gap: 10px; width: 100%; overflow-x: auto; padding-bottom: 5px;" class="font-selector" id="mentionFontSelector">
+                        <span onclick="updateMentionStyle('font', 'Classic')" data-font="Classic" style="font-family: Arial;">Classic</span>
+                        <span onclick="updateMentionStyle('font', 'Modern')" data-font="Modern" style="font-family: 'Helvetica';">Modern</span>
+                        <span onclick="updateMentionStyle('font', 'Neon')" data-font="Neon" class="font-neon">Neon</span>
+                        <span onclick="updateMentionStyle('font', 'Typewriter')" data-font="Typewriter" style="font-family: 'Courier New';">Type</span>
+                        <span onclick="updateMentionStyle('font', 'Strong')" data-font="Strong" style="font-weight: 900;">Strong</span>
+                        <span onclick="updateMentionStyle('font', 'Elegant')" data-font="Elegant" style="font-family: 'Georgia';">Elegant</span>
+                        <span onclick="updateMentionStyle('font', 'Script')" data-font="Script" style="font-family: 'Brush Script MT';">Script</span>
+                        <span onclick="updateMentionStyle('font', 'Comic')" data-font="Comic" style="font-family: 'Comic Sans MS';">Comic</span>
+                        <span onclick="updateMentionStyle('font', 'Stencil')" data-font="Stencil" style="font-family: 'Impact';">Impact</span>
+                        <span onclick="updateMentionStyle('font', 'Light')" data-font="Light" style="font-weight: 100;">Light</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; width: 100%; justify-content: center;" class="color-selector">
+                        <div class="color-dot" style="background: #fff;" onclick="updateMentionStyle('color', '#fff')"></div>
+                        <div class="color-dot" style="background: #000;" onclick="updateMentionStyle('color', '#000')"></div>
+                        <div class="color-dot" style="background: #ff4444;" onclick="updateMentionStyle('color', '#ff4444')"></div>
+                        <div class="color-dot" style="background: #ffcc00;" onclick="updateMentionStyle('color', '#ffcc00')"></div>
+                        <div class="color-dot" style="background: #00ff55;" onclick="updateMentionStyle('color', '#00ff55')"></div>
+                        <div class="color-dot" style="background: #007aff;" onclick="updateMentionStyle('color', '#007aff')"></div>
+                        <div class="color-dot" style="background: linear-gradient(45deg, #f09433, #bc1888);" onclick="updateMentionStyle('color', 'gradient')"></div>
+                    </div>
+                    <div style="display: flex; gap: 10px; width: 100%; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; gap: 8px;">
+                            <button class="tool-btn" onclick="toggleMentionStyle('weight')" style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i class="fa-solid fa-bold"></i></button>
+                            <button class="tool-btn" onclick="toggleMentionStyle('style')" style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i class="fa-solid fa-italic"></i></button>
+                            <button class="tool-btn" onclick="toggleMentionStyle('mode')" style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i class="fa-solid fa-font"></i></button>
+                        </div>
+                        <div style="flex: 1; display: flex; align-items: center; gap: 8px; margin: 0 10px;">
+                            <i class="fa-solid fa-text-height" style="font-size: 14px; color: #aaa;"></i>
+                            <input type="range" id="mentionSizeInp" min="12" max="100" style="flex: 1; accent-color: #ffcc00;" oninput="updateMentionStyle('size', this.value)">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-maximize" style="font-size: 14px; color: #aaa;"></i>
+                            <input type="range" id="mentionScaleInp" min="0.5" max="8" step="0.1" style="width: 60px; accent-color: #ffcc00;" oninput="updateMentionStyle('scale', this.value)">
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Drag-to-Delete Zone -->
                 <div id="storyDeleteZone" class="story-delete-zone">
                     <i class="fa-solid fa-trash-can"></i>
@@ -659,7 +699,7 @@
                             </div>
                             <div style="flex-grow: 1;">
                                 <div id="selectedMusicTitle"
-                                    style="font-size: 14px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    style="font-size: 14px; font-weight: bold; white-space: wrap; overflow: hidden; text-overflow: ellipsis;">
                                 </div>
                                 <div id="selectedMusicSource" style="font-size: 12px; color: #aaa;"></div>
                             </div>

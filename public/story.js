@@ -797,6 +797,12 @@
 // Publish Story
   window.publishStory = async () => {
     if (!currentStoryMedia) return;
+
+    // 🔥 Guard: Only include music metadata if it exists, preventing ghost playback after deletion
+    const musicData = currentStoryMusic
+      ? { ...currentStoryMusic, duration: SEGMENT_DURATION }
+      : null;
+
     const res = await fetch("/uploadStory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -805,9 +811,7 @@
         media: currentStoryMedia.data,
         type: currentStoryMedia.type,
         overlays: storyOverlays,
-        music: currentStoryMusic
-          ? { ...currentStoryMusic, duration: SEGMENT_DURATION }
-          : null,
+        music: musicData,
         privacy: document.getElementById("storyPrivacyInp").value,
         parentStoryId: currentStoryParentId
       }),
@@ -1339,11 +1343,13 @@
       div.style.fontSize = "80px";
       div.textContent = overlay.content;
     } else if (overlay.type === "mention") {
-      div.style.fontSize = "24px";
-      div.style.fontWeight = "bold";
-      div.style.color = "#4facfe";
-      div.style.textShadow = "0 0 5px rgba(0,0,0,0.5)";
       div.textContent = overlay.content || `@${overlay.name}`;
+      div.style.fontFamily = getFontFamily(overlay.styles.font);
+      div.style.fontSize = `${overlay.styles.size}px`;
+      div.style.fontWeight = overlay.styles.weight || "bold";
+      div.style.fontStyle = overlay.styles.style || "normal";
+      applyVisualStyles(div, overlay.styles);
+      if (overlay.styles.font === "Neon") div.classList.add("font-neon");
       div.onclick = (e) => {
         e.stopPropagation();
         if (!isEditorOpen) {
@@ -1372,6 +1378,17 @@
           openChat(overlay.content.ownerId, overlay.content.ownerName);
         }
       };
+    } else if (overlay.type === "music") {
+      div.classList.add("story-tag-music");
+      div.innerHTML = `
+        <div class="music-card-overlay">
+          <img src="${overlay.thumbnail || '/images/music_placeholder.png'}" class="music-card-thumb">
+          <div class="music-card-info">
+            <div class="music-card-title">${overlay.content}</div>
+            <div class="music-card-source">${overlay.source === 'youtube' ? 'YouTube' : 'Pixabay'}</div>
+          </div>
+        </div>
+      `;
     }
 
     // Interaction Logic
@@ -1517,26 +1534,42 @@
   function stopDragging() {
     if (isDraggingOverlay && activeOverlay) {
       if (isOverDeleteZone) {
+        const deletedType = activeOverlay.type;
         document.getElementById(`ov-${activeOverlay.id}`).remove();
+
+        // 🔥 Reset music selection if card dragged to delete zone
+        if (deletedType === "music") {
+          currentStoryMusic = null;
+          stopTrimPreview(); // 🔥 Stop looping segment and clear timers
+          updateSelectedMusicDisplay();
+        }
+
         storyOverlays = storyOverlays.filter((o) => o.id !== activeOverlay.id);
         if (selectedOverlayId === activeOverlay.id) deselectOverlay();
       } else if (!hasMovedDuringDrag && activeOverlay.type === "text") {
         openStoryTextTool(activeOverlay);
       } else if (
         !hasMovedDuringDrag &&
-        (activeOverlay.type === "emoji" || activeOverlay.type === "sticker")
+        (activeOverlay.type === "emoji" ||
+          activeOverlay.type === "sticker" ||
+          activeOverlay.type === "music" ||
+          activeOverlay.type === "mention")
       ) {
         selectOverlay(activeOverlay);
       } else if (
         selectedOverlayId === activeOverlay.id &&
-        (activeOverlay.type === "emoji" || activeOverlay.type === "sticker")
+        (activeOverlay.type === "emoji" || activeOverlay.type === "sticker" || activeOverlay.type === "music")
       ) {
         // Show scale control again if it was already selected and just moved
-        const scaleControl = document.getElementById("storyScaleControl");
-        const scaleInp = document.getElementById("storyOverlayScaleInp");
-        if (scaleControl && scaleInp) {
-          scaleInp.value = activeOverlay.scale;
-          scaleControl.style.display = "flex";
+        if (activeOverlay.type === "mention") {
+          showMentionStyleToolbox(activeOverlay);
+        } else {
+          const scaleControl = document.getElementById("storyScaleControl");
+          const scaleInp = document.getElementById("storyOverlayScaleInp");
+          if (scaleControl && scaleInp) {
+            scaleInp.value = activeOverlay.scale;
+            scaleControl.style.display = "flex";
+          }
         }
       }
     }
@@ -1558,13 +1591,15 @@
     const el = document.getElementById(`ov-${overlay.id}`);
     if (el) el.classList.add("selected-overlay");
 
-    if (overlay.type === "emoji" || overlay.type === "sticker") {
+    if (overlay.type === "emoji" || overlay.type === "sticker" || overlay.type === "music") {
       const scaleControl = document.getElementById("storyScaleControl");
       const scaleInp = document.getElementById("storyOverlayScaleInp");
       if (scaleControl && scaleInp) {
         scaleInp.value = overlay.scale;
         scaleControl.style.display = "flex";
       }
+    } else if (overlay.type === "mention") {
+      showMentionStyleToolbox(overlay);
     }
   };
 
@@ -1576,6 +1611,8 @@
     selectedOverlayId = null;
     const scaleControl = document.getElementById("storyScaleControl");
     if (scaleControl) scaleControl.style.display = "none";
+    const mentionToolbox = document.getElementById("mentionStyleToolbox");
+    if (mentionToolbox) mentionToolbox.style.display = "none";
   };
 
   window.updateOverlayScale = (val) => {
@@ -1726,6 +1763,73 @@
     updateLiveTextStyle();
   };
 
+  window.showMentionStyleToolbox = (overlay) => {
+    const toolbox = document.getElementById("mentionStyleToolbox");
+    if (!toolbox) return;
+    toolbox.style.display = "flex";
+
+    const sizeInp = document.getElementById("mentionSizeInp");
+    const scaleInp = document.getElementById("mentionScaleInp");
+    if (sizeInp) sizeInp.value = overlay.styles.size;
+    if (scaleInp) scaleInp.value = overlay.scale;
+
+    toolbox.querySelectorAll(".font-selector span").forEach((s) => {
+      if (s.getAttribute("data-font") === overlay.styles.font) s.classList.add("active");
+      else s.classList.remove("active");
+    });
+  };
+
+  window.updateMentionStyle = (prop, val) => {
+    if (!selectedOverlayId) return;
+    const overlay = storyOverlays.find((o) => o.id === selectedOverlayId);
+    if (!overlay || overlay.type !== "mention") return;
+
+    if (prop === "scale") overlay.scale = parseFloat(val);
+    else overlay.styles[prop] = val;
+
+    const el = document.getElementById(`ov-${overlay.id}`);
+    if (el) {
+      if (prop === "scale") {
+        el.style.transform = `translate(-50%, -50%) scale(${overlay.scale}) rotate(${overlay.rotation}deg)`;
+      } else if (prop === "size") {
+        el.style.fontSize = `${val}px`;
+      } else if (prop === "font") {
+        el.style.fontFamily = getFontFamily(val);
+        if (val === "Neon") el.classList.add("font-neon");
+        else el.classList.remove("font-neon");
+        document.querySelectorAll("#mentionFontSelector span").forEach((s) => {
+          if (s.getAttribute("data-font") === val) s.classList.add("active");
+          else s.classList.remove("active");
+        });
+      } else if (prop === "color") {
+        applyVisualStyles(el, overlay.styles);
+      }
+    }
+  };
+
+  window.toggleMentionStyle = (prop) => {
+    if (!selectedOverlayId) return;
+    const overlay = storyOverlays.find((o) => o.id === selectedOverlayId);
+    if (!overlay || overlay.type !== "mention") return;
+
+    if (prop === "weight") {
+      overlay.styles.weight = overlay.styles.weight === "bold" ? "normal" : "bold";
+    } else if (prop === "style") {
+      overlay.styles.style = overlay.styles.style === "italic" ? "normal" : "italic";
+    } else if (prop === "mode") {
+      const modes = ["normal", "bg", "shadow"];
+      const currentIdx = modes.indexOf(overlay.styles.mode || "normal");
+      overlay.styles.mode = modes[(currentIdx + 1) % modes.length];
+    }
+
+    const el = document.getElementById(`ov-${overlay.id}`);
+    if (el) {
+      if (prop === "weight") el.style.fontWeight = overlay.styles.weight;
+      else if (prop === "style") el.style.fontStyle = overlay.styles.style;
+      else if (prop === "mode") applyVisualStyles(el, overlay.styles);
+    }
+  };
+
   window.openStoryLocationTool = () => {
     deselectOverlay();
     document.getElementById("storyLocationModal").style.display = "flex";
@@ -1862,7 +1966,14 @@
       y: 50,
       scale: 1,
       rotation: 0,
-      styles: {},
+      styles: {
+        font: "Classic",
+        color: "#4facfe",
+        size: 24,
+        weight: "bold",
+        style: "normal",
+        mode: "shadow",
+      },
     };
 
     storyOverlays.push(overlay);
@@ -1870,6 +1981,9 @@
     document
       .getElementById("storyOverlayContainer")
       .appendChild(createOverlayElement(overlay));
+
+    // Auto-select for styling
+    setTimeout(() => selectOverlay(overlay), 50);
   }
 
   window.closeStoryMentionTool = () => {
@@ -1892,6 +2006,55 @@
     document
       .getElementById("storyOverlayContainer")
       .appendChild(createOverlayElement(overlay));
+  };
+
+  window.switchStickerTab = (tab) => {
+    const results = document.getElementById("stickerResults");
+    results.innerHTML = "";
+    results.style.display = "grid";
+    results.style.gridTemplateColumns = "repeat(6, 1fr)";
+
+    document.querySelectorAll(".sticker-tab").forEach((t) => {
+      if (t.dataset.tab === tab) t.classList.add("active");
+      else t.classList.remove("active");
+    });
+
+    if (tab === "emojis") {
+      Object.keys(emojiCategories).forEach((cat) => {
+        emojiCategories[cat].forEach((e) => {
+          const d = document.createElement("div");
+          d.style.fontSize = "40px";
+          d.style.cursor = "pointer";
+          d.style.textAlign = "center";
+          d.textContent = e;
+          d.onclick = () => {
+            const overlay = {
+              id: Date.now(),
+              type: "emoji",
+              content: e,
+              x: 50,
+              y: 50,
+              scale: 2.5,
+              rotation: 0,
+              styles: {},
+            };
+            storyOverlays.push(overlay);
+            document
+              .getElementById("storyOverlayContainer")
+              .appendChild(createOverlayElement(overlay));
+            selectOverlay(overlay);
+            closeStoryStickerTool();
+          };
+          results.appendChild(d);
+        });
+      });
+    } else if (tab === "stickers") {
+      results.innerHTML = "<p style='grid-column: span 6; text-align:center; color:#888; padding:20px;'>Stickers coming soon!</p>";
+    }
+  };
+
+  window.closeStoryStickerTool = () => {
+    document.getElementById("storyStickerModal").style.display = "none";
   };
 
   window.openStoryStickerTool = () => {
@@ -1951,7 +2114,7 @@
       div.style.left = `${ov.x}%`;
       div.style.top = `${ov.y}%`;
       div.style.transform = `translate(-50%, -50%) scale(${ov.scale}) rotate(${ov.rotation}deg)`;
-      div.style.pointerEvents = ov.type === "mention" ? "auto" : "none";
+      div.style.pointerEvents = (ov.type === "mention" || ov.type === "credit") ? "auto" : "none";
       if (ov.type === "text") {
         div.textContent = ov.content;
         div.style.fontFamily = getFontFamily(ov.styles.font);
@@ -1996,6 +2159,16 @@
             openChat(ov.content.ownerId, ov.content.ownerName);
           }
         };
+      } else if (ov.type === "music") {
+        div.innerHTML = `
+          <div class="music-card-overlay">
+            <img src="${ov.thumbnail || '/images/music_placeholder.png'}" class="music-card-thumb">
+            <div class="music-card-info">
+              <div class="music-card-title">${ov.content}</div>
+              <div class="music-card-source">${ov.source === 'youtube' ? 'YouTube' : 'Pixabay'}</div>
+            </div>
+          </div>
+        `;
       }
       container.appendChild(div);
     });
@@ -2604,7 +2777,30 @@
   };
 
   document.getElementById("confirmMusicSelectionBtn").onclick = () => {
-    // currentStoryMusic is already set by playMusicPreview
+    // 1. Clean up existing music overlay
+    storyOverlays = storyOverlays.filter(o => o.type !== 'music');
+    const existingMusicEl = document.querySelector('.story-tag-music');
+    if (existingMusicEl) existingMusicEl.remove();
+
+    // 2. Create new music overlay card
+    if (currentStoryMusic) {
+      const overlay = {
+        id: Date.now(),
+        type: "music",
+        content: currentStoryMusic.title,
+        thumbnail: currentStoryMusic.thumbnail,
+        source: currentStoryMusic.source,
+        x: 50,
+        y: 70,
+        scale: 1,
+        rotation: 0,
+        styles: {},
+      };
+      storyOverlays.push(overlay);
+      const container = document.getElementById("storyOverlayContainer");
+      if (container) container.appendChild(createOverlayElement(overlay));
+    }
+
     updateSelectedMusicDisplay();
     closeMusicPicker();
   };
@@ -2667,6 +2863,12 @@
   }
 
   window.removeSelectedMusic = () => {
+    const musicOverlay = storyOverlays.find(o => o.type === 'music');
+    if (musicOverlay) {
+      const el = document.getElementById(`ov-${musicOverlay.id}`);
+      if (el) el.remove();
+      storyOverlays = storyOverlays.filter(o => o.type !== 'music');
+    }
     currentStoryMusic = null;
     stopTrimPreview();
     updateSelectedMusicDisplay();
