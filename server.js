@@ -1279,14 +1279,25 @@ app.get("/getFriends/:userId", (req, res) => {
   db.all(
     `
     SELECT DISTINCT u.id, u.name, u.avatar,
-    (SELECT COUNT(*) FROM messages WHERE sender = u.id AND receiver = ? AND status != 'seen') as unreadCount,
-    (SELECT message FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessage,
-    (SELECT type FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessageType
+    (SELECT COUNT(*) FROM messages 
+     WHERE sender = u.id AND receiver = ? AND status != 'seen'
+     AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')) as unreadCount,
+
+    (SELECT message FROM messages 
+     WHERE ((sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id))
+     AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')
+     ORDER BY id DESC LIMIT 1) as lastMessage,
+
+    (SELECT type FROM messages 
+     WHERE ((sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id))
+     AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')
+     ORDER BY id DESC LIMIT 1) as lastMessageType
+
     FROM friends f 
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
     `,
-    [userId, userId, userId, userId, userId, userId, userId, userId],
+    [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
     async (err, rows) => {
       if (err) {
         console.error("GET FRIENDS ERROR:", err);
@@ -1631,7 +1642,7 @@ app.post("/deleteStory", (req, res) => {
     });
   });
 });
-//
+
 // This must be after all API routes to ensure they are handled first.
 app.use(express.static("public"));
 // ================= SOCKET =================
@@ -2356,19 +2367,23 @@ io.on("connection", (socket) => {
     if (type === "everyone") {
       // Allow deletion if the user is either the sender or the receiver
       db.get(
-        `SELECT sender, receiver FROM messages WHERE id=?`,
+        `SELECT id, sender, receiver, status FROM messages WHERE id=?`,
         [msgId],
         (err, row) => {
-          if (!row) return;
+          if (err || !row) return;
           const isParticipant =
             String(row.sender) === userId || String(row.receiver) === userId;
           if (!isParticipant) return;
 
-          db.run(`DELETE FROM messages WHERE id=?`, [msgId]);
-
-          io.to(`user_${userId}`).to(`user_${to}`).emit("messageDeleted", {
-            msgId,
-            type: "everyone",
+          db.run(`DELETE FROM messages WHERE id=?`, [msgId], function (delErr) {
+            if (delErr) return;
+            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("messageDeleted", {
+              msgId: row.id,
+              type: "everyone",
+              senderId: row.sender,
+              receiverId: row.receiver,
+              wasUnread: row.status !== 'seen'
+            });
           });
         },
       );
@@ -2376,10 +2391,10 @@ io.on("connection", (socket) => {
 
     if (type === "me") {
       db.get(
-        `SELECT deleted_for FROM messages WHERE id=?`,
+        `SELECT id, sender, receiver, deleted_for FROM messages WHERE id=?`,
         [msgId],
         (err, row) => {
-          if (err) return console.error(err);
+          if (err || !row) return;
 
           let list = [];
 
@@ -2399,14 +2414,12 @@ io.on("connection", (socket) => {
             `UPDATE messages SET deleted_for=? WHERE id=?`,
             [clean, msgId],
             function (err) {
-              if (err) {
-                console.error("Delete failed:", err);
-                return;
-              }
-
+              if (err) return;
               io.to(`user_${userId}`).emit("messageDeleted", {
-                msgId,
+                msgId: row.id,
                 type: "me",
+                senderId: row.sender,
+                receiverId: row.receiver
               });
             },
           );

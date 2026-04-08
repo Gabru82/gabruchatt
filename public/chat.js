@@ -30,7 +30,8 @@ function formatPreviewText(message, type) {
   const labels = {
     image: "📷 Photo", video: "🎥 Video", audio: "🎤 Audio", sticker: "💟 Sticker",
     document: "📄 Document", profile_share: "👤 Shared a profile",
-    story_reaction: "❤️ Reacted to story", story_reply: "💬 Replied to story"
+    story_reaction: "❤️ Reacted to story", story_reply: "💬 Replied to story",
+    story_removed: "Story removed"
   };
   if (labels[type]) return labels[type];
   if (type === "call_log") return message.includes("Missed") ? "📞 Missed call" : "☎️ Call ended";
@@ -1380,6 +1381,14 @@ socket.on("requestCanceled", () => {
   }
 });
 
+socket.on("storyDeleted", (data) => {
+  loadFriends();
+  // If the chat screen is open, re-open it to refresh message bubbles
+  if (isChatOpen && currentFriendId) {
+    openChat(currentFriendId, currentFriendName);
+  }
+});
+
 socket.on("friendAdded", () => {
   loadFriends();
 });
@@ -2371,7 +2380,7 @@ function appendMessage(
       const sharedStoryData = JSON.parse(message);
       window.storyShareData = window.storyShareData || {};
       window.storyShareData[sharedStoryData.storyId] = sharedStoryData;
-//my
+
       contentHtml = `
         <div class="story-share-card">
           <div class="story-share-preview">
@@ -2798,9 +2807,38 @@ socket.on("messageReacted", ({ msgId, reactions }) => {
     reactEl.innerText = emojis;
   }
 });
-socket.on("messageDeleted", ({ msgId, type }) => {
-  const msgEls = document.querySelectorAll(`[data-id="${msgId}"]`);
-  msgEls.forEach((el) => el.remove());
+socket.on("messageDeleted", (data) => {
+  const { msgId, type, senderId, receiverId, wasUnread } = data;
+
+  // 1. Inside chat screen: Remove from UI if present
+  document.querySelectorAll(`[data-id="${msgId}"]`).forEach(el => el.remove());
+
+  // 2. Global UI update (Chat List)
+  const otherId = String(senderId) === String(userId) ? receiverId : senderId;
+  const chatItem = document.querySelector(`.chat-item[data-friend-id="${otherId}"]`);
+
+  if (chatItem) {
+    // Update unread count tracking
+    if (type === "everyone" && wasUnread && String(receiverId) === String(userId)) {
+      if (unreadCounts[otherId] && unreadCounts[otherId].count > 0) {
+        unreadCounts[otherId].count--;
+      }
+    }
+
+    // Update chat item preview
+    const msgEl = chatItem.querySelector(".chat-msg");
+    if (msgEl) msgEl.textContent = "Click to chat";
+
+    // Update badge visibility
+    const days = chatItem.querySelector(".chat-days");
+    const unread = unreadCounts[otherId];
+    if (unread && unread.count > 0) {
+      days.innerHTML = `<span class="unread-badge">${unread.count}</span>`;
+    } else {
+      const streak = parseInt(chatItem.dataset.streak) || 0;
+      days.innerHTML = streak > 0 ? `🔥 ${streak}` : "💬";
+    }
+  }
 });
 
 socket.on("messageEdited", ({ msgId, newText, type }) => {
@@ -3187,11 +3225,12 @@ async function loadFriends() {
 
     const fireHtml = friend.streak > 0 ? `🔥 ${friend.streak}` : "💬";
 
+    const lastMsgPreview = formatPreviewText(friend.lastMessage, friend.lastMessageType) || "Click to chat";
     item.innerHTML = `
       <img src="${getAvatarSrc(friend)}">
       <div class="chat-info">
         <div class="chat-name">${friend.name}</div>
-        <div class="chat-msg">${friend.lastMessage || "Click to chat"}</div>
+        <div class="chat-msg">${lastMsgPreview}</div>
       </div>
       <div class="chat-days">${fireHtml}</div>
     `;
