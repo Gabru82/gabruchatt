@@ -17,6 +17,26 @@ callSound.preload = "auto";
 callSound.loop = true;
 let isChatOpen = false;
 
+function formatPreviewText(message, type) {
+  if (!message) return "";
+  if (type === "story_share") {
+    try {
+      const data = JSON.parse(message);
+      return data.isMentioned === true ? "Mentioned you in a story" : "Shared a story";
+    } catch (e) {
+      return "Shared a story";
+    }
+  }
+  const labels = {
+    image: "📷 Photo", video: "🎥 Video", audio: "🎤 Audio", sticker: "💟 Sticker",
+    document: "📄 Document", profile_share: "👤 Shared a profile",
+    story_reaction: "❤️ Reacted to story", story_reply: "💬 Replied to story"
+  };
+  if (labels[type]) return labels[type];
+  if (type === "call_log") return message.includes("Missed") ? "📞 Missed call" : "☎️ Call ended";
+  return message.substring(0, 30) + (message.length > 30 ? "..." : "");
+}
+
 const canPlaySounds = () =>
   localStorage.getItem("notificationsEnabled") !== "false";
 
@@ -1988,8 +2008,7 @@ socket.on("newMessage", (data) => {
 
   unreadCounts[fromId] = {
     count: (unreadCounts[fromId]?.count || 0) + 1,
-    preview:
-      data.message.substring(0, 30) + (data.message.length > 30 ? "..." : ""),
+    preview: formatPreviewText(data.message, data.type),
   };
 
   updateFriendList();
@@ -2295,6 +2314,16 @@ function appendMessage(
       <div class="message-text">${message}</div>
     </div>
   `;
+    } else if (type === "story_removed") {
+      contentHtml = `
+        <div class="story-share-card removed" style="opacity: 0.6; padding: 15px; border: 1px dashed #555; border-radius: 12px; text-align: center;">
+          <div class="story-share-info">
+            <div class="story-share-owner" style="color: #888; font-size: 13px; font-style: italic;">
+              <i class="fa-solid fa-circle-exclamation"></i> Story removed
+            </div>
+          </div>
+        </div>
+  `;
     } else if (type === "audio") {
       div.classList.add("audio-message");
       contentHtml = `
@@ -2340,28 +2369,27 @@ function appendMessage(
       setTimeout(() => checkShareRelation(sharedData.sharedUserId, msgId), 50);
     } else if (type === "story_share") {
       const sharedStoryData = JSON.parse(message);
+      window.storyShareData = window.storyShareData || {};
+      window.storyShareData[sharedStoryData.storyId] = sharedStoryData;
+//my
       contentHtml = `
         <div class="story-share-card">
           <div class="story-share-preview">
             ${
               sharedStoryData.storyType === "video"
                 ? `<video src="${sharedStoryData.storyMedia}" class="share-story-preview" muted loop></video>`
-                : `<img src="${sharedStoryData.storyMedia} " class="share-story-preview">`
+                : `<img src="${sharedStoryData.storyMedia}" class="share-story-preview">`
             }
           </div>
           <div class="story-share-info">
             <div class="story-share-owner">Story by ${
               sharedStoryData.ownerName
             }</div>
-            <button class="story-share-view-btn" onclick="viewSharedStory(${
-              sharedStoryData.ownerId
-            }, '${sharedStoryData.storyMedia}', '${
-              sharedStoryData.storyType
-            }', '${sharedStoryData.storyId}', '${
-              sharedStoryData.ownerName
-            }', '${sharedStoryData.ownerAvatar}')">
-              Add Story
-            </button>
+            ${!isMe ? `
+              <button class="story-share-view-btn" onclick="handleAddStoryFromMention(${sharedStoryData.storyId})">
+                Add Story
+              </button>
+            ` : ''}
           </div>
         </div>
       `;
@@ -3118,9 +3146,13 @@ function updateFriendList() {
     if (typingUsers.get(friendId)) {
       msgEl.textContent = "typing...";
       days.innerHTML = "⏳";
-    } else if (unread && unread.count > 0) {
-      msgEl.textContent = unread.preview;
-      days.innerHTML = `<span class="unread-badge">${unread.count}</span>`;
+    } else if (unread) {
+      msgEl.textContent = unread.preview || "Click to chat";
+      if (unread.count > 0) {
+        days.innerHTML = `<span class="unread-badge">${unread.count}</span>`;
+      } else {
+        days.innerHTML = streakHtml;
+      }
     } else {
       msgEl.textContent = "Click to chat";
       days.innerHTML = streakHtml;
@@ -3140,12 +3172,10 @@ async function loadFriends() {
 
   // ✅ POPULATE UNREAD COUNTS FROM DB
   data.friends.forEach((friend) => {
-    if (friend.unreadCount > 0) {
-      unreadCounts[friend.id] = {
-        count: friend.unreadCount,
-        preview: friend.lastMessage,
-      };
-    }
+    unreadCounts[friend.id] = {
+      count: friend.unreadCount || 0,
+      preview: formatPreviewText(friend.lastMessage, friend.lastMessageType),
+    };
   });
 
   data.friends.forEach((friend) => {

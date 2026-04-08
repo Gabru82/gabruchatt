@@ -267,6 +267,11 @@ db.serialize(() => {
   db.run("ALTER TABLE stories ADD COLUMN mentions TEXT DEFAULT '[]'", (err) => {
     if (err && !err.message.includes("duplicate column")) console.error(err);
   });
+  db.run("ALTER TABLE stories ADD COLUMN parent_story_id INTEGER", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("stories parent_story_id error:", err.message);
+    }
+  });
 
   // ================= STORY VIEWS =================
   db.run(`
@@ -1275,12 +1280,13 @@ app.get("/getFriends/:userId", (req, res) => {
     `
     SELECT DISTINCT u.id, u.name, u.avatar,
     (SELECT COUNT(*) FROM messages WHERE sender = u.id AND receiver = ? AND status != 'seen') as unreadCount,
-    (SELECT message FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessage
+    (SELECT message FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessage,
+    (SELECT type FROM messages WHERE (sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id) ORDER BY id DESC LIMIT 1) as lastMessageType
     FROM friends f 
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
     `,
-    [userId, userId, userId, userId, userId, userId],
+    [userId, userId, userId, userId, userId, userId, userId, userId],
     async (err, rows) => {
       if (err) {
         console.error("GET FRIENDS ERROR:", err);
@@ -1495,13 +1501,13 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
 });
 
 app.post("/uploadStory", (req, res) => {
-  const { userId, media, type, overlays, music, privacy } = req.body;
+  const { userId, media, type, overlays, music, privacy, parentStoryId } = req.body;
   const mentions = Array.isArray(overlays) 
     ? overlays.filter(ov => ov.type === 'mention' && ov.userId).map(ov => ov.userId) 
     : [];
   db.run(
-    "INSERT INTO stories (user_id, media, type, overlays, music, privacy, mentions) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null, privacy || 'friends', JSON.stringify(mentions)],
+    "INSERT INTO stories (user_id, media, type, overlays, music, privacy, mentions, parent_story_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null, privacy || 'friends', JSON.stringify(mentions), parentStoryId || null],
     function (err) {
       if (err) { console.error("Error uploading story:", err); return res.json({ success: false }); }
       res.json({ success: true, storyId: this.lastID });
@@ -1600,11 +1606,32 @@ app.post("/reactToStory", (req, res) => {
 
 app.post("/deleteStory", (req, res) => {
   const { storyId, userId } = req.body;
-  db.run("DELETE FROM stories WHERE id = ? AND user_id = ?", [storyId, userId], (err) => {
-    res.json({ success: !err });
+  db.get("SELECT id FROM stories WHERE id = ? AND user_id = ?", [storyId, userId], (err, row) => {
+    if (err || !row) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    db.serialize(() => {
+      db.all("SELECT id FROM stories WHERE parent_story_id = ?", [storyId], (err, reshares) => {
+        const idsToDelete = [storyId, ...(reshares || []).map(r => r.id)];
+        const placeholders = idsToDelete.map(() => "?").join(",");
+        
+        db.run(`DELETE FROM stories WHERE id IN (${placeholders})`, idsToDelete, function(err) {
+          if (err) return res.json({ success: false });
+
+          db.run(`
+            UPDATE messages 
+            SET type = 'story_removed', message = '{"type": "story_removed"}' 
+            WHERE type = 'story_share' AND message LIKE ?
+          `, [`%"storyId":${storyId}%`], (err) => {
+            io.emit("storyUpdate");
+            io.emit("storyDeleted", { storyId, deletedIds: idsToDelete });
+            res.json({ success: true });
+          });
+        });
+      });
+    });
   });
 });
-
+//
 // This must be after all API routes to ensure they are handled first.
 app.use(express.static("public"));
 // ================= SOCKET =================

@@ -5,7 +5,12 @@
   let storiesData = [];
   let currentStoryIndex = 0;
   let currentUserStoryGroup = []; // 🔥 ADD THIS
+  let currentStoryParentId = null; // Track source for reshares
   let storyTimer = null; // For story progression
+  let accumulatedElapsed = 0;
+  let lastTimestamp = 0;
+  let storyDuration = 20000;
+  let currentFill = null;
   let activeStoriesForViewer = []; // Track currently viewing stories
   let isEditorOpen = false; // Controls playback lifecycle
   let trimLoopTimeout = null; // For recursive looping of trimmed segment
@@ -39,6 +44,67 @@
   let hasMovedDuringDrag = false;
   let selectedShareFriendId = null; // For sharing stories to chat
   let locationSearchTimer;
+
+  function animationStep(timestamp) {
+    if (!activeStoriesForViewer.length || viewerPause) return;
+    if (!lastTimestamp) lastTimestamp = timestamp;
+    const delta = timestamp - lastTimestamp;
+    lastTimestamp = timestamp;
+
+    const video = document.getElementById("viewerVideo");
+    if (video && !video.paused) {
+      accumulatedElapsed = video.currentTime * 1000;
+    } else {
+      accumulatedElapsed += delta;
+    }
+
+    if (currentFill) {
+      currentFill.style.width = Math.min((accumulatedElapsed / storyDuration) * 100, 100) + "%";
+    }
+
+    if (accumulatedElapsed < storyDuration) {
+      storyTimer = requestAnimationFrame(animationStep);
+    } else {
+      nextStory();
+    }
+  }
+
+  function pauseStoryPlayback() {
+    if (viewerPause) return;
+    viewerPause = true;
+    cancelAnimationFrame(storyTimer);
+    const video = document.getElementById("viewerVideo");
+    if (video) video.pause();
+    if (currentStoryMusicPlayer) {
+      if (currentStoryMusicPlayer.pause) currentStoryMusicPlayer.pause();
+      else if (currentStoryMusicPlayer.contentWindow) {
+        currentStoryMusicPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', "*");
+      }
+    }
+  }
+
+  function resumeStoryPlayback() {
+    if (!viewerPause) return;
+    viewerPause = false;
+    const video = document.getElementById("viewerVideo");
+    if (video) video.play();
+    if (currentStoryMusicPlayer) {
+      const story = activeStoriesForViewer[currentStoryIndex];
+      const music = story.music ? JSON.parse(story.music) : null;
+      if (music) {
+        const targetTime = (music.startTime || 0) + (accumulatedElapsed / 1000);
+        if (currentStoryMusicPlayer.currentTime !== undefined) {
+          currentStoryMusicPlayer.currentTime = targetTime;
+          currentStoryMusicPlayer.play();
+        } else if (currentStoryMusicPlayer.contentWindow) {
+          currentStoryMusicPlayer.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${targetTime}, true]}`, "*");
+          currentStoryMusicPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', "*");
+        }
+      }
+    }
+    lastTimestamp = 0;
+    storyTimer = requestAnimationFrame(animationStep);
+  }
 
   let trimPreviewAudioPlayer = null; // For playing the trimmed segment
 
@@ -640,6 +706,7 @@
     // 🔥 RESET EVERYTHING FOR NEW STORY
     currentStoryMusic = null; // ❗ FIX MAIN ISSUE
     stopTrimPreview(); // stop any previous preview
+    currentStoryParentId = null;
     stopMusicPreview();
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -667,6 +734,11 @@
     preview.innerHTML =
       mediaHtml +
       '<div id="storyOverlayContainer" class="overlay-container"></div>';
+
+    const container = document.getElementById("storyOverlayContainer");
+    storyOverlays.forEach((ov) => {
+      container.appendChild(createOverlayElement(ov));
+    });
 
     // Add background click to deselect
     preview.onclick = (e) => {
@@ -699,7 +771,7 @@
     currentStoryMedia = null;
     storyFileInput.value = "";
   };
-
+// Publish Story
   window.publishStory = async () => {
     if (!currentStoryMedia) return;
     const res = await fetch("/uploadStory", {
@@ -714,6 +786,7 @@
           ? { ...currentStoryMusic, duration: SEGMENT_DURATION }
           : null,
         privacy: document.getElementById("storyPrivacyInp").value,
+        parentStoryId: currentStoryParentId
       }),
     });
     const data = await res.json();
@@ -728,6 +801,11 @@
             ownerId: userId,
             ownerName: localStorage.getItem("username") || "Someone",
             ownerAvatar: localStorage.getItem("userAvatar") || "",
+            senderId: userId,
+            receiverId: ov.userId,
+            isMentioned: true,
+            overlays: storyOverlays,
+            music: currentStoryMusic
           };
           socket.emit("sendMessage", {
             to: ov.userId,
@@ -947,41 +1025,25 @@
       )
       .join("");
 
-    const currentFill =
+    currentFill =
       progress.children[currentStoryIndex].querySelector(".progress-fill");
 
-    let start = null;
-    let storyDuration = 20000; // Default 20s for images
-
-    function step(timestamp) {
-      if (viewerPause) {
-        start = null;
-        storyTimer = requestAnimationFrame(step);
-        return;
-      }
-      if (!start) start = timestamp;
-      const elapsed = timestamp - start;
-      currentFill.style.width =
-        Math.min((elapsed / storyDuration) * 100, 100) + "%";
-      if (elapsed < storyDuration) {
-        storyTimer = requestAnimationFrame(step);
-      } else {
-        nextStory();
-      }
-    }
+    accumulatedElapsed = 0;
+    lastTimestamp = 0;
+    storyDuration = 20000; // Default 20s for images
 
     if (story.type === "video") {
       const video = document.getElementById("viewerVideo");
       video.onloadedmetadata = () => {
         storyDuration = video.duration * 1000;
-        storyTimer = requestAnimationFrame(step);
+        storyTimer = requestAnimationFrame(animationStep);
       };
       if (video.readyState >= 1) {
         storyDuration = video.duration * 1000;
-        storyTimer = requestAnimationFrame(step);
+        storyTimer = requestAnimationFrame(animationStep);
       }
     } else {
-      storyTimer = requestAnimationFrame(step);
+      storyTimer = requestAnimationFrame(animationStep);
     }
 
     // Handle music playback
@@ -1015,9 +1077,7 @@
     isHolding = true;
 
     // HOLD → pause
-    setTimeout(() => {
-      if (isHolding) viewerPause = true;
-    }, 200);
+    setTimeout(() => { if (isHolding) pauseStoryPlayback(); }, 200);
   });
 
   viewer.addEventListener("pointerup", (e) => {
@@ -1037,7 +1097,7 @@
     const duration = Date.now() - startTime;
 
     isHolding = false;
-    viewerPause = false;
+    resumeStoryPlayback();
 
     // 🔥 DOUBLE TAP → reaction
     const now = Date.now();
@@ -1094,7 +1154,6 @@
   }
   window.openViewersList = async () => {
     // Pause story playback when viewers list is open
-    viewerPause = true;
     const modal = document.getElementById("storymod");
     modal.style.display = "flex";
 
@@ -1130,7 +1189,6 @@
   };
   window.reactToStory = async (emoji) => {
     if (activeStoriesForViewer[currentStoryIndex].user_id == userId) {
-      showPopup("Cannot react to your own story.");
       return;
     }
     const story = activeStoriesForViewer[currentStoryIndex];
@@ -1970,6 +2028,12 @@
         ownerId: currentStory.user_id,
         ownerName: currentStory.name,
         ownerAvatar: currentStory.avatar,
+        senderId: userId,
+        receiverId: selectedShareFriendId,
+        isMentioned: false,
+        overlays: currentStory.overlays ? JSON.parse(currentStory.overlays) : [],
+        music: currentStory.music ? JSON.parse(currentStory.music) : null,
+        timestamp: currentStory.created_at
       };
 
       socket.emit("sendMessage", {
@@ -1977,7 +2041,7 @@
         message: JSON.stringify(captionData), // Store data in message for story_share
         type: "story_share",
       });
-
+//
       showPopup(
         `Story shared to ${data.friends.find((f) => f.id === selectedShareFriendId)?.name || "chat"}!`,
       );
@@ -2000,6 +2064,7 @@
       data: currentStory.media,
       type: currentStory.type,
     };
+    currentStoryParentId = currentStory.id;
 
     // Also copy the music from the original story
     if (currentStory.music) {
@@ -2030,6 +2095,31 @@
 
     // Close viewer and open editor
     closeStoryViewer();
+    openStoryEditor();
+  };
+
+  window.handleAddStoryFromMention = (storyId) => {
+    const data = window.storyShareData ? window.storyShareData[storyId] : null;
+    if (!data) return;
+
+   
+
+    closeStoryViewer();
+    currentStoryMedia = { data: data.storyMedia, type: data.storyType };
+    currentStoryMusic = data.music || null;
+    currentStoryParentId = storyId;
+
+    const creditOverlay = {
+      id: Date.now(),
+      type: "credit",
+      content: {
+        ownerId: data.ownerId,
+        ownerName: data.ownerName,
+        ownerAvatar: data.ownerAvatar,
+      },
+      x: 50, y: 90, scale: 1, rotation: 0, styles: {},
+    };
+    storyOverlays = (data.overlays || []).concat(creditOverlay);
     openStoryEditor();
   };
 
@@ -2607,12 +2697,6 @@
       currentStoryMusicPlayer = audio;
     }
 
-    // Enforce strict 20s (or specified duration) hard stop
-    const stopDuration = musicMetadata.duration || 20;
-    storyMusicStopTimeout = setTimeout(() => {
-      stopStoryMusicPlayback();
-    }, stopDuration * 1000);
-
     // If it's a video story, mute the story video to hear the music
     if (isVideoStory) {
       const viewerVideo = document.getElementById("viewerVideo");
@@ -2733,6 +2817,32 @@
   }
 
   socket.on("storyUpdate", () => loadStories());
+  socket.on("storyDeleted", (data) => {
+    // Real-time cleanup of reshares and UI
+    storiesData = storiesData.filter(s => !data.deletedIds.includes(s.id));
+    
+    const groups = {};
+    storiesData.forEach((s) => {
+      if (!groups[s.user_id]) {
+        groups[s.user_id] = {
+          user_id: s.user_id,
+          name: s.name,
+          avatar: s.avatar,
+          stories: [],
+        };
+      }
+      groups[s.user_id].stories.push(s);
+    });
+    groupedStories = Object.values(groups);
+    renderStoryTray();
+
+    if (activeStoriesForViewer.length > 0) {
+      const current = activeStoriesForViewer[currentStoryIndex];
+      if (data.deletedIds.includes(current.id)) {
+        closeStoryViewer();
+      }
+    }
+  });
 
   // Init
   loadStories();

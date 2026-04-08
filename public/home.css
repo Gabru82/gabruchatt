@@ -2598,12 +2598,37 @@ EDIT PROFILE MODAL
 }
 
 .story-privacy-select {
-    background: rgba(255,255,255,0.1);
-    color: white;
-    border: 1px solid rgba(255,255,255,0.2);
-    padding: 8px 15px;
-    border-radius: 20px;
-    outline: none;
+  appearance: none !important; /* remove default style */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 10px 40px 10px 15px;
+  border-radius: 25px;
+  outline: none;
+  font-size: 14px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+
+  /* custom arrow */
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg fill='white' viewBox='0 0 20 20'><path d='M5 7l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+}
+
+/* Dropdown options */
+.story-privacy-select option {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+/* Focus effect */
+.story-privacy-select:focus {
+  border-color: #ffcc00;
+  box-shadow: 0 0 0 2px rgba(255, 204, 0, 0.2);
 }
 
 .story-viewer-footer {
