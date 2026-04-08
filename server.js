@@ -264,6 +264,9 @@ db.serialize(() => {
   db.run("ALTER TABLE stories ADD COLUMN reactions TEXT DEFAULT '{}'", (err) => {
     if (err && !err.message.includes("duplicate column")) console.error(err);
   });
+  db.run("ALTER TABLE stories ADD COLUMN mentions TEXT DEFAULT '[]'", (err) => {
+    if (err && !err.message.includes("duplicate column")) console.error(err);
+  });
 
   // ================= STORY VIEWS =================
   db.run(`
@@ -1493,9 +1496,12 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
 
 app.post("/uploadStory", (req, res) => {
   const { userId, media, type, overlays, music, privacy } = req.body;
+  const mentions = Array.isArray(overlays) 
+    ? overlays.filter(ov => ov.type === 'mention' && ov.userId).map(ov => ov.userId) 
+    : [];
   db.run(
-    "INSERT INTO stories (user_id, media, type, overlays, music, privacy) VALUES (?, ?, ?, ?, ?, ?)",
-    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null, privacy || 'friends'],
+    "INSERT INTO stories (user_id, media, type, overlays, music, privacy, mentions) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null, privacy || 'friends', JSON.stringify(mentions)],
     function (err) {
       if (err) { console.error("Error uploading story:", err); return res.json({ success: false }); }
       res.json({ success: true, storyId: this.lastID });
@@ -1514,11 +1520,12 @@ app.get("/getStories/:userId", (req, res) => {
 
       (SELECT COUNT(*) FROM story_views WHERE story_id = s.id) as view_count,
 
-      -- 🔥 ADD THIS (IMPORTANT)
       CASE 
         WHEN sv.user_id IS NOT NULL THEN 1 
         ELSE 0 
-      END as seen
+      END as seen,
+
+      EXISTS (SELECT 1 FROM json_each(IFNULL(s.mentions, '[]')) WHERE value = CAST(? AS INTEGER)) as isMentioned
 
     FROM stories s
 
@@ -1543,7 +1550,7 @@ app.get("/getStories/:userId", (req, res) => {
     ORDER BY s.created_at DESC
   `;
 
-  db.all(query, [userId, userId, userId, userId], (err, rows) => {
+  db.all(query, [userId, userId, userId, userId, userId], (err, rows) => {
     if (err) return res.json({ success: false });
     res.json({ success: true, stories: rows });
   });

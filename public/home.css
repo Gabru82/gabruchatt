@@ -1434,6 +1434,29 @@ EDIT PROFILE MODAL
     opacity: 0;
   }
 }
+.story-share-view-btn{
+    background: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    width: 100%;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 5px rgba(0, 0, 0, 0.849);
+}
+.add-mentioned-story {
+  display: none;
+  text-align: center;
+  padding: 10px;
+  cursor: pointer;
+  color: #000000;
+  font-weight: bold;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.757);
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
 .story-share-preview {
     background: #111;
     border-radius: 12px;

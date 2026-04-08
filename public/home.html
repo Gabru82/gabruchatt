@@ -776,15 +776,17 @@
 
                 <!-- Footer Interactions -->
                 <div class="story-viewer-footer">
+                    <div id="addMentionedToStory" class="add-mentioned-story">
+                        Add story
+                    </div>
                     <div class="story-reply-container">
                         <input type="text" id="storyReplyInput" placeholder="Send a message...">
                         <button onclick="event.stopPropagation(); sendStoryReply()">Send</button>
                     </div>
                     <div class="story-actions-row">
                         <div class="story-views-info" onclick="openViewersList()">
-                            <i class="fa-solid fa-share-nodes" onclick="event.stopPropagation(); shareCurrentStory()"></i>
-                            <i class="fa-solid fa-plus" id="addStoryToMyStoryBtn" style="display:none;" onclick="event.stopPropagation(); addCurrentStoryToMyStory()"></i>
-
+                            <i class="fa-solid fa-share-nodes"
+                                onclick="event.stopPropagation(); shareCurrentStory()"></i>
                             <i class="fa-solid fa-eye"></i> <span id="storyViewCount">0</span>
                         </div>
                         <div class="story-reactions-strip">

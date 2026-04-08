@@ -2360,7 +2360,7 @@ function appendMessage(
             }', '${sharedStoryData.storyId}', '${
               sharedStoryData.ownerName
             }', '${sharedStoryData.ownerAvatar}')">
-              View Story
+              Add Story
             </button>
           </div>
         </div>

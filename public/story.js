@@ -865,9 +865,7 @@
     const replyContainer = document.querySelector(".story-reply-container");
     const reactionsStrip = document.querySelector(".story-reactions-strip");
     const viewsInfo = document.querySelector(".story-views-info");
-    const addStoryToMyStoryBtn = document.getElementById(
-      "addStoryToMyStoryBtn",
-    );
+    const addMentionedToStory = document.getElementById("addMentionedToStory");
     const viewCountIcon = viewsInfo ? viewsInfo.querySelector(".fa-eye") : null;
     const viewCountSpan = document.getElementById("storyViewCount");
 
@@ -892,18 +890,23 @@
     if (story.user_id == userId) {
       if (replyContainer) replyContainer.style.display = "none";
       if (reactionsStrip) reactionsStrip.style.display = "none";
-      // Owner: Show view count, hide "Add to Story"
       if (viewCountIcon) viewCountIcon.style.display = "inline-block";
       if (viewCountSpan) viewCountSpan.style.display = "inline-block";
-      if (addStoryToMyStoryBtn) addStoryToMyStoryBtn.style.display = "none";
+      if (addMentionedToStory) addMentionedToStory.style.display = "none";
     } else {
       if (replyContainer) replyContainer.style.display = "flex";
       if (reactionsStrip) reactionsStrip.style.display = "flex";
-      // Viewer: Hide view count, show "Add to Story"
       if (viewCountIcon) viewCountIcon.style.display = "none";
       if (viewCountSpan) viewCountSpan.style.display = "none";
-      if (addStoryToMyStoryBtn)
-        addStoryToMyStoryBtn.style.display = "inline-block";
+
+      if (addMentionedToStory) {
+        if (!!story.isMentioned) {
+          addMentionedToStory.style.display = "block";
+          addMentionedToStory.onclick = (e) => { e.stopPropagation(); addCurrentStoryToMyStory(); };
+        } else {
+          addMentionedToStory.style.display = "none";
+        }
+      }
     }
 
     name.textContent = story.name;
@@ -1905,7 +1908,6 @@
         div.style.display = "flex";
         div.style.alignItems = "center";
         div.style.gap = "8px";
-        div.innerHTML = `<img src="${ov.content.ownerAvatar}" style="width:24px; height:24px; border-radius:50%;"> @${ov.content.ownerName}`;
         div.onclick = (e) => {
           e.stopPropagation();
           if (!isEditorOpen) {
