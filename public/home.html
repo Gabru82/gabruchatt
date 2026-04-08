@@ -735,11 +735,17 @@
 
             <div class="editor-footer">
                 <button class="action-btn-outline" onclick="closeStoryEditor()">Cancel</button>
-                <select id="storyPrivacyInp" class="story-privacy-select">
-                    <option value="friends">Friends</option>
-                    <option value="public">Public</option>
-                    <option value="private">Private (Only Me)</option>
-                </select>
+                <div class="custom-privacy-selector">
+                    <div id="storyPrivacyDisplay" class="story-privacy-select" onclick="togglePrivacyMenu(event)">
+                        Friends
+                    </div>
+                    <div id="storyPrivacyMenu" class="privacy-menu-popup">
+                        <div class="privacy-option" onclick="selectPrivacy('friends', 'Friends')">Friends</div>
+                        <div class="privacy-option" onclick="selectPrivacy('public', 'Public')">Public</div>
+                        <div class="privacy-option" onclick="selectPrivacy('private', 'Private (Only Me)')">Private (Only Me)</div>
+                    </div>
+                    <input type="hidden" id="storyPrivacyInp" value="friends">
+                </div>
                 <button onclick="publishStory()" class="publish-btn-story">Add Story</button>
             </div>
         </div>

@@ -770,7 +770,30 @@
     document.getElementById("storyEditorModal").style.display = "none";
     currentStoryMedia = null;
     storyFileInput.value = "";
+    // Reset privacy UI
+    const privacyInp = document.getElementById("storyPrivacyInp");
+    const privacyDisp = document.getElementById("storyPrivacyDisplay");
+    if (privacyInp) privacyInp.value = "friends";
+    if (privacyDisp) privacyDisp.textContent = "Friends";
   };
+
+  window.togglePrivacyMenu = (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById("storyPrivacyMenu");
+    if (menu) menu.classList.toggle("show");
+  };
+
+  window.selectPrivacy = (val, label) => {
+    document.getElementById("storyPrivacyInp").value = val;
+    document.getElementById("storyPrivacyDisplay").textContent = label;
+    document.getElementById("storyPrivacyMenu").classList.remove("show");
+  };
+
+  document.addEventListener("click", () => {
+    const menu = document.getElementById("storyPrivacyMenu");
+    if (menu) menu.classList.remove("show");
+  });
+
 // Publish Story
   window.publishStory = async () => {
     if (!currentStoryMedia) return;

@@ -2327,7 +2327,7 @@ function appendMessage(
       contentHtml = `
         <div class="story-share-card removed" style="opacity: 0.6; padding: 15px; border: 1px dashed #555; border-radius: 12px; text-align: center;">
           <div class="story-share-info">
-            <div class="story-share-owner" style="color: #888; font-size: 13px; font-style: italic;">
+            <div class="story-share-owner" style="color: #dedede; font-size: 13px; font-style: italic;">
               <i class="fa-solid fa-circle-exclamation"></i> Story removed
             </div>
           </div>

@@ -2597,6 +2597,47 @@ EDIT PROFILE MODAL
     pointer-events: none;
 }
 
+.custom-privacy-selector {
+    position: relative;
+}
+
+.privacy-menu-popup {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px); /* Position on top of the button */
+    left: 0;
+    width: 100%;
+    min-width: 160px;
+    background: rgba(30, 30, 30, 0.95);
+    backdrop-filter: blur(15px);
+    border-radius: 15px;
+    overflow: hidden;
+    z-index: 1000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.6);
+    animation: slideUpFadeIn 0.2s ease-out;
+}
+
+.privacy-menu-popup.show {
+    display: block;
+}
+
+.privacy-option {
+    padding: 12px 15px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: center;
+    transition: background 0.2s;
+}
+
+.privacy-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+@keyframes slideUpFadeIn {
+    from { transform: translateY(10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
 .story-privacy-select {
   appearance: none !important; /* remove default style */
   -webkit-appearance: none;
