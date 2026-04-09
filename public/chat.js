@@ -874,9 +874,6 @@ function openUserProfile() {
     // NAME
     document.getElementById("profileModalName").innerText = user.name || "User";
 
-    document.getElementById("profileUsername").innerText =
-      "@" + (user.name || "user");
-
     document.getElementById("profileBioBottom").innerText =
       user.bio || "No bio available";
 
