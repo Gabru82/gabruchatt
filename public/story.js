@@ -904,7 +904,7 @@
 
     myItem.innerHTML = `
             <div class="story-circle ${hasMyStories ? "" : "no-ring"}">
-                <img src="${myAvatar}">
+                <img id="myStoryAvatar" src="${myAvatar}">
                 <div class="add-story-overlay"><i class="fa-solid fa-plus"></i></div>
             </div>
             <div class="story-user-name">Your Story</div>
@@ -946,10 +946,11 @@
       const item = document.createElement("div");
       item.className = "story-item";
       item.onclick = () => openStoryViewer(uid);
+      item.setAttribute("data-uid", uid);
 
       item.innerHTML = `
     <div class="story-circle ${allSeen ? "seen-story" : ""}">
-        <img src="${user.avatar || getAvatarSrc(uid)}">
+        <img src="${user.avatar}">
     </div>
     <div class="story-user-name">${user.name}</div>
   `;
@@ -995,12 +996,7 @@
     cancelAnimationFrame(storyTimer);
 
     // Use global helper for avatar if available
-    const avatarUrl =
-      story.avatar ||
-      (window.getAvatarSrc
-        ? window.getAvatarSrc(story.user_id)
-        : `https://i.pravatar.cc/150?img=${(story.user_id % 70) + 1}`);
-    avatar.src = avatarUrl;
+    avatar.src = story.avatar;
 
     // ✅ Ownership logic
     if (viewsInfo) viewsInfo.style.display = "flex"; // Always show the action bar
@@ -1231,7 +1227,7 @@
         div.className = "friend-item-mini"; // Reuse existing styles
         div.style.marginBottom = "10px";
         div.innerHTML = `
-          <img src="${v.avatar || (window.getAvatarSrc ? window.getAvatarSrc(v.id) : `https://i.pravatar.cc/150?img=${(v.id % 70) + 1}`)}">
+          <img src="${v.avatar}">
           <div style="flex:1; text-align:left;"><div style="font-weight:600; color:white;">${v.name}</div></div>
         `;
         list.appendChild(div);
@@ -3137,6 +3133,44 @@
       currentStoryMusicPlayer = null;
     }
   }
+
+  socket.on("storyViewed", (data) => {
+    const { storyId, viewerId, ownerId } = data;
+
+    // 1. Update local state and check for owner UI update
+    const story = storiesData.find((s) => s.id == storyId);
+    if (story) {
+      // Use a local set to track viewers per session to prevent duplicate UI increments
+      story.localViewers = story.localViewers || new Set();
+      if (!story.localViewers.has(viewerId)) {
+        story.localViewers.add(viewerId);
+
+        // If current user is the owner, increment view count locally and update active UI
+        if (userId == ownerId) {
+          story.view_count = (story.view_count || 0) + 1;
+          const viewCountSpan = document.getElementById("storyViewCount");
+          // Only update UI if the user is currently looking at this specific story
+          if (viewCountSpan && activeStoriesForViewer[currentStoryIndex]?.id == storyId) {
+            viewCountSpan.textContent = story.view_count;
+          }
+        }
+      }
+    }
+
+    // 2. If current user is the viewer, mark the story as seen in the tray
+    if (userId == viewerId) {
+      if (story) story.seen = 1;
+
+      const group = groupedStories.find((g) => g.user_id == ownerId);
+      if (group && group.stories.every((s) => s.seen == 1)) {
+        const trayItem = document.querySelector(`.story-item[data-uid="${ownerId}"]`);
+        if (trayItem) {
+          const circle = trayItem.querySelector(".story-circle");
+          if (circle) circle.classList.add("seen-story");
+        }
+      }
+    }
+  });
 
   socket.on("storyUpdate", () => loadStories());
   socket.on("storyDeleted", (data) => {

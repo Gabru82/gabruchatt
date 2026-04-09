@@ -585,7 +585,8 @@ window.closePasswordModal = function () {
       }
 
       document.getElementById("fullEditModal").style.display = "none";
-      loadMyProfile(false);
+      // UI synchronization is now handled globally via the 'profileUpdated' socket event 
+      // broadcasted by the server.
     } else {
       showPopup(data.message || "Update failed");
     }

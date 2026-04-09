@@ -16,13 +16,16 @@ messageSound.preload = "auto";
 callSound.preload = "auto";
 callSound.loop = true;
 let isChatOpen = false;
+let cachedFriends = [];
 
 function formatPreviewText(message, type) {
   if (!message) return "";
   if (type === "story_share") {
     try {
       const data = JSON.parse(message);
-      return data.isMentioned === true ? "Mentioned you in a story" : "Shared a story";
+      return data.isMentioned === true
+        ? "Mentioned you in a story"
+        : "Shared a story";
     } catch (e) {
       return "Shared a story";
     }
@@ -36,13 +39,19 @@ function formatPreviewText(message, type) {
     }
   }
   const labels = {
-    image: "📷 Photo", video: "🎥 Video", audio: "🎤 Audio", sticker: "💟 Sticker",
-    document: "📄 Document", profile_share: "👤 Shared a profile",
-    story_reaction: "❤️ Reacted to story", story_reply: "💬 Replied to story",
-    story_removed: "Story removed"
+    image: "📷 Photo",
+    video: "🎥 Video",
+    audio: "🎤 Audio",
+    sticker: "💟 Sticker",
+    document: "📄 Document",
+    profile_share: "👤 Shared a profile",
+    story_reaction: "❤️ Reacted to story",
+    story_reply: "💬 Replied to story",
+    story_removed: "Story removed",
   };
   if (labels[type]) return labels[type];
-  if (type === "call_log") return message.includes("Missed") ? "📞 Missed call" : "☎️ Call ended";
+  if (type === "call_log")
+    return message.includes("Missed") ? "📞 Missed call" : "☎️ Call ended";
   return message.substring(0, 30) + (message.length > 30 ? "..." : "");
 }
 
@@ -86,7 +95,7 @@ window.showPopup = function (message) {
       popup.style.display = "none";
     }, 2000);
   }
-}
+};
 const showPopup = window.showPopup;
 setupCustomPopup();
 
@@ -586,10 +595,7 @@ async function loadNotifications() {
                 </div>`;
       } else {
         // Friend-related notifications use actual sender profile image
-        const avatarSrc =
-          n.senderAvatar ||
-          `https://i.pravatar.cc/150?img=${(n.sender_id % 70) + 1}`;
-        avatarContent = `<img src="${avatarSrc}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 255, 255, 0.1);">`;
+        avatarContent = `<img src="${n.senderAvatar}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 255, 255, 0.1);">`;
 
         if (n.type === "friend_request") {
           actionText = "sent you a friend request";
@@ -857,33 +863,12 @@ window.resetProfileAlias = async function () {
   if (res.ok) {
     showPopup("Reset to original");
     closeProfileMenu();
-
-    // Refresh lists and trays
-    loadFriends();
-    if (window.loadStories) window.loadStories();
-
-    // Update current conversation UI
     const profileRes = await fetch(`/getMyProfile/${currentFriendId}`);
     const profileData = await profileRes.json();
     if (profileData.success) {
-      const originalUser = profileData.user;
-      currentFriendName = originalUser.name;
-
-      // Update Header
-      const headerName = document.querySelector(".chat-header-info span:first-child");
-      if (headerName) headerName.innerText = originalUser.name;
-      const headerAvatar = document.querySelector("#chatName img");
-      if (headerAvatar) headerAvatar.src = getAvatarSrc(originalUser);
-
-      // Update Profile Modal if open
-      if (document.getElementById("userProfileModal").style.display === "flex") {
-        openUserProfile();
-      }
-
-      // Update sender labels in message list
-      document.querySelectorAll(".message.received .message-sender").forEach((el) => {
-        el.innerText = originalUser.name;
-      });
+      const u = profileData.user;
+      refreshUserUI(currentFriendId, "name", u.name);
+      refreshUserUI(currentFriendId, "avatar", getAvatarSrc(u));
     }
   }
 };
@@ -899,76 +884,82 @@ function openUserProfile() {
   loadSharedInfo(currentFriendId);
 
   // NEW DATA
-  socket.emit("getUserProfile", { userId: currentFriendId, ownerId: userId }, (res) => {
-    if (!res || !res.success) return;
+  socket.emit(
+    "getUserProfile",
+    { userId: currentFriendId, ownerId: userId },
+    (res) => {
+      if (!res || !res.success) return;
 
-    const user = res.data;
+      const user = res.data;
 
-    // AVATAR
-    document.getElementById("profileModalAvatar").src =
-      user.avatar || getAvatarSrc(currentFriendId);
+      // AVATAR
+      document.getElementById("profileModalAvatar").src =
+        user.avatar || getAvatarSrc(currentFriendId);
 
-    // SETUP ALIAS CLICKS
-    const modalAvatar = document.getElementById("profileModalAvatar");
-    modalAvatar.style.cursor = "pointer";
-    modalAvatar.title = "Click to set custom avatar";
-    modalAvatar.onclick = () => document.getElementById("customAvatarInput").click();
+      // SETUP ALIAS CLICKS
+      const modalAvatar = document.getElementById("profileModalAvatar");
+      modalAvatar.style.cursor = "pointer";
+      modalAvatar.title = "Click to set custom avatar";
+      modalAvatar.onclick = () =>
+        document.getElementById("customAvatarInput").click();
 
-    const modalName = document.getElementById("profileModalName");
-    modalName.style.cursor = "pointer";
-    modalName.title = "Click to set custom name";
-    modalName.onclick = () => editFriendAliasName(user.name);
+      const modalName = document.getElementById("profileModalName");
+      modalName.style.cursor = "pointer";
+      modalName.title = "Click to set custom name";
+      modalName.onclick = () => editFriendAliasName(user.name);
 
-    // COVER
-    const coverImg = document.getElementById("profileCoverImg");
-    coverImg.src = user.cover
-      ? user.cover
-      : "https://via.placeholder.com/600x200/222/fff?text=No+Cover";
+      // COVER
+      const coverImg = document.getElementById("profileCoverImg");
+      coverImg.src = user.cover
+        ? user.cover
+        : "https://via.placeholder.com/600x200/222/fff?text=No+Cover";
 
-    // NAME
-    document.getElementById("profileModalName").innerText = user.name || "User";
+      // NAME
+      document.getElementById("profileModalName").innerText =
+        user.name || "User";
 
-    document.getElementById("profileBioBottom").innerText =
-      user.bio || "No bio available";
+      document.getElementById("profileBioBottom").innerText =
+        user.bio || "No bio available";
 
-    // CITY (TOP + BOTTOM)
-    document.getElementById("profileCityBottom").innerText =
-      "📍 " + user.city || "";
+      // CITY (TOP + BOTTOM)
+      document.getElementById("profileCityBottom").innerText =
+        "📍 " + user.city || "";
 
-    // EMAIL
-    document.getElementById("profileEmail").innerText = user.email || "";
+      // EMAIL
+      document.getElementById("profileEmail").innerText = user.email || "";
 
-    // STATS
-    if (user.birthday) {
-      const [y, m, d] = user.birthday.split("-");
-      const months = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      document.getElementById("statBirthday").textContent =
-        `${parseInt(d)} ${months[parseInt(m) - 1]}`;
-    } else {
-      document.getElementById("statBirthday").textContent = "--";
-    }
-    document.getElementById("statScore").innerText = user.score || 0;
+      // STATS
+      if (user.birthday) {
+        const [y, m, d] = user.birthday.split("-");
+        const months = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+        document.getElementById("statBirthday").textContent =
+          `${parseInt(d)} ${months[parseInt(m) - 1]}`;
+      } else {
+        document.getElementById("statBirthday").textContent = "--";
+      }
+      document.getElementById("statScore").innerText = user.score || 0;
 
-    document.getElementById("statLevel").innerText = user.level || 1;
+      document.getElementById("statLevel").innerText = user.level || 1;
 
-    document.getElementById("statPosts").innerText = user.posts || 0;
-  });
+      document.getElementById("statPosts").innerText = user.posts || 0;
+    },
+  );
 }
 
-window.editFriendAliasName = function(currentName) {
+window.editFriendAliasName = function (currentName) {
   const modal = document.getElementById("aliasNameModal");
   const input = document.getElementById("aliasNameInput");
   const confirmBtn = document.getElementById("confirmAliasBtn");
@@ -980,14 +971,175 @@ window.editFriendAliasName = function(currentName) {
   confirmBtn.onclick = () => {
     const newName = input.value.trim();
     if (newName !== "") {
-      saveAlias(currentFriendId, 'name', newName);
+      saveAlias(currentFriendId, "name", newName);
       closeAliasModal();
     }
   };
 };
 
-window.closeAliasModal = function() {
+window.closeAliasModal = function () {
   document.getElementById("aliasNameModal").style.display = "none";
+};
+window.refreshUserUI = function (targetId, type, value) {
+  const idStr = String(targetId);
+
+  // 1. Update Chat List feed items
+  document
+    .querySelectorAll(`.chat-item[data-friend-id="${idStr}"]`)
+    .forEach((item) => {
+      if (type === "name") {
+        const nameEl = item.querySelector(".chat-name");
+        if (nameEl) nameEl.innerText = value;
+      } else if (type === "avatar") {
+        const imgEl = item.querySelector("img");
+        if (imgEl) imgEl.src = value;
+      }
+    });
+
+  // 2. Update Header & current conversation if this friend is active
+  if (String(currentFriendId) === idStr) {
+    if (type === "name") {
+      currentFriendName = value;
+      const headerName = document.querySelector(
+        ".chat-header-info span:first-child",
+      );
+      if (headerName) headerName.innerText = value;
+
+      document
+        .querySelectorAll(
+          `.message.received[data-sender="${idStr}"] .message-sender`,
+        )
+        .forEach((el) => {
+          el.innerText = value;
+        });
+    } else if (type === "avatar") {
+      const headerAvatar = document.querySelector("#chatName img");
+      if (headerAvatar) headerAvatar.src = value;
+    }
+  }
+
+  // 3. Update the Friend Profile Modal if it's currently open for this user
+  if (
+    document.getElementById("userProfileModal").style.display === "flex" &&
+    String(currentFriendId) === idStr
+  ) {
+    if (type === "name") {
+      const modalName = document.getElementById("profileModalName");
+      if (modalName) modalName.innerText = value;
+    } else if (type === "avatar") {
+      const modalAvatar = document.getElementById("profileModalAvatar");
+      if (modalAvatar) modalAvatar.src = value;
+    }
+  }
+
+  // 4. Trigger re-render of components that rely on global data (like stories)
+  if (window.loadStories) window.loadStories();
+
+  // 5. Update the local cache used for search filtering
+  const friendIdx = cachedFriends.findIndex((f) => String(f.id) === idStr);
+  if (friendIdx > -1) {
+    if (type === "name") cachedFriends[friendIdx].name = value;
+    else if (type === "avatar") cachedFriends[friendIdx].avatar = value;
+  }
+};
+
+window.updateUserUI = function (userData) {
+  const { userId: targetId, name, avatar, cover, bio, city, birthday, email, links } = userData;
+  const idStr = String(targetId);
+  const myId = localStorage.getItem("userId");
+
+  const formatBirthday = (dateStr) => {
+    if (!dateStr) return "--";
+    const parts = dateStr.split("-");
+    if (parts.length < 3) return "--";
+    const [y, m, d] = parts;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${parseInt(d)} ${months[parseInt(m) - 1]}`;
+  };
+
+  // 1. Update Chat List Feed items
+  document.querySelectorAll(`.chat-item[data-friend-id="${idStr}"]`).forEach((item) => {
+    if (name) {
+      const nameEl = item.querySelector(".chat-name");
+      if (nameEl) nameEl.innerText = name;
+    }
+    if (avatar) {
+      const imgEl = item.querySelector("img");
+      if (imgEl) imgEl.src = avatar;
+    }
+  });
+
+  // 2. Self-Profile updates
+  if (idStr === myId) {
+    if (name) {
+      localStorage.setItem("username", name);
+      const dispName = document.getElementById("dispName");
+      if (dispName) dispName.textContent = name;
+    }
+    if (avatar) {
+      localStorage.setItem("userAvatar", avatar);
+      const elements = [
+        document.getElementById("profileImage"),
+        document.getElementById("profileBtn"),
+        document.getElementById("myStoryAvatar"),
+        document.getElementById("myAvatarPreview"),
+      ];
+      elements.forEach((el) => { if (el) el.src = avatar; });
+    }
+    if (cover) {
+      const coverPreview = document.getElementById("coverPreview");
+      if (coverPreview) coverPreview.src = cover;
+    }
+    if (bio !== undefined) {
+      const dispBio = document.getElementById("dispBio");
+      if (dispBio) dispBio.textContent = bio || "Tell the world about yourself...";
+    }
+    if (city !== undefined) {
+      const dispCityText = document.getElementById("dispCityText");
+      if (dispCityText) dispCityText.textContent = city || "Add city";
+    }
+    if (links !== undefined) {
+      const dispLink = document.getElementById("dispLink");
+      if (dispLink) dispLink.textContent = links || "No website";
+    }
+    if (birthday !== undefined) {
+      const statBirthday2 = document.getElementById("statBirthday2");
+      if (statBirthday2) statBirthday2.textContent = formatBirthday(birthday);
+    }
+  }
+
+  // 3. Active Chat Header & Messages
+  if (String(currentFriendId) === idStr) {
+    if (name) {
+      currentFriendName = name;
+      const headerName = document.querySelector(".chat-header-info span:first-child");
+      if (headerName) headerName.innerText = name;
+      document.querySelectorAll(`.message.received[data-sender="${idStr}"] .message-sender`).forEach((el) => {
+        el.innerText = name;
+      });
+    }
+    if (avatar) {
+      const headerAvatar = document.querySelector("#chatName img");
+      if (headerAvatar) headerAvatar.src = avatar;
+    }
+  }
+
+  // 4. Friend Profile Modal
+  if (document.getElementById("userProfileModal").style.display === "flex" && String(currentFriendId) === idStr) {
+    if (name) document.getElementById("profileModalName").innerText = name;
+    if (avatar) document.getElementById("profileModalAvatar").src = avatar;
+    if (cover) document.getElementById("profileCoverImg").src = cover;
+    if (bio !== undefined) document.getElementById("profileBioBottom").innerText = bio || "No bio available";
+    if (city !== undefined) document.getElementById("profileCityBottom").innerText = "📍 " + (city || "");
+    if (email) document.getElementById("profileEmail").innerText = email;
+    if (birthday !== undefined) {
+      const statBirthday = document.getElementById("statBirthday");
+      if (statBirthday) statBirthday.textContent = formatBirthday(birthday);
+    }
+  }
+
+  // 5. Story Tray
+  if (window.loadStories) window.loadStories();
 };
 
 async function saveAlias(targetId, type, value) {
@@ -997,20 +1149,8 @@ async function saveAlias(targetId, type, value) {
     body: JSON.stringify({ userId, targetId, type, value }),
   });
   if (res.ok) {
-    showPopup("Update");
-    loadFriends();
-    if (String(currentFriendId) === String(targetId)) {
-      if (type === 'name') {
-        currentFriendName = value;
-        const headerName = document.querySelector(".chat-header-info span:first-child");
-        if (headerName) headerName.innerText = value;
-        document.getElementById("profileModalName").innerText = value;
-      } else if (type === 'avatar') {
-        const headerAvatar = document.querySelector("#chatName img");
-        if (headerAvatar) headerAvatar.src = value;
-        document.getElementById("profileModalAvatar").src = value;
-      }
-    }
+    showPopup("Update successful");
+    refreshUserUI(targetId, type, value);
   }
 }
 
@@ -1040,7 +1180,7 @@ document.getElementById("customAvatarInput").onchange = (e) => {
 
       ctx.drawImage(img, sx, sy, sSide, sSide, 0, 0, size, size);
       const processedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
-      saveAlias(currentFriendId, 'avatar', processedDataUrl);
+      saveAlias(currentFriendId, "avatar", processedDataUrl);
     };
     img.src = ev.target.result;
   };
@@ -1054,8 +1194,7 @@ async function updateProfileStatus(friendId) {
 
   // Update avatar in modal
   const avatar = document.getElementById("profileModalAvatar");
-  avatar.src =
-    data.avatar || `https://i.pravatar.cc/150?img=${(friendId % 70) + 1}`;
+  avatar.src = data.avatar;
 
   if (data.statusHidden) {
     statusEl.textContent = "";
@@ -1450,15 +1589,9 @@ setupProfileTabs();
 // Helper for avatar
 window.getAvatarSrc = function (user) {
   if (user && user.avatar) return user.avatar;
-  if (user && user.id)
-    return `https://i.pravatar.cc/150?img=${(user.id % 70) + 1}`;
-  // If passing just ID
-  if (typeof user === "number" || typeof user === "string")
-    return `https://i.pravatar.cc/150?img=${(user % 70) + 1}`;
-  return `https://i.pravatar.cc/150?img=1`;
-}
+  return "/images/profile1.webp";
+};
 const getAvatarSrc = window.getAvatarSrc;
-let cachedFriends = [];
 
 let activeChat = null;
 
@@ -1525,36 +1658,44 @@ socket.on("storyDeleted", (data) => {
   // Instant UI update for messages referencing this story
   if (isChatOpen) {
     const deletedIds = data.deletedIds || [data.storyId];
-    deletedIds.forEach(id => {
-      document.querySelectorAll(`.message[data-story-id="${id}"]`).forEach(msgEl => {
-        const msgTextEl = msgEl.querySelector('.message-text');
-        const originalText = msgTextEl ? msgTextEl.innerText : "";
-        const isReactionOrReply = msgEl.classList.contains('received') || msgEl.classList.contains('sent');
+    deletedIds.forEach((id) => {
+      document
+        .querySelectorAll(`.message[data-story-id="${id}"]`)
+        .forEach((msgEl) => {
+          const msgTextEl = msgEl.querySelector(".message-text");
+          const originalText = msgTextEl ? msgTextEl.innerText : "";
+          const isReactionOrReply =
+            msgEl.classList.contains("received") ||
+            msgEl.classList.contains("sent");
 
-        const box = msgEl.querySelector('.chat-story-box, .story-share-card');
-        if (box) {
-          box.className = "chat-story-box removed";
-          box.style.cssText = "opacity: 0.6; padding: 12px; border: 1px dashed #555; border-radius: 12px; text-align: center; width: 100%; max-width: 220px;";
-          
-          let reactionHtml = "";
-          // Keep reaction text if it's not the removal placeholder itself
-          if (originalText && originalText !== "Story removed") {
-            reactionHtml = `<div class="message-text" style="margin-top: 8px;">${originalText}</div>`;
-          }
+          const box = msgEl.querySelector(".chat-story-box, .story-share-card");
+          if (box) {
+            box.className = "chat-story-box removed";
+            box.style.cssText =
+              "opacity: 0.6; padding: 12px; border: 1px dashed #555; border-radius: 12px; text-align: center; width: 100%; max-width: 220px;";
 
-          box.innerHTML = `
+            let reactionHtml = "";
+            // Keep reaction text if it's not the removal placeholder itself
+            if (originalText && originalText !== "Story removed") {
+              reactionHtml = `<div class="message-text" style="margin-top: 8px;">${originalText}</div>`;
+            }
+
+            box.innerHTML = `
             <div class="chat-story-label" style="color: #dedede; font-size: 13px; font-style: italic;">
               <i class="fa-solid fa-circle-exclamation"></i> Story removed
             </div>
             ${reactionHtml}
           `;
 
-          // Prevent further interactions
-          box.onclick = (e) => { e.stopPropagation(); e.preventDefault(); };
-          box.querySelectorAll('button').forEach(btn => btn.remove());
-          msgEl.removeAttribute('data-story-id');
-        }
-      });
+            // Prevent further interactions
+            box.onclick = (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            };
+            box.querySelectorAll("button").forEach((btn) => btn.remove());
+            msgEl.removeAttribute("data-story-id");
+          }
+        });
     });
   }
 });
@@ -2232,7 +2373,7 @@ window.timeAgo = function (date) {
   if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
 
   return Math.floor(seconds / 86400) + "d ago";
-}
+};
 const timeAgo = window.timeAgo;
 // 🔥 AUTO UPDATE "Seen 2m ago"
 setInterval(() => {
@@ -2562,7 +2703,8 @@ function appendMessage(
       window.storyShareData = window.storyShareData || {};
       window.storyShareData[sharedStoryData.storyId] = sharedStoryData;
 
-      if (sharedStoryData.storyId) div.setAttribute("data-story-id", sharedStoryData.storyId);
+      if (sharedStoryData.storyId)
+        div.setAttribute("data-story-id", sharedStoryData.storyId);
 
       contentHtml = `
         <div class="story-share-card">
@@ -2577,17 +2719,25 @@ function appendMessage(
             <div class="story-share-owner">Story by ${
               sharedStoryData.ownerName
             }</div>
-            ${!isMe ? `
-              ${sharedStoryData.isMentioned ? `
+            ${
+              !isMe
+                ? `
+              ${
+                sharedStoryData.isMentioned
+                  ? `
                 <button class="story-share-view-btn" onclick="handleAddStoryFromMention(${sharedStoryData.storyId})">
                   Add Story
                 </button>
-              ` : `
+              `
+                  : `
                 <button class="story-share-view-btn" onclick="handleViewSharedStory(${sharedStoryData.storyId})">
                   View Story
                 </button>
-              `}
-            ` : ''}
+              `
+              }
+            `
+                : ""
+            }
           </div>
         </div>
       `;
@@ -3000,15 +3150,23 @@ socket.on("messageDeleted", (data) => {
   const { msgId, type, senderId, receiverId, wasUnread } = data;
 
   // 1. Inside chat screen: Remove from UI if present
-  document.querySelectorAll(`[data-id="${msgId}"]`).forEach(el => el.remove());
+  document
+    .querySelectorAll(`[data-id="${msgId}"]`)
+    .forEach((el) => el.remove());
 
   // 2. Global UI update (Chat List)
   const otherId = String(senderId) === String(userId) ? receiverId : senderId;
-  const chatItem = document.querySelector(`.chat-item[data-friend-id="${otherId}"]`);
+  const chatItem = document.querySelector(
+    `.chat-item[data-friend-id="${otherId}"]`,
+  );
 
   if (chatItem) {
     // Update unread count tracking
-    if (type === "everyone" && wasUnread && String(receiverId) === String(userId)) {
+    if (
+      type === "everyone" &&
+      wasUnread &&
+      String(receiverId) === String(userId)
+    ) {
       if (unreadCounts[otherId] && unreadCounts[otherId].count > 0) {
         unreadCounts[otherId].count--;
       }
@@ -3042,6 +3200,15 @@ socket.on("messageEdited", ({ msgId, newText, type }) => {
   } else {
     textEl.innerText = newText;
   }
+});
+
+socket.on("profileUpdated", (userData) => {
+  updateUserUI(userData);
+});
+
+socket.on("avatarUpdated", (data) => {
+  // Backward compatibility for avatar events if still emitted elsewhere
+  updateUserUI({ userId: data.userId, avatar: data.avatar });
 });
 function showEditOptions(isMe) {
   document.getElementById("editOptions")?.remove();
@@ -3414,7 +3581,9 @@ async function loadFriends() {
 
     const fireHtml = friend.streak > 0 ? `🔥 ${friend.streak}` : "💬";
 
-    const lastMsgPreview = formatPreviewText(friend.lastMessage, friend.lastMessageType) || "Click to chat";
+    const lastMsgPreview =
+      formatPreviewText(friend.lastMessage, friend.lastMessageType) ||
+      "Click to chat";
     item.innerHTML = `
       <img src="${getAvatarSrc(friend)}">
       <div class="chat-info">
@@ -3660,7 +3829,7 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
 
   document.getElementById("chatScreen").style.display = "flex";
   messagesEl.scrollTop = messagesEl.scrollHeight;
-}
+};
 function extractEditedText(editedStr, userId) {
   if (!editedStr) return null;
 

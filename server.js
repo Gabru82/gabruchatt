@@ -650,10 +650,18 @@ app.post("/verifyLoginOtp", (req, res) => {
 
 app.post("/register", (req, res) => {
   const { name, email, password } = req.body;
+  const avatars = [
+    "/images/profile1.webp",
+    "/images/profile2.webp",
+    "/images/profile3.webp",
+    "/images/profile4.webp",
+    "/images/profile5.webp"
+  ];
+  const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
 
   db.run(
-    `INSERT INTO users(name,email,password) VALUES(?,?,?)`,
-    [name, email, password],
+    `INSERT INTO users(name,email,password,avatar) VALUES(?,?,?,?)`,
+    [name, email, password, randomAvatar],
     function (err) {
       if (err) {
         return res.json({ success: false, message: "User already exists" });
@@ -1026,6 +1034,10 @@ app.post("/updateProfile", (req, res) => {
       }
       return res.json({ success: false, message: "Failed to update profile" });
     }
+
+    // Emit the update globally for real-time UI synchronization
+    io.emit("profileUpdated", { userId, ...updates });
+
     res.json({ success: true });
   });
 });
@@ -1657,10 +1669,19 @@ app.post("/markStoryViewed", (req, res) => {
   db.run(
     `INSERT OR IGNORE INTO story_views (story_id, user_id) VALUES (?, ?)`,
     [storyId, userId],
-    (err) => {
+    function (err) {
       if (err) {
         console.error(err);
         return res.json({ success: false });
+      }
+
+      // Only notify if this is a new view (changes > 0)
+      if (this.changes > 0) {
+        db.get("SELECT user_id FROM stories WHERE id = ?", [storyId], (err, row) => {
+          if (!err && row) {
+            io.emit("storyViewed", { storyId, viewerId: userId, ownerId: row.user_id });
+          }
+        });
       }
       res.json({ success: true });
     }
@@ -2707,6 +2728,10 @@ io.on("connection", (socket) => {
       from: socket.userId,
       isVideo,
     });
+  });
+
+  socket.on("avatarUpdated", (data) => {
+    io.emit("avatarUpdated", data);
   });
 });
 
