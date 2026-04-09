@@ -13,6 +13,7 @@
   let currentFill = null;
   let activeStoriesForViewer = []; // Track currently viewing stories
   let isEditorOpen = false; // Controls playback lifecycle
+  let storyToDeleteId = null; // Temporarily store story ID for deletion confirmation
   let trimLoopTimeout = null; // For recursive looping of trimmed segment
 
   // Music related variables
@@ -59,7 +60,8 @@
     }
 
     if (currentFill) {
-      currentFill.style.width = Math.min((accumulatedElapsed / storyDuration) * 100, 100) + "%";
+      currentFill.style.width =
+        Math.min((accumulatedElapsed / storyDuration) * 100, 100) + "%";
     }
 
     if (accumulatedElapsed < storyDuration) {
@@ -78,7 +80,10 @@
     if (currentStoryMusicPlayer) {
       if (currentStoryMusicPlayer.pause) currentStoryMusicPlayer.pause();
       else if (currentStoryMusicPlayer.contentWindow) {
-        currentStoryMusicPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', "*");
+        currentStoryMusicPlayer.contentWindow.postMessage(
+          '{"event":"command","func":"pauseVideo","args":""}',
+          "*",
+        );
       }
     }
   }
@@ -92,13 +97,19 @@
       const story = activeStoriesForViewer[currentStoryIndex];
       const music = story.music ? JSON.parse(story.music) : null;
       if (music) {
-        const targetTime = (music.startTime || 0) + (accumulatedElapsed / 1000);
+        const targetTime = (music.startTime || 0) + accumulatedElapsed / 1000;
         if (currentStoryMusicPlayer.currentTime !== undefined) {
           currentStoryMusicPlayer.currentTime = targetTime;
           currentStoryMusicPlayer.play();
         } else if (currentStoryMusicPlayer.contentWindow) {
-          currentStoryMusicPlayer.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${targetTime}, true]}`, "*");
-          currentStoryMusicPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', "*");
+          currentStoryMusicPlayer.contentWindow.postMessage(
+            `{"event":"command","func":"seekTo","args":[${targetTime}, true]}`,
+            "*",
+          );
+          currentStoryMusicPlayer.contentWindow.postMessage(
+            '{"event":"command","func":"playVideo","args":""}',
+            "*",
+          );
         }
       }
     }
@@ -794,7 +805,7 @@
     if (menu) menu.classList.remove("show");
   });
 
-// Publish Story
+  // Publish Story
   window.publishStory = async () => {
     if (!currentStoryMedia) return;
 
@@ -813,7 +824,7 @@
         overlays: storyOverlays,
         music: musicData,
         privacy: document.getElementById("storyPrivacyInp").value,
-        parentStoryId: currentStoryParentId
+        parentStoryId: currentStoryParentId,
       }),
     });
     const data = await res.json();
@@ -832,7 +843,7 @@
             receiverId: ov.userId,
             isMentioned: true,
             overlays: storyOverlays,
-            music: currentStoryMusic
+            music: currentStoryMusic,
           };
           socket.emit("sendMessage", {
             to: ov.userId,
@@ -1002,9 +1013,9 @@
       if (addMentionedToStory) addMentionedToStory.style.display = "none";
       if (postMentionBtn) {
         postMentionBtn.style.display = "block";
-        postMentionBtn.onclick = (e) => { 
-          e.stopPropagation(); 
-          openShareModalGeneric('mention', story); 
+        postMentionBtn.onclick = (e) => {
+          e.stopPropagation();
+          openShareModalGeneric("mention", story);
         };
       }
     } else {
@@ -1017,7 +1028,10 @@
       if (addMentionedToStory) {
         if (!!story.isMentioned) {
           addMentionedToStory.style.display = "block";
-          addMentionedToStory.onclick = (e) => { e.stopPropagation(); addCurrentStoryToMyStory(); };
+          addMentionedToStory.onclick = (e) => {
+            e.stopPropagation();
+            addCurrentStoryToMyStory();
+          };
         } else {
           addMentionedToStory.style.display = "none";
         }
@@ -1028,7 +1042,7 @@
     avatar.dataset.uid = story.user_id;
     timeEl.textContent = timeAgo(story.created_at);
     delBtn.style.display = story.user_id == userId ? "block" : "none";
-    delBtn.onclick = () => deleteStory(story.id);
+    delBtn.onclick = () => showStoryDeleteConfirm(story.id);
     // Interaction: Mark viewed
     if (story.user_id != userId) {
       fetch("/markStoryViewed", {
@@ -1114,7 +1128,9 @@
     isHolding = true;
 
     // HOLD → pause
-    setTimeout(() => { if (isHolding) pauseStoryPlayback(); }, 200);
+    setTimeout(() => {
+      if (isHolding) pauseStoryPlayback();
+    }, 200);
   });
 
   viewer.addEventListener("pointerup", (e) => {
@@ -1394,10 +1410,10 @@
       div.classList.add("story-tag-music");
       div.innerHTML = `
         <div class="music-card-overlay">
-          <img src="${overlay.thumbnail || '/images/music_placeholder.png'}" class="music-card-thumb">
+          <img src="${overlay.thumbnail || "/images/music_placeholder.png"}" class="music-card-thumb">
           <div class="music-card-info">
             <div class="music-card-title">${overlay.content}</div>
-            <div class="music-card-source">${overlay.source === 'youtube' ? 'YouTube' : 'Pixabay'}</div>
+            <div class="music-card-source">${overlay.source === "youtube" ? "YouTube" : "Pixabay"}</div>
           </div>
         </div>
       `;
@@ -1570,7 +1586,9 @@
         selectOverlay(activeOverlay);
       } else if (
         selectedOverlayId === activeOverlay.id &&
-        (activeOverlay.type === "emoji" || activeOverlay.type === "sticker" || activeOverlay.type === "music")
+        (activeOverlay.type === "emoji" ||
+          activeOverlay.type === "sticker" ||
+          activeOverlay.type === "music")
       ) {
         // Show scale control again if it was already selected and just moved
         if (activeOverlay.type === "mention") {
@@ -1603,7 +1621,11 @@
     const el = document.getElementById(`ov-${overlay.id}`);
     if (el) el.classList.add("selected-overlay");
 
-    if (overlay.type === "emoji" || overlay.type === "sticker" || overlay.type === "music") {
+    if (
+      overlay.type === "emoji" ||
+      overlay.type === "sticker" ||
+      overlay.type === "music"
+    ) {
       const scaleControl = document.getElementById("storyScaleControl");
       const scaleInp = document.getElementById("storyOverlayScaleInp");
       if (scaleControl && scaleInp) {
@@ -1786,7 +1808,8 @@
     if (scaleInp) scaleInp.value = overlay.scale;
 
     toolbox.querySelectorAll(".font-selector span").forEach((s) => {
-      if (s.getAttribute("data-font") === overlay.styles.font) s.classList.add("active");
+      if (s.getAttribute("data-font") === overlay.styles.font)
+        s.classList.add("active");
       else s.classList.remove("active");
     });
   };
@@ -1825,9 +1848,11 @@
     if (!overlay || overlay.type !== "mention") return;
 
     if (prop === "weight") {
-      overlay.styles.weight = overlay.styles.weight === "bold" ? "normal" : "bold";
+      overlay.styles.weight =
+        overlay.styles.weight === "bold" ? "normal" : "bold";
     } else if (prop === "style") {
-      overlay.styles.style = overlay.styles.style === "italic" ? "normal" : "italic";
+      overlay.styles.style =
+        overlay.styles.style === "italic" ? "normal" : "italic";
     } else if (prop === "mode") {
       const modes = ["normal", "bg", "shadow"];
       const currentIdx = modes.indexOf(overlay.styles.mode || "normal");
@@ -2061,7 +2086,8 @@
         });
       });
     } else if (tab === "stickers") {
-      results.innerHTML = "<p style='grid-column: span 6; text-align:center; color:#888; padding:20px;'>Stickers coming soon!</p>";
+      results.innerHTML =
+        "<p style='grid-column: span 6; text-align:center; color:#888; padding:20px;'>Stickers coming soon!</p>";
     }
   };
 
@@ -2126,7 +2152,8 @@
       div.style.left = `${ov.x}%`;
       div.style.top = `${ov.y}%`;
       div.style.transform = `translate(-50%, -50%) scale(${ov.scale}) rotate(${ov.rotation}deg)`;
-      div.style.pointerEvents = (ov.type === "mention" || ov.type === "credit") ? "auto" : "none";
+      div.style.pointerEvents =
+        ov.type === "mention" || ov.type === "credit" ? "auto" : "none";
       if (ov.type === "text") {
         div.textContent = ov.content;
         div.style.fontFamily = getFontFamily(ov.styles.font);
@@ -2174,10 +2201,10 @@
       } else if (ov.type === "music") {
         div.innerHTML = `
           <div class="music-card-overlay">
-            <img src="${ov.thumbnail || '/images/music_placeholder.png'}" class="music-card-thumb">
+            <img src="${ov.thumbnail || "/images/music_placeholder.png"}" class="music-card-thumb">
             <div class="music-card-info">
               <div class="music-card-title">${ov.content}</div>
-              <div class="music-card-source">${ov.source === 'youtube' ? 'YouTube' : 'Pixabay'}</div>
+              <div class="music-card-source">${ov.source === "youtube" ? "YouTube" : "Pixabay"}</div>
             </div>
           </div>
         `;
@@ -2189,87 +2216,100 @@
   // ================= SHARE STORY TO CHAT LOGIC =================
   window.shareCurrentStory = () => {
     const story = activeStoriesForViewer[currentStoryIndex];
-    if (story) openShareModalGeneric('share', story);
+    if (story) openShareModalGeneric("share", story);
   };
 
   function openShareModalGeneric(mode, story) {
     const modal = document.getElementById("shareStoryModal");
     const list = document.getElementById("shareStoryFriendList");
     const confirmBtn = document.getElementById("confirmShareStoryBtn");
-    const title = modal.querySelector('h3');
+    const title = modal.querySelector("h3");
 
-    title.textContent = mode === 'mention' ? "Mention friends..." : "Share Story to...";
-    list.innerHTML = '<p style="text-align:center; color:#888;">Loading friends...</p>';
+    title.textContent =
+      mode === "mention" ? "Mention friends..." : "Share Story to...";
+    list.innerHTML =
+      '<p style="text-align:center; color:#888;">Loading friends...</p>';
     modal.style.display = "flex";
     confirmBtn.style.display = "none";
     selectedShareFriendIds.clear();
 
-    fetch(`/getFriends/${userId}`).then(res => res.json()).then(data => {
-      list.innerHTML = "";
-      data.friends.forEach(friend => {
-        const item = document.createElement("div");
-        item.className = "forward-friend-item";
-        item.onclick = () => {
-          if (selectedShareFriendIds.has(friend.id)) {
-            selectedShareFriendIds.delete(friend.id);
-            item.classList.remove("selected");
-          } else {
-            selectedShareFriendIds.add(friend.id);
-            item.classList.add("selected");
-          }
-          confirmBtn.style.display = selectedShareFriendIds.size > 0 ? "block" : "none";
-        };
-        item.innerHTML = `
-          <img src="${friend.avatar || (window.getAvatarSrc ? window.getAvatarSrc(friend) : '')}">
+    fetch(`/getFriends/${userId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        list.innerHTML = "";
+        data.friends.forEach((friend) => {
+          const item = document.createElement("div");
+          item.className = "forward-friend-item";
+          item.onclick = () => {
+            if (selectedShareFriendIds.has(friend.id)) {
+              selectedShareFriendIds.delete(friend.id);
+              item.classList.remove("selected");
+            } else {
+              selectedShareFriendIds.add(friend.id);
+              item.classList.add("selected");
+            }
+            confirmBtn.style.display =
+              selectedShareFriendIds.size > 0 ? "block" : "none";
+          };
+          item.innerHTML = `
+          <img src="${friend.avatar || (window.getAvatarSrc ? window.getAvatarSrc(friend) : "")}">
           <div class="forward-friend-info">
               <div class="forward-friend-name">${friend.name}</div>
           </div>
           <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
         `;
-        list.appendChild(item);
-      });
-
-      confirmBtn.onclick = () => {
-        const isMention = mode === 'mention';
-        const basePayload = {
-          storyId: story.id,
-          storyMedia: story.media,
-          storyType: story.type,
-          ownerId: story.user_id,
-          ownerName: story.name,
-          ownerAvatar: story.avatar,
-          senderId: userId,
-          isMentioned: isMention,
-          timestamp: story.created_at
-        };
-
-        if (isMention) {
-          basePayload.overlays = story.overlays ? JSON.parse(story.overlays) : [];
-          basePayload.music = story.music ? JSON.parse(story.music) : null;
-          
-          const existingMentions = JSON.parse(story.mentions || "[]");
-          const newMentions = Array.from(selectedShareFriendIds);
-          const combined = Array.from(new Set([...existingMentions, ...newMentions]));
-          
-          fetch("/updateMentions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storyId: story.id, userId, mentions: combined })
-          });
-        }
-
-        selectedShareFriendIds.forEach(fid => {
-          socket.emit("sendMessage", {
-            to: fid,
-            message: JSON.stringify(basePayload),
-            type: "story_share"
-          });
+          list.appendChild(item);
         });
 
-        showPopup(isMention ? "Mentions sent!" : "Story shared!");
-        modal.style.display = "none";
-      };
-    });
+        confirmBtn.onclick = () => {
+          const isMention = mode === "mention";
+          const basePayload = {
+            storyId: story.id,
+            storyMedia: story.media,
+            storyType: story.type,
+            ownerId: story.user_id,
+            ownerName: story.name,
+            ownerAvatar: story.avatar,
+            senderId: userId,
+            isMentioned: isMention,
+            timestamp: story.created_at,
+          };
+
+          if (isMention) {
+            basePayload.overlays = story.overlays
+              ? JSON.parse(story.overlays)
+              : [];
+            basePayload.music = story.music ? JSON.parse(story.music) : null;
+
+            const existingMentions = JSON.parse(story.mentions || "[]");
+            const newMentions = Array.from(selectedShareFriendIds);
+            const combined = Array.from(
+              new Set([...existingMentions, ...newMentions]),
+            );
+
+            fetch("/updateMentions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                storyId: story.id,
+                userId,
+                mentions: combined,
+              }),
+            });
+          }
+
+          selectedShareFriendIds.forEach((fid) => {
+            socket.emit("sendMessage", {
+              to: fid,
+              message: JSON.stringify(basePayload),
+              type: "story_share",
+            });
+          });
+
+          showPopup(isMention ? "Mentions sent!" : "Story shared!");
+          modal.style.display = "none";
+        };
+      });
   }
 
   window.closeShareStoryModal = () => {
@@ -2324,8 +2364,6 @@
     const data = window.storyShareData ? window.storyShareData[storyId] : null;
     if (!data) return;
 
-   
-
     closeStoryViewer();
     currentStoryMedia = { data: data.storyMedia, type: data.storyType };
     currentStoryMusic = data.music || null;
@@ -2339,7 +2377,11 @@
         ownerName: data.ownerName,
         ownerAvatar: data.ownerAvatar,
       },
-      x: 50, y: 90, scale: 1, rotation: 0, styles: {},
+      x: 50,
+      y: 90,
+      scale: 1,
+      rotation: 0,
+      styles: {},
     };
     storyOverlays = (data.overlays || []).concat(creditOverlay);
     openStoryEditor();
@@ -2347,7 +2389,15 @@
 
   window.handleViewSharedStory = (storyId) => {
     const data = window.storyShareData ? window.storyShareData[storyId] : null;
-    if (data) viewSharedStory(data.ownerId, data.storyMedia, data.storyType, data.storyId, data.ownerName, data.ownerAvatar);
+    if (data)
+      viewSharedStory(
+        data.ownerId,
+        data.storyMedia,
+        data.storyType,
+        data.storyId,
+        data.ownerName,
+        data.ownerAvatar,
+      );
   };
 
   // ================= VIEW SHARED STORY FROM CHAT =================
@@ -2447,25 +2497,41 @@
     }, 300);
   };
   window.closeStoryViewer = () => {
+    storyToDeleteId = null; // Clear any pending deletion
+
     cancelAnimationFrame(storyTimer);
     stopStoryMusicPlayback();
     document.getElementById("storyViewerModal").style.display = "none";
     activeStoriesForViewer = [];
   };
+  // Function to show the custom confirmation modal
+  window.showStoryDeleteConfirm = (storyId) => {
+    storyToDeleteId = storyId; // Store the ID of the story to be deleted
+    document.getElementById("confirmStoryDeleteModal").style.display = "flex";
+  };
+  // Function to handle confirmation of story deletion
+  window.confirmStoryDelete = async () => {
+    if (!storyToDeleteId) return; // Should not happen if modal is shown correctly
 
-  async function deleteStory(storyId) {
-    if (!confirm("Delete this story?")) return;
+    document.getElementById("confirmStoryDeleteModal").style.display = "none";
+
     const res = await fetch("/deleteStory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId, userId }),
+      body: JSON.stringify({ storyId: storyToDeleteId, userId }),
     });
     if (res.ok) {
       closeStoryViewer();
       socket.emit("newStory", { userId });
       loadStories();
     }
-  }
+  };
+
+  // Function to handle cancellation of story deletion
+  window.cancelStoryDelete = () => {
+    storyToDeleteId = null; // Clear the stored ID
+    document.getElementById("confirmStoryDeleteModal").style.display = "none";
+  };
 
   // ================= MUSIC PICKER LOGIC =================
   window.openMusicPicker = () => {
@@ -2809,8 +2875,8 @@
 
   document.getElementById("confirmMusicSelectionBtn").onclick = () => {
     // 1. Clean up existing music overlay
-    storyOverlays = storyOverlays.filter(o => o.type !== 'music');
-    const existingMusicEl = document.querySelector('.story-tag-music');
+    storyOverlays = storyOverlays.filter((o) => o.type !== "music");
+    const existingMusicEl = document.querySelector(".story-tag-music");
     if (existingMusicEl) existingMusicEl.remove();
 
     // 2. Create new music overlay card
@@ -2894,11 +2960,11 @@
   }
 
   window.removeSelectedMusic = () => {
-    const musicOverlay = storyOverlays.find(o => o.type === 'music');
+    const musicOverlay = storyOverlays.find((o) => o.type === "music");
     if (musicOverlay) {
       const el = document.getElementById(`ov-${musicOverlay.id}`);
       if (el) el.remove();
-      storyOverlays = storyOverlays.filter(o => o.type !== 'music');
+      storyOverlays = storyOverlays.filter((o) => o.type !== "music");
     }
     currentStoryMusic = null;
     stopTrimPreview();
@@ -3075,8 +3141,8 @@
   socket.on("storyUpdate", () => loadStories());
   socket.on("storyDeleted", (data) => {
     // Real-time cleanup of reshares and UI
-    storiesData = storiesData.filter(s => !data.deletedIds.includes(s.id));
-    
+    storiesData = storiesData.filter((s) => !data.deletedIds.includes(s.id));
+
     const groups = {};
     storiesData.forEach((s) => {
       if (!groups[s.user_id]) {
