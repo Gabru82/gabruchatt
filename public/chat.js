@@ -845,6 +845,49 @@ window.blockUser = async function () {
   }
 };
 
+window.resetProfileAlias = async function () {
+  if (!currentFriendId) return;
+
+  const res = await fetch("/resetAlias", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, targetId: currentFriendId }),
+  });
+
+  if (res.ok) {
+    showPopup("Reset to original");
+    closeProfileMenu();
+
+    // Refresh lists and trays
+    loadFriends();
+    if (window.loadStories) window.loadStories();
+
+    // Update current conversation UI
+    const profileRes = await fetch(`/getMyProfile/${currentFriendId}`);
+    const profileData = await profileRes.json();
+    if (profileData.success) {
+      const originalUser = profileData.user;
+      currentFriendName = originalUser.name;
+
+      // Update Header
+      const headerName = document.querySelector(".chat-header-info span:first-child");
+      if (headerName) headerName.innerText = originalUser.name;
+      const headerAvatar = document.querySelector("#chatName img");
+      if (headerAvatar) headerAvatar.src = getAvatarSrc(originalUser);
+
+      // Update Profile Modal if open
+      if (document.getElementById("userProfileModal").style.display === "flex") {
+        openUserProfile();
+      }
+
+      // Update sender labels in message list
+      document.querySelectorAll(".message.received .message-sender").forEach((el) => {
+        el.innerText = originalUser.name;
+      });
+    }
+  }
+};
+
 function openUserProfile() {
   if (!currentFriendId) return;
 
@@ -856,7 +899,7 @@ function openUserProfile() {
   loadSharedInfo(currentFriendId);
 
   // NEW DATA
-  socket.emit("getUserProfile", { userId: currentFriendId }, (res) => {
+  socket.emit("getUserProfile", { userId: currentFriendId, ownerId: userId }, (res) => {
     if (!res || !res.success) return;
 
     const user = res.data;
@@ -864,6 +907,17 @@ function openUserProfile() {
     // AVATAR
     document.getElementById("profileModalAvatar").src =
       user.avatar || getAvatarSrc(currentFriendId);
+
+    // SETUP ALIAS CLICKS
+    const modalAvatar = document.getElementById("profileModalAvatar");
+    modalAvatar.style.cursor = "pointer";
+    modalAvatar.title = "Click to set custom avatar";
+    modalAvatar.onclick = () => document.getElementById("customAvatarInput").click();
+
+    const modalName = document.getElementById("profileModalName");
+    modalName.style.cursor = "pointer";
+    modalName.title = "Click to set custom name";
+    modalName.onclick = () => editFriendAliasName(user.name);
 
     // COVER
     const coverImg = document.getElementById("profileCoverImg");
@@ -913,6 +967,86 @@ function openUserProfile() {
     document.getElementById("statPosts").innerText = user.posts || 0;
   });
 }
+
+window.editFriendAliasName = function(currentName) {
+  const modal = document.getElementById("aliasNameModal");
+  const input = document.getElementById("aliasNameInput");
+  const confirmBtn = document.getElementById("confirmAliasBtn");
+
+  input.value = currentName || "";
+  modal.style.display = "flex";
+  input.focus();
+
+  confirmBtn.onclick = () => {
+    const newName = input.value.trim();
+    if (newName !== "") {
+      saveAlias(currentFriendId, 'name', newName);
+      closeAliasModal();
+    }
+  };
+};
+
+window.closeAliasModal = function() {
+  document.getElementById("aliasNameModal").style.display = "none";
+};
+
+async function saveAlias(targetId, type, value) {
+  const res = await fetch("/setAlias", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, targetId, type, value }),
+  });
+  if (res.ok) {
+    showPopup("Update");
+    loadFriends();
+    if (String(currentFriendId) === String(targetId)) {
+      if (type === 'name') {
+        currentFriendName = value;
+        const headerName = document.querySelector(".chat-header-info span:first-child");
+        if (headerName) headerName.innerText = value;
+        document.getElementById("profileModalName").innerText = value;
+      } else if (type === 'avatar') {
+        const headerAvatar = document.querySelector("#chatName img");
+        if (headerAvatar) headerAvatar.src = value;
+        document.getElementById("profileModalAvatar").src = value;
+      }
+    }
+  }
+}
+
+document.getElementById("customAvatarInput").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file || !currentFriendId) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const size = 300; // Target square size
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      let sx, sy, sSide;
+      if (img.width > img.height) {
+        sSide = img.height;
+        sx = (img.width - img.height) / 2;
+        sy = 0;
+      } else {
+        sSide = img.width;
+        sx = 0;
+        sy = (img.height - img.width) / 2;
+      }
+
+      ctx.drawImage(img, sx, sy, sSide, sSide, 0, 0, size, size);
+      const processedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      saveAlias(currentFriendId, 'avatar', processedDataUrl);
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+};
+
 async function updateProfileStatus(friendId) {
   const res = await fetch(`/getUserStatus/${friendId}`);
   const data = await res.json();

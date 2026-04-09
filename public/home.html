@@ -935,6 +935,7 @@
                 </div>
                 <div class="profile-overlay-info">
                     <img id="profileModalAvatar" class="profile-modal-avatar">
+                    <input type="file" id="customAvatarInput" hidden accept="image/*">
 
                     <div class="profile-text">
                         <h2 id="profileModalName">User Name</h2>
@@ -1053,6 +1054,10 @@
 
                 <div class="sheet-item" onclick="shareProfile()">
                     <i class="fa-solid fa-share-nodes"></i> Share Profile
+                </div>
+
+                <div class="sheet-item" onclick="resetProfileAlias()">
+                    <i class="fa-solid fa-rotate-left"></i> Reset to Original
                 </div>
 
                 <div class="sheet-item danger" onclick="removeFriend()">
@@ -1246,6 +1251,19 @@
                 <div class="center-actions">
                     <button onclick="closePasswordModal()">Cancel</button>
                     <button onclick="verifyDeletePassword()">Continue</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✏️ Alias Name Modal -->
+        <div id="aliasNameModal" class="center-modal">
+            <div class="center-box">
+                <h3>Set Custom Name</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">Enter a nickname for your friend.</p>
+                <input type="text" id="aliasNameInput" placeholder="Enter name..." />
+                <div class="center-actions">
+                    <button onclick="closeAliasModal()">Cancel</button>
+                    <button id="confirmAliasBtn">Confirm</button>
                 </div>
             </div>
         </div>

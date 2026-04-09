@@ -204,6 +204,17 @@ db.serialize(() => {
     )
   `);
 
+  // ================= ALIASES =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_aliases(
+      owner_id INTEGER,
+      target_id INTEGER,
+      custom_name TEXT,
+      custom_avatar TEXT,
+      PRIMARY KEY(owner_id, target_id)
+    )
+  `);
+
   // ================= NOTIFICATIONS =================
   db.run(`
     CREATE TABLE IF NOT EXISTS notifications(
@@ -773,6 +784,37 @@ app.post("/toggle2FA", (req, res) => {
   });
 });
 
+app.post("/setAlias", (req, res) => {
+  const { userId, targetId, type, value } = req.body;
+  if (!userId || !targetId) return res.status(400).json({ success: false });
+
+  const column = type === 'name' ? 'custom_name' : 'custom_avatar';
+  
+  db.get("SELECT 1 FROM user_aliases WHERE owner_id = ? AND target_id = ?", [userId, targetId], (err, row) => {
+    if (row) {
+      db.run(`UPDATE user_aliases SET ${column} = ? WHERE owner_id = ? AND target_id = ?`, [value, userId, targetId], (err2) => {
+        res.json({ success: !err2 });
+      });
+    } else {
+      const name = type === 'name' ? value : null;
+      const avatar = type === 'avatar' ? value : null;
+      db.run(`INSERT INTO user_aliases (owner_id, target_id, custom_name, custom_avatar) VALUES (?, ?, ?, ?)`, [userId, targetId, name, avatar], (err2) => {
+        res.json({ success: !err2 });
+      });
+    }
+  });
+});
+
+app.post("/resetAlias", (req, res) => {
+  const { userId, targetId } = req.body;
+  if (!userId || !targetId) return res.status(400).json({ success: false });
+
+  db.run("DELETE FROM user_aliases WHERE owner_id = ? AND target_id = ?", [userId, targetId], function (err) {
+    if (err) return res.status(500).json({ success: false });
+    res.json({ success: true });
+  });
+});
+
 app.get("/getPendingLogin/:pendingId", (req, res) => {
   db.get(
     "SELECT * FROM pending_logins WHERE id = ?",
@@ -804,13 +846,17 @@ app.get("/getNotifications/:userId", (req, res) => {
   const { userId } = req.params;
   // We join with pending_logins for login_request types to get device info
   db.all(
-    `SELECT n.*, u.name AS senderName, u.avatar AS senderAvatar, p.device_info, p.ip_address as login_ip
+    `SELECT n.*, 
+     COALESCE(ua.custom_name, u.name) AS senderName, 
+     COALESCE(ua.custom_avatar, u.avatar) AS senderAvatar, 
+     p.device_info, p.ip_address as login_ip
      FROM notifications n 
      JOIN users u ON n.sender_id = u.id
      LEFT JOIN pending_logins p ON n.type = 'login_request:' || p.id
+     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
      WHERE n.user_id = ? 
      ORDER BY n.timestamp DESC`,
-    [userId],
+    [userId, userId],
     (err, rows) => {
       if (err) return res.json({ success: false });
       res.json({ success: true, notifications: rows || [] });
@@ -986,14 +1032,18 @@ app.post("/updateProfile", (req, res) => {
 app.post("/searchUser", (req, res) => {
   const { name, userId, discoverMode } = req.body;
 
-  let query = `SELECT id, name, avatar FROM users 
-     WHERE name LIKE ? 
+  let query = `SELECT u.id, 
+     COALESCE(ua.custom_name, u.name) as name, 
+     COALESCE(ua.custom_avatar, u.avatar) as avatar 
+     FROM users u
+     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
+     WHERE u.name LIKE ? 
      AND account_status = 1
-     AND id != ?
-     AND id NOT IN (SELECT blocked FROM blocks WHERE blocker = ?)
-     AND id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`;
+     AND u.id != ?
+     AND u.id NOT IN (SELECT blocked FROM blocks WHERE blocker = ?)
+     AND u.id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`;
 
-  let params = [`%${name}%`, userId || 0, userId || 0, userId || 0];
+  let params = [userId || 0, `%${name}%`, userId || 0, userId || 0, userId || 0];
 
   if (discoverMode && userId) {
     query += ` 
@@ -1206,12 +1256,16 @@ app.get("/getRequests/:userId", (req, res) => {
 
   db.all(
     `
-    SELECT friend_requests.id, users.name, users.avatar, users.id as senderId
+    SELECT friend_requests.id, 
+    COALESCE(ua.custom_name, users.name) as name, 
+    COALESCE(ua.custom_avatar, users.avatar) as avatar, 
+    users.id as senderId
     FROM friend_requests 
     JOIN users ON users.id = friend_requests.sender
+    LEFT JOIN user_aliases ua ON ua.target_id = users.id AND ua.owner_id = ?
     WHERE receiver = ? AND status = 'pending'
     `,
-    [userId],
+    [userId, userId],
     (err, rows) => {
       if (err) {
         console.error("GET REQUESTS ERROR:", err);
@@ -1290,7 +1344,9 @@ app.get("/getFriends/:userId", (req, res) => {
 
   db.all(
     `
-    SELECT DISTINCT u.id, u.name, u.avatar,
+    SELECT DISTINCT u.id, 
+    COALESCE(ua.custom_name, u.name) as name, 
+    COALESCE(ua.custom_avatar, u.avatar) as avatar,
     (SELECT COUNT(*) FROM messages 
      WHERE sender = u.id AND receiver = ? AND status != 'seen'
      AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')) as unreadCount,
@@ -1307,9 +1363,10 @@ app.get("/getFriends/:userId", (req, res) => {
 
     FROM friends f 
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
+    LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
     `,
-    [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
+    [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
     async (err, rows) => {
       if (err) {
         console.error("GET FRIENDS ERROR:", err);
@@ -1361,8 +1418,8 @@ app.get("/getMessages/:user1/:user2", (req, res) => {
   db.all(
     `
     SELECT 
-      m.*, 
-      u.name as senderName,
+      m.*,
+      COALESCE(ua.custom_name, u.name) AS senderName,
 
       CASE 
         WHEN m.edited_for_me IS NOT NULL 
@@ -1378,6 +1435,7 @@ app.get("/getMessages/:user1/:user2", (req, res) => {
 
     FROM messages m
     JOIN users u ON u.id = m.sender
+    LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
 
     WHERE ((m.sender = ? AND m.receiver = ?) 
         OR (m.sender = ? AND m.receiver = ?))
@@ -1395,6 +1453,8 @@ app.get("/getMessages/:user1/:user2", (req, res) => {
       user1 + ":", // length calc
       user1 + ":", // substring
       user1 + ":", // length again
+
+      user1, // ua.owner_id = ?
 
       user1,
       user2,
@@ -1455,8 +1515,13 @@ app.get("/getUserStatus/:userId", (req, res) => {
   const requesterId = req.query.requesterId;
 
   db.get(
-    "SELECT last_seen, avatar, active_status, account_status FROM users WHERE id=?",
-    [userId],
+    `SELECT u.last_seen, 
+     COALESCE(ua.custom_avatar, u.avatar) as avatar, 
+     u.active_status, u.account_status 
+     FROM users u
+     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
+     WHERE u.id=?`,
+    [requesterId, userId],
     (err, row) => {
       if (err || !row || row.account_status === 0)
         return res.json({ online: false, lastSeen: null });
@@ -1544,8 +1609,8 @@ app.get("/getStories/:userId", (req, res) => {
   const query = ` 
     SELECT 
       s.*, 
-      u.name, 
-      u.avatar,
+      COALESCE(ua.custom_name, u.name) as name, 
+      COALESCE(ua.custom_avatar, u.avatar) as avatar,
 
       (SELECT COUNT(*) FROM story_views WHERE story_id = s.id) as view_count,
 
@@ -1559,6 +1624,7 @@ app.get("/getStories/:userId", (req, res) => {
     FROM stories s
 
     JOIN users u ON s.user_id = u.id
+    LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
 
     -- 🔥 JOIN FOR SEEN STATUS
     LEFT JOIN story_views sv 
@@ -1579,7 +1645,7 @@ app.get("/getStories/:userId", (req, res) => {
     ORDER BY s.created_at DESC
   `;
 
-  db.all(query, [userId, userId, userId, userId, userId], (err, rows) => {
+  db.all(query, [userId, userId, userId, userId, userId, userId], (err, rows) => {
     if (err) return res.json({ success: false });
     res.json({ success: true, stories: rows });
   });
@@ -2569,11 +2635,17 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("getUserProfile", ({ userId }, callback) => {
+  socket.on("getUserProfile", ({ userId, ownerId }, callback) => {
     db.get(
-      `SELECT id, name, email, avatar, bio, cover, city, birthday 
-     FROM users WHERE id=?`,
-      [userId],
+      `SELECT u.id, 
+       COALESCE(ua.custom_name, u.name) as name, 
+       u.email, 
+       COALESCE(ua.custom_avatar, u.avatar) as avatar, 
+       u.bio, u.cover, u.city, u.birthday 
+     FROM users u
+     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
+     WHERE u.id=?`,
+      [ownerId, userId],
       (err, user) => {
         if (err || !user) {
           return callback({ success: false });

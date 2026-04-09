@@ -873,6 +873,7 @@
 
     renderStoryTray();
   }
+  window.loadStories = loadStories;
 
   function renderStoryTray() {
     const tray = document.getElementById("storyTray");
