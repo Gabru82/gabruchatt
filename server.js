@@ -1640,11 +1640,17 @@ app.post("/deleteStory", (req, res) => {
         db.run(`DELETE FROM stories WHERE id IN (${placeholders})`, idsToDelete, function(err) {
           if (err) return res.json({ success: false });
 
-          db.run(`
-            UPDATE messages 
-            SET type = 'story_removed', message = '{"type": "story_removed"}' 
-            WHERE type = 'story_share' AND message LIKE ?
-          `, [`%"storyId":${storyId}%`], (err) => {
+          // Update all message types referencing the deleted stories
+          const updatePromises = idsToDelete.map(id => {
+            const pattern = `%"storyId":${id}%`;
+            return new Promise(resolve => {
+              db.run(`UPDATE messages SET type = 'story_removed' WHERE type = 'story_share' AND message LIKE ?`, [pattern], () => {
+                db.run(`UPDATE messages SET type = 'story_removed' WHERE type IN ('story_reaction', 'story_reply') AND caption LIKE ?`, [pattern], resolve);
+              });
+            });
+          });
+
+          Promise.all(updatePromises).then(() => {
             io.emit("storyUpdate");
             io.emit("storyDeleted", { storyId, deletedIds: idsToDelete });
             res.json({ success: true });

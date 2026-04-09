@@ -27,6 +27,14 @@ function formatPreviewText(message, type) {
       return "Shared a story";
     }
   }
+  if (type === "story_removed") {
+    try {
+      const data = JSON.parse(message);
+      if (data.type === "story_removed" || data.storyId) return "Story removed";
+    } catch (e) {
+      return message || "Story removed";
+    }
+  }
   const labels = {
     image: "📷 Photo", video: "🎥 Video", audio: "🎤 Audio", sticker: "💟 Sticker",
     document: "📄 Document", profile_share: "👤 Shared a profile",
@@ -1383,9 +1391,40 @@ socket.on("requestCanceled", () => {
 
 socket.on("storyDeleted", (data) => {
   loadFriends();
-  // If the chat screen is open, re-open it to refresh message bubbles
-  if (isChatOpen && currentFriendId) {
-    openChat(currentFriendId, currentFriendName);
+  // Instant UI update for messages referencing this story
+  if (isChatOpen) {
+    const deletedIds = data.deletedIds || [data.storyId];
+    deletedIds.forEach(id => {
+      document.querySelectorAll(`.message[data-story-id="${id}"]`).forEach(msgEl => {
+        const msgTextEl = msgEl.querySelector('.message-text');
+        const originalText = msgTextEl ? msgTextEl.innerText : "";
+        const isReactionOrReply = msgEl.classList.contains('received') || msgEl.classList.contains('sent');
+
+        const box = msgEl.querySelector('.chat-story-box, .story-share-card');
+        if (box) {
+          box.className = "chat-story-box removed";
+          box.style.cssText = "opacity: 0.6; padding: 12px; border: 1px dashed #555; border-radius: 12px; text-align: center; width: 100%; max-width: 220px;";
+          
+          let reactionHtml = "";
+          // Keep reaction text if it's not the removal placeholder itself
+          if (originalText && originalText !== "Story removed") {
+            reactionHtml = `<div class="message-text" style="margin-top: 8px;">${originalText}</div>`;
+          }
+
+          box.innerHTML = `
+            <div class="chat-story-label" style="color: #dedede; font-size: 13px; font-style: italic;">
+              <i class="fa-solid fa-circle-exclamation"></i> Story removed
+            </div>
+            ${reactionHtml}
+          `;
+
+          // Prevent further interactions
+          box.onclick = (e) => { e.stopPropagation(); e.preventDefault(); };
+          box.querySelectorAll('button').forEach(btn => btn.remove());
+          msgEl.removeAttribute('data-story-id');
+        }
+      });
+    });
   }
 });
 
@@ -2293,6 +2332,8 @@ function appendMessage(
         data = JSON.parse(caption || "{}");
       } catch (e) {}
 
+      if (data.storyId) div.setAttribute("data-story-id", data.storyId);
+
       const preview =
         data.storyType === "video"
           ? `<video src="${data.storyMedia}" class="chat-story-preview" muted></video>`
@@ -2311,6 +2352,8 @@ function appendMessage(
         data = JSON.parse(caption || "{}");
       } catch (e) {}
 
+      if (data.storyId) div.setAttribute("data-story-id", data.storyId);
+
       const preview =
         data.storyType === "video"
           ? `<video src="${data.storyMedia}" class="chat-story-preview" muted></video>`
@@ -2324,15 +2367,22 @@ function appendMessage(
     </div>
   `;
     } else if (type === "story_removed") {
+      let isReaction = false;
+      try {
+        const check = JSON.parse(message);
+        if (check.type !== "story_removed" && !check.storyId) isReaction = true;
+      } catch (e) {
+        if (message) isReaction = true;
+      }
+
       contentHtml = `
-        <div class="story-share-card removed" style="opacity: 0.6; padding: 15px; border: 1px dashed #555; border-radius: 12px; text-align: center;">
-          <div class="story-share-info">
-            <div class="story-share-owner" style="color: #dedede; font-size: 13px; font-style: italic;">
-              <i class="fa-solid fa-circle-exclamation"></i> Story removed
-            </div>
+        <div class="chat-story-box removed" style="opacity: 0.6; padding: 12px; border: 1px dashed #555; border-radius: 12px; text-align: center; width: 100%;">
+          <div class="chat-story-label" style="color: #dedede; font-size: 13px; font-style: italic;">
+            <i class="fa-solid fa-circle-exclamation"></i> Story removed
           </div>
+          ${isReaction ? `<div class="message-text" style="margin-top: 8px;">${message}</div>` : ""}
         </div>
-  `;
+      `;
     } else if (type === "audio") {
       div.classList.add("audio-message");
       contentHtml = `
@@ -2380,6 +2430,8 @@ function appendMessage(
       const sharedStoryData = JSON.parse(message);
       window.storyShareData = window.storyShareData || {};
       window.storyShareData[sharedStoryData.storyId] = sharedStoryData;
+
+      if (sharedStoryData.storyId) div.setAttribute("data-story-id", sharedStoryData.storyId);
 
       contentHtml = `
         <div class="story-share-card">

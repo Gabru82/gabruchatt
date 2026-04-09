@@ -1256,6 +1256,7 @@
       caption: JSON.stringify({
         storyMedia: story.media,
         storyType: story.type,
+        storyId: story.id,
       }),
     });
 
@@ -1293,6 +1294,7 @@
       caption: JSON.stringify({
         storyMedia: story.media,
         storyType: story.type,
+        storyId: story.id,
       }),
     });
 
