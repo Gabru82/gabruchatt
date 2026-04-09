@@ -10,7 +10,7 @@ GLOBAL
 }
 
 body {
-  background: #0f0f0f;
+  background: linear-gradient(135deg, #1a1a2e, #16213e, #727c88);
   display: flex;
   justify-content: center;
   height: 100vh;
@@ -22,16 +22,24 @@ APP CONTAINER
 ========================= */
 
 .app {
-  /* width: 100%; */
   width: 500px;
   height: 100vh;
-  background: #000;
+
+  /* Glass effect */
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+
   overflow: hidden;
   position: relative;
   display: flex;
   flex-direction: column;
 }
-
 /* =========================
 TOP BAR
 ========================= */
@@ -479,11 +487,16 @@ CHAT LIST
   padding: 10px;
   border-radius: 10px;
   cursor: pointer;
-  transition: 0.2s;
+  transition:all 0.2s ease;
 }
 
 .chat-item:hover {
-  background: #111;
+  background: rgba(20, 20, 20, 0.45); /* smoky dark glass */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .chat-item img {
@@ -1074,7 +1087,6 @@ MEDIA MENU
   cursor: pointer;
 }
 
-
 /* =========================
 CHAT INPUT BAR
 ========================= */
@@ -1334,9 +1346,18 @@ EDIT PROFILE MODAL
   gap: 15px;
   padding: 10px 15px;
   overflow-x: auto;
-  background: #000;
-  border-bottom: 1px solid #222;
+
+  /* Glass effect */
+  background: rgba(188, 27, 27, 0.06);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  /* Optional smooth edges */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
+
 .story-tray::-webkit-scrollbar {
   display: none;
 }
