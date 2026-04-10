@@ -319,6 +319,11 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS post_comments(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, comment TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   db.run(`CREATE TABLE IF NOT EXISTS post_saves(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`);
   db.run(`CREATE TABLE IF NOT EXISTS post_shares(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  db.run("ALTER TABLE notifications ADD COLUMN content TEXT", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("notifications content error:", err.message);
+    }
+  });
 });
 // ================= ROUTES =================
 
@@ -904,7 +909,7 @@ app.get("/getNotifications/:userId", (req, res) => {
   const { userId } = req.params;
   // We join with pending_logins for login_request types to get device info
   db.all(
-    `SELECT n.*, 
+    `SELECT n.*, n.content as text,
      COALESCE(ua.custom_name, u.name) AS senderName, 
      COALESCE(ua.custom_avatar, u.avatar) AS senderAvatar, 
      p.device_info, p.ip_address as login_ip
@@ -1891,6 +1896,7 @@ app.post("/likePost", (req, res) => {
       db.run("INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)", [postId, userId], (err) => {
         db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, cRow) => {
           io.emit("postLiked", { postId, userId, userName, liked: true, count: cRow.count || 0 });
+          sendPostActivityNotification(postId, userId, "like");
           res.json({ success: true, liked: true, count: cRow.count || 0 });
         });
       });
@@ -1912,6 +1918,7 @@ app.post("/savePost", (req, res) => {
       db.run("INSERT INTO post_saves (post_id, user_id) VALUES (?, ?)", [postId, userId], (err) => {
         db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, cRow) => {
           io.emit("postSaved", { postId, userId, userName, saved: true, count: cRow.count || 0 });
+          sendPostActivityNotification(postId, userId, "save");
           res.json({ success: true, saved: true, count: cRow.count || 0 });
         });
       });
@@ -1924,6 +1931,7 @@ app.post("/sharePost", (req, res) => {
   db.run("INSERT INTO post_shares (post_id, user_id) VALUES (?, ?)", [postId, userId], function(err) {
     db.get("SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?", [postId], (err, cRow) => {
       io.emit("postShared", { postId, userId, userName, count: cRow.count || 0 });
+      sendPostActivityNotification(postId, userId, "share");
       res.json({ success: true, count: cRow.count || 0 });
     });
   });
@@ -1936,6 +1944,7 @@ app.post("/commentPost", (req, res) => {
     db.get("SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.id = ?", [commentId], (err, newComment) => {
       db.get("SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?", [postId], (err, cRow) => {
         io.emit("postCommented", { postId, userId, userName, comment: newComment, count: cRow.count || 0 });
+        sendPostActivityNotification(postId, userId, "comment", comment);
         res.json({ success: true, comment: newComment, count: cRow.count || 0 });
       });
     });
@@ -1983,6 +1992,39 @@ app.get("/getPostComments/:postId", (req, res) => {
 // This must be after all API routes to ensure they are handled first.
 app.use(express.static("public"));
 // ================= SOCKET =================
+
+function sendPostActivityNotification(postId, senderId, type, text = null) {
+  db.get("SELECT user_id FROM posts WHERE id = ?", [postId], (err, post) => {
+    if (err || !post || String(post.user_id) === String(senderId)) return;
+
+    const ownerId = post.user_id;
+    const notifType = `post_activity:${type}:${postId}`;
+
+    db.get("SELECT name, avatar FROM users WHERE id = ?", [senderId], (uErr, sender) => {
+      if (uErr || !sender) return;
+
+      db.run(
+        "INSERT INTO notifications(user_id, sender_id, type, content, status) VALUES(?,?,?,?,?)",
+        [ownerId, senderId, notifType, text, "unread"],
+        function (nErr) {
+          if (!nErr) {
+            io.to(`user_${ownerId}`).emit("postActivityNotification", {
+              id: this.lastID,
+              type,
+              postId,
+              senderId,
+              senderName: sender.name,
+              senderAvatar: sender.avatar,
+              text,
+              timestamp: new Date().toISOString()
+            });
+            io.to(`user_${ownerId}`).emit("newNotification");
+          }
+        }
+      );
+    });
+  });
+}
 
 const onlineUsers = new Map();
 const activeChats = new Map();

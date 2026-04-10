@@ -550,6 +550,22 @@ window.addNotificationToUI = function (n) {
       if (window._openPostById) window._openPostById(postId, n.sender_id);
       toggleNotificationPanel(); // close panel
     };
+  } else if (n.type.startsWith("post_activity:")) {
+    const parts = n.type.split(":");
+    const type = parts[1];
+    const postId = parts[2];
+    const contentText = n.content || n.text || "";
+
+    if (type === "like") actionText = "liked your post";
+    else if (type === "comment") actionText = `commented: ${contentText}`;
+    else if (type === "save") actionText = "saved your post";
+    else if (type === "share") actionText = "shared your post";
+
+    card.style.cursor = "pointer";
+    card.onclick = () => {
+      if (window._openPostById) window._openPostById(postId, userId);
+      toggleNotificationPanel();
+    };
   } else if (n.type === "friend_request") {
     actionText = "sent you a friend request";
   } else if (n.type === "request_accepted") {
@@ -645,6 +661,22 @@ async function loadNotifications() {
           card.style.cursor = "pointer";
           card.onclick = () => {
             if (window._openPostById) window._openPostById(postId, n.sender_id);
+            toggleNotificationPanel();
+          };
+        } else if (n.type.startsWith("post_activity:")) {
+          const parts = n.type.split(":");
+          const type = parts[1];
+          const postId = parts[2];
+          const contentText = n.content || n.text || "";
+
+          if (type === "like") actionText = "liked your post";
+          else if (type === "comment") actionText = `commented: ${contentText}`;
+          else if (type === "save") actionText = "saved your post";
+          else if (type === "share") actionText = "shared your post";
+
+          card.style.cursor = "pointer";
+          card.onclick = () => {
+            if (window._openPostById) window._openPostById(postId, userId);
             toggleNotificationPanel();
           };
         } else if (n.type === "request_accepted") {
@@ -1721,6 +1753,32 @@ socket.on("forcedLogout", () => {
 socket.on("newNotification", () => {
   if (canPlaySounds()) messageSound.play().catch(() => {});
   loadNotifications();
+});
+
+socket.on("postActivityNotification", (data) => {
+  const { type, senderName, text, postId } = data;
+  if (String(data.senderId) === String(userId)) return;
+
+  let msg = "";
+  if (type === "like") msg = `${senderName} liked your post`;
+  else if (type === "comment") msg = `${senderName} commented: ${text}`;
+  else if (type === "save") msg = `${senderName} saved your post`;
+  else if (type === "share") msg = `${senderName} shared your post`;
+
+  // if (window.showPopup) window.showPopup(msg);
+  
+  if (window.addNotificationToUI) {
+    window.addNotificationToUI({
+      id: data.id,
+      sender_id: data.senderId,
+      senderName: data.senderName,
+      senderAvatar: data.senderAvatar,
+      type: `post_activity:${type}:${postId}`,
+      content: text,
+      status: "unread",
+      timestamp: data.timestamp
+    });
+  }
 });
 
 socket.on("newLoginRequest", () => {
