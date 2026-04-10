@@ -176,13 +176,13 @@
                     <div class="chat-name"></div>
 
                     <div class="chat-msg">
-                        
+
                     </div>
 
                 </div>
 
                 <div class="chat-days">
-               
+
                 </div>
 
             </div>
@@ -197,13 +197,13 @@
                     <div class="chat-name"></div>
 
                     <div class="chat-msg">
-                        
+
                     </div>
 
                 </div>
 
                 <div class="chat-days">
-                   
+
                 </div>
 
             </div>
@@ -218,13 +218,13 @@
                     <div class="chat-name"></div>
 
                     <div class="chat-msg">
-                        
+
                     </div>
 
                 </div>
 
                 <div class="chat-days">
-                   
+
                 </div>
 
             </div>
@@ -472,41 +472,71 @@
                 </div>
 
                 <!-- Mention Styling Toolbox -->
-                <div id="mentionStyleToolbox" class="story-scale-control" style="display: none; flex-direction: column; bottom: 85px; padding: 12px; gap: 12px; height: auto; width: 90%; left: 5%; transform: none; border-radius: 20px;">
-                    <div style="display: flex; gap: 10px; width: 100%; overflow-x: auto; padding-bottom: 5px;" class="font-selector" id="mentionFontSelector">
-                        <span onclick="updateMentionStyle('font', 'Classic')" data-font="Classic" style="font-family: Arial;">Classic</span>
-                        <span onclick="updateMentionStyle('font', 'Modern')" data-font="Modern" style="font-family: 'Helvetica';">Modern</span>
-                        <span onclick="updateMentionStyle('font', 'Neon')" data-font="Neon" class="font-neon">Neon</span>
-                        <span onclick="updateMentionStyle('font', 'Typewriter')" data-font="Typewriter" style="font-family: 'Courier New';">Type</span>
-                        <span onclick="updateMentionStyle('font', 'Strong')" data-font="Strong" style="font-weight: 900;">Strong</span>
-                        <span onclick="updateMentionStyle('font', 'Elegant')" data-font="Elegant" style="font-family: 'Georgia';">Elegant</span>
-                        <span onclick="updateMentionStyle('font', 'Script')" data-font="Script" style="font-family: 'Brush Script MT';">Script</span>
-                        <span onclick="updateMentionStyle('font', 'Comic')" data-font="Comic" style="font-family: 'Comic Sans MS';">Comic</span>
-                        <span onclick="updateMentionStyle('font', 'Stencil')" data-font="Stencil" style="font-family: 'Impact';">Impact</span>
-                        <span onclick="updateMentionStyle('font', 'Light')" data-font="Light" style="font-weight: 100;">Light</span>
+                <div id="mentionStyleToolbox" class="story-scale-control"
+                    style="display: none; flex-direction: column; bottom: 85px; padding: 12px; gap: 12px; height: auto; width: 90%; left: 5%; transform: none; border-radius: 20px;">
+                    <div style="display: flex; gap: 10px; width: 100%; overflow-x: auto; padding-bottom: 5px;"
+                        class="font-selector" id="mentionFontSelector">
+                        <span onclick="updateMentionStyle('font', 'Classic')" data-font="Classic"
+                            style="font-family: Arial;">Classic</span>
+                        <span onclick="updateMentionStyle('font', 'Modern')" data-font="Modern"
+                            style="font-family: 'Helvetica';">Modern</span>
+                        <span onclick="updateMentionStyle('font', 'Neon')" data-font="Neon"
+                            class="font-neon">Neon</span>
+                        <span onclick="updateMentionStyle('font', 'Typewriter')" data-font="Typewriter"
+                            style="font-family: 'Courier New';">Type</span>
+                        <span onclick="updateMentionStyle('font', 'Strong')" data-font="Strong"
+                            style="font-weight: 900;">Strong</span>
+                        <span onclick="updateMentionStyle('font', 'Elegant')" data-font="Elegant"
+                            style="font-family: 'Georgia';">Elegant</span>
+                        <span onclick="updateMentionStyle('font', 'Script')" data-font="Script"
+                            style="font-family: 'Brush Script MT';">Script</span>
+                        <span onclick="updateMentionStyle('font', 'Comic')" data-font="Comic"
+                            style="font-family: 'Comic Sans MS';">Comic</span>
+                        <span onclick="updateMentionStyle('font', 'Stencil')" data-font="Stencil"
+                            style="font-family: 'Impact';">Impact</span>
+                        <span onclick="updateMentionStyle('font', 'Light')" data-font="Light"
+                            style="font-weight: 100;">Light</span>
                     </div>
                     <div style="display: flex; gap: 8px; width: 100%; justify-content: center;" class="color-selector">
-                        <div class="color-dot" style="background: #fff;" onclick="updateMentionStyle('color', '#fff')"></div>
-                        <div class="color-dot" style="background: #000;" onclick="updateMentionStyle('color', '#000')"></div>
-                        <div class="color-dot" style="background: #ff4444;" onclick="updateMentionStyle('color', '#ff4444')"></div>
-                        <div class="color-dot" style="background: #ffcc00;" onclick="updateMentionStyle('color', '#ffcc00')"></div>
-                        <div class="color-dot" style="background: #00ff55;" onclick="updateMentionStyle('color', '#00ff55')"></div>
-                        <div class="color-dot" style="background: #007aff;" onclick="updateMentionStyle('color', '#007aff')"></div>
-                        <div class="color-dot" style="background: linear-gradient(45deg, #f09433, #bc1888);" onclick="updateMentionStyle('color', 'gradient')"></div>
+                        <div class="color-dot" style="background: #fff;" onclick="updateMentionStyle('color', '#fff')">
+                        </div>
+                        <div class="color-dot" style="background: #000;" onclick="updateMentionStyle('color', '#000')">
+                        </div>
+                        <div class="color-dot" style="background: #ff4444;"
+                            onclick="updateMentionStyle('color', '#ff4444')"></div>
+                        <div class="color-dot" style="background: #ffcc00;"
+                            onclick="updateMentionStyle('color', '#ffcc00')"></div>
+                        <div class="color-dot" style="background: #00ff55;"
+                            onclick="updateMentionStyle('color', '#00ff55')"></div>
+                        <div class="color-dot" style="background: #007aff;"
+                            onclick="updateMentionStyle('color', '#007aff')"></div>
+                        <div class="color-dot" style="background: linear-gradient(45deg, #f09433, #bc1888);"
+                            onclick="updateMentionStyle('color', 'gradient')"></div>
                     </div>
-                    <div style="display: flex; gap: 10px; width: 100%; align-items: center; justify-content: space-between;">
+                    <div
+                        style="display: flex; gap: 10px; width: 100%; align-items: center; justify-content: space-between;">
                         <div style="display: flex; gap: 8px;">
-                            <button class="tool-btn" onclick="toggleMentionStyle('weight')" style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i class="fa-solid fa-bold"></i></button>
-                            <button class="tool-btn" onclick="toggleMentionStyle('style')" style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i class="fa-solid fa-italic"></i></button>
-                            <button class="tool-btn" onclick="toggleMentionStyle('mode')" style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i class="fa-solid fa-font"></i></button>
+                            <button class="tool-btn" onclick="toggleMentionStyle('weight')"
+                                style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i
+                                    class="fa-solid fa-bold"></i></button>
+                            <button class="tool-btn" onclick="toggleMentionStyle('style')"
+                                style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i
+                                    class="fa-solid fa-italic"></i></button>
+                            <button class="tool-btn" onclick="toggleMentionStyle('mode')"
+                                style="background: rgba(255,255,255,0.1); width:34px; height:34px;"><i
+                                    class="fa-solid fa-font"></i></button>
                         </div>
                         <div style="flex: 1; display: flex; align-items: center; gap: 8px; margin: 0 10px;">
                             <i class="fa-solid fa-text-height" style="font-size: 14px; color: #aaa;"></i>
-                            <input type="range" id="mentionSizeInp" min="12" max="100" style="flex: 1; accent-color: #ffcc00;" oninput="updateMentionStyle('size', this.value)">
+                            <input type="range" id="mentionSizeInp" min="12" max="100"
+                                style="flex: 1; accent-color: #ffcc00;"
+                                oninput="updateMentionStyle('size', this.value)">
                         </div>
                         <div style="display: flex; align-items: center; gap: 5px;">
                             <i class="fa-solid fa-maximize" style="font-size: 14px; color: #aaa;"></i>
-                            <input type="range" id="mentionScaleInp" min="0.5" max="8" step="0.1" style="width: 60px; accent-color: #ffcc00;" oninput="updateMentionStyle('scale', this.value)">
+                            <input type="range" id="mentionScaleInp" min="0.5" max="8" step="0.1"
+                                style="width: 60px; accent-color: #ffcc00;"
+                                oninput="updateMentionStyle('scale', this.value)">
                         </div>
                     </div>
                 </div>
@@ -739,7 +769,8 @@
                     <div id="storyPrivacyMenu" class="privacy-menu-popup">
                         <div class="privacy-option" onclick="selectPrivacy('friends', 'Friends')">Friends</div>
                         <div class="privacy-option" onclick="selectPrivacy('public', 'Public')">Public</div>
-                        <div class="privacy-option" onclick="selectPrivacy('private', 'Private (Only Me)')">Private (Only Me)</div>
+                        <div class="privacy-option" onclick="selectPrivacy('private', 'Private (Only Me)')">Private
+                            (Only Me)</div>
                     </div>
                     <input type="hidden" id="storyPrivacyInp" value="friends">
                 </div>
@@ -780,7 +811,8 @@
                         <span id="storyTime" class="story-time"></span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 15px;">
-                        <button id="postMentionBtn" class="delete-story-btn" style="display: none; color: #4facfe; margin-left: 0; margin-right: -5px;">
+                        <button id="postMentionBtn" class="delete-story-btn"
+                            style="display: none; color: #4facfe; margin-left: 0; margin-right: -5px;">
                             <i class="fa-solid fa-at"></i>
                         </button>
                         <button id="deleteStoryBtn" class="delete-story-btn" style="display: none;">
@@ -1481,6 +1513,181 @@
         </div>
 
 
+        <div class="bottom-actions">
+            <button id="cameraBtnBottom" class="bottom-btn">
+                <i class="fa-solid fa-camera"></i>
+            </button>
+
+            <button id="plusBtnBottom" class="bottom-btn">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+        </div>
+
+        <!-- POST EDITOR MODAL -->
+        <div id="postEditorModal" class="user-profile-modal" style="display: none; background: #000; z-index: 10006;">
+            <div class="user-profile-content">
+                <div class="panel-header"
+                    style="border-bottom: 1px solid #222; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 15px;">
+                    <button class="close-panel-btn" onclick="closePostEditor()"
+                        style="background:none; border:none; color:white; font-size:24px;"><i
+                            class="fa-solid fa-xmark"></i></button>
+                    <h3>New Post</h3>
+                    <button id="publishPostBtn" class="save-btn"
+                        style="color: #ffcc00; background: none; border: none; font-size: 16px; font-weight: bold;">Share</button>
+                </div>
+                <div style="width: 100%; padding: 15px;">
+                    <div id="postMediaPreview"
+                        style="display: flex; gap: 10px; overflow-x: auto; padding: 10px; min-height: 200px; background: #111; border-radius: 12px; align-items: center; justify-content: flex-start; scrollbar-width: none;">
+                        <p style="color: #555; width: 100%; text-align: center;">No media selected</p>
+                    </div>
+                    <input type="file" id="postFileInput" multiple accept="image/*,video/*" hidden>
+                    <button class="action-btn-outline" onclick="document.getElementById('postFileInput').click()"
+                        style="width: 100%; margin-top: 15px;">
+                        <i class="fa-solid fa-images"></i> Add Media
+                    </button>
+
+                    <textarea id="postCaption" placeholder="Write a caption..."
+                        style="width: 100%; background: transparent; border: none; color: white; padding: 15px 0; font-size: 15px; outline: none; border-bottom: 1px solid #222; resize: none; min-height: 80px; margin-top: 10px;"></textarea>
+
+                    <div class="settings-group" style="padding: 0; margin-top: 10px;">
+                        <div id="postMusicSelectRow" class="settings-item" onclick="openPostMusicPicker()"
+                            style="background: transparent; border: none; border-bottom: 1px solid #222; border-radius: 0; padding: 15px 0;">
+                            <span><i class="fa-solid fa-music" style="color: #ffcc00; margin-right: 10px;"></i> Add
+                                Music</span>
+                            <div id="selectedPostMusic"
+                                style="font-size: 12px; color: #888; text-align: right; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                None</div>
+                        </div>
+                        <div class="settings-item" onclick="openPostTagPicker()"
+                            style="background: transparent; border: none; border-bottom: 1px solid #222; border-radius: 0; padding: 15px 0;">
+                            <span><i class="fa-solid fa-user-tag" style="color: #ffcc00; margin-right: 10px;"></i> Tag
+                                People</span>
+                            <div id="taggedUsersCount" style="font-size: 12px; color: #888;">0 people</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- POST GALLERY MODAL -->
+        <div id="postGalleryModal" class="user-profile-modal" style="display: none; background: #000; z-index: 10007;">
+            <div class="user-profile-content">
+                <div class="panel-header"
+                    style="border-bottom: 1px solid #222; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 15px;">
+                    <button class="close-panel-btn"
+                        onclick="document.getElementById('postGalleryModal').style.display='none'"
+                        style="background:none; border:none; color:white; font-size:24px;"><i
+                            class="fa-solid fa-arrow-left"></i></button>
+                    <h3>Posts</h3>
+                    <div style="width: 24px;"></div>
+                </div>
+                <div id="postGrid" class="post-grid"></div>
+            </div>
+        </div>
+
+        <!-- POST MUSIC PICKER MODAL -->
+        <div id="postMusicPickerModal" class="theme-popup" style="z-index: 10008;">
+            <div class="theme-popup-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 450px;">
+                <button class="close-btn" onclick="closePostMusicPicker()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                <h3 style="margin-bottom: 10px;">Add Music to Post</h3>
+
+                <div style="position: relative; margin-bottom: 15px;">
+                    <input type="text" id="postMusicSearchInput" placeholder="Search for songs..." style="width: 100%; padding: 10px 15px; border-radius: 8px; border: 1px solid #444; background: #222; color: white;">
+                    <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #888;"></i>
+                </div>
+
+                <div id="postMusicResultsList" style="flex: 1; overflow-y: auto; margin-bottom: 15px; text-align: left; padding-right: 5px;">
+                    <p style="text-align:center; color:#888;">Type to search music for your post...</p>
+                </div>
+
+                <div id="postMusicPreviewPlayer" style="display: none; margin-top: 10px; padding: 10px; background: #1a1a1a; border-radius: 8px; align-items: center; gap: 10px;">
+                    <div id="postMusicPreviewThumbnail" style="width: 50px; height: 50px; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
+                        <img src="" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <div style="flex-grow: 1; overflow: hidden;">
+                        <div id="postMusicPreviewTitle" style="font-size: 14px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+                        <div id="postMusicPreviewSource" style="font-size: 12px; color: #aaa;"></div>
+                    </div>
+                    <button id="postMusicPreviewPlayPause" style="background: none; border: none; color: #ffcc00; font-size: 20px; cursor: pointer;"><i class="fa-solid fa-play"></i></button>
+                </div>
+
+                <div id="postMusicTrimmer" style="display: none; margin-top: 15px; padding: 10px; background: #1a1a1a; border-radius: 8px; flex-direction: column; align-items: center; gap: 10px; width: 100%;">
+                    <div style="font-size: 13px; color: #aaa;">Select 30-second segment</div>
+                    <div id="postWaveformContainer" style="width: 100%; height: 50px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(to right, #ffcc00 0%, #ff6600 100%); opacity: 0.3;"></div>
+                        <div id="postSegmentSlider" style="position: absolute; top: 0; height: 100%; background: rgba(255,255,255,0.2); border-left: 2px solid #ffcc00; border-right: 2px solid #ffcc00; cursor: grab; width: 30%;">
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; width: 100%; font-size: 12px; color: #888;">
+                        <span id="postSegmentStartTime">0:00</span>
+                        <span id="postSegmentEndTime">0:30</span>
+                        <span id="postSegmentTotalDuration" style="margin-left: auto;">0:00</span>
+                    </div>
+                    <div style="display: flex; gap: 10px; width: 100%; justify-content: center;">
+                        <button id="postTrimPreviewPlayPause"
+                            style="background: #ffcc00; color: #000; border: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                            <i class="fa-solid fa-play"></i> Play Segment
+                        </button>
+                        <button id="postTrimResetBtn"
+                            style="background: #333; color: #fff; border: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: center; padding-top: 10px;">
+                    <button id="postConfirmMusicBtn" class="save-btn" style="width: auto; padding: 12px 60px; display: none;">Add Song</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- POST TAG MODAL -->
+        <div id="postTagModal" class="theme-popup" style="z-index: 10010;">
+            <div class="theme-popup-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+                <button class="close-btn" onclick="closePostTagPicker()"
+                    style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                <h3 style="margin-bottom: 10px;">Tag People</h3>
+
+                <div style="position: relative; margin-bottom: 15px;">
+                    <input type="text" id="postTagSearchInput" placeholder="Search friends..."
+                        style="width: 100%; padding: 10px 15px; border-radius: 8px; border: 1px solid #444; background: #222; color: white;">
+                </div>
+
+                <div id="postTagResultsList" style="flex: 1; overflow-y: auto; margin-bottom: 15px; text-align: left; padding-right: 5px;">
+                    <p style="text-align:center; color:#888;">Type to search friends...</p>
+                </div>
+
+                <div style="display: flex; justify-content: center; padding-top: 10px;">
+                    <button id="confirmPostTagsBtn" class="save-btn" style="width: auto; padding: 12px 60px;">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- POST VIEWER MODAL -->
+        <div id="postViewerModal" class="user-profile-modal" style="display: none; background: rgba(0,0,0,0.95); z-index: 10009;">
+            <div class="user-profile-content" style="height: 100%; justify-content: flex-start;">
+                <div class="panel-header" style="width: 100%;">
+                    <button class="close-panel-btn" onclick="closePostViewer()" style="background:none; border:none; color:white; font-size:24px;"><i class="fa-solid fa-xmark"></i></button>
+                    <h3 id="postViewerTitle">Post</h3>
+                    <div style="width: 24px;"></div>
+                </div>
+                <div id="postViewerMedia" style="width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; background: #000; position: relative;">
+                    <!-- Post media injected here -->
+                </div>
+                <div id="postViewerInfo" style="width: 100%; padding: 15px; background: #111;">
+                    <div id="postViewerMusicRow" style="display: none; align-items: center; gap: 10px; margin-bottom: 10px; background: rgba(255,204,0,0.1); padding: 8px; border-radius: 8px;">
+                        <i class="fa-solid fa-music" style="color: #ffcc00;"></i>
+                        <span id="postViewerMusicTitle" style="font-size: 13px; font-weight: bold;"></span>
+                    </div>
+                    <p id="postViewerCaption" style="font-size: 14px; color: #eee;"></p>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
 
 
     </div>
@@ -1489,7 +1696,7 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="chat.js"></script>
     <script src="story.js"></script>
-
+    <script src="post.js"></script>
 </body>
 
 </html>

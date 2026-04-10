@@ -264,17 +264,36 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // ================= POSTS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS posts(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      media TEXT,
+      caption TEXT,
+      music TEXT,
+      tags TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
   db.run("ALTER TABLE stories ADD COLUMN music TEXT", (err) => {
     if (err && !err.message.includes("duplicate column")) {
       console.error("stories music error:", err.message);
     }
   });
-  db.run("ALTER TABLE stories ADD COLUMN privacy TEXT DEFAULT 'friends'", (err) => {
-    if (err && !err.message.includes("duplicate column")) console.error(err);
-  });
-  db.run("ALTER TABLE stories ADD COLUMN reactions TEXT DEFAULT '{}'", (err) => {
-    if (err && !err.message.includes("duplicate column")) console.error(err);
-  });
+  db.run(
+    "ALTER TABLE stories ADD COLUMN privacy TEXT DEFAULT 'friends'",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) console.error(err);
+    },
+  );
+  db.run(
+    "ALTER TABLE stories ADD COLUMN reactions TEXT DEFAULT '{}'",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) console.error(err);
+    },
+  );
   db.run("ALTER TABLE stories ADD COLUMN mentions TEXT DEFAULT '[]'", (err) => {
     if (err && !err.message.includes("duplicate column")) console.error(err);
   });
@@ -305,7 +324,9 @@ app.get("/searchSongs", async (req, res) => {
   const { query } = req.query;
 
   if (!query) {
-    return res.status(400).json({ success: false, message: "Query is required" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Query is required" });
   }
 
   let youtubeResults = [];
@@ -344,17 +365,14 @@ app.get("/searchSongs", async (req, res) => {
   // Search Pixabay (for free audio)
   if (PIXABAY_API_KEY) {
     try {
-      const pixabayResponse = await axios.get(
-        "https://pixabay.com/audios/",
-        {
-          params: {
-            key: PIXABAY_API_KEY,
-            q: query,
-            per_page: 10,
-            category: "music", // Focus on music
-          },
+      const pixabayResponse = await axios.get("https://pixabay.com/audios/", {
+        params: {
+          key: PIXABAY_API_KEY,
+          q: query,
+          per_page: 10,
+          category: "music", // Focus on music
         },
-      );
+      });
 
       pixabayResults = pixabayResponse.data.hits.map((item) => ({
         source: "pixabay",
@@ -395,19 +413,22 @@ app.get("/searchLocations", async (req, res) => {
   }
 
   try {
-    const response = await axios.get(`https://nominatim.openstreetmap.org/search`, {
-      params: {
-        q: query,
-        format: "json",
-        addressdetails: 1,
-        limit: 10
+    const response = await axios.get(
+      `https://nominatim.openstreetmap.org/search`,
+      {
+        params: {
+          q: query,
+          format: "json",
+          addressdetails: 1,
+          limit: 10,
+        },
+        headers: { "User-Agent": "GabruuChatApp/1.0" },
       },
-      headers: { 'User-Agent': 'GabruuChatApp/1.0' }
-    });
+    );
 
-    const locations = response.data.map(item => ({
+    const locations = response.data.map((item) => ({
       name: item.display_name,
-      shortName: item.name || item.display_name.split(',')[0]
+      shortName: item.name || item.display_name.split(",")[0],
     }));
 
     res.json({ success: true, locations });
@@ -449,16 +470,19 @@ app.post("/sendRegOtp", (req, res) => {
   });
 
   // ✅ RESEND EMAIL
-  resend.emails.send({
-    from: "onboarding@resend.dev",
-    to: email,
-    subject: "Your OTP Code",
-    text: `Your OTP is: ${otp}`,
-  }).then(() => {
-    console.log("OTP sent:", email);
-  }).catch(err => {
-    console.error("Email error:", err);
-  });
+  resend.emails
+    .send({
+      from: "onboarding@resend.dev",
+      to: email,
+      subject: "Your OTP Code",
+      text: `Your OTP is: ${otp}`,
+    })
+    .then(() => {
+      console.log("OTP sent:", email);
+    })
+    .catch((err) => {
+      console.error("Email error:", err);
+    });
 
   res.json({ success: true, message: "OTP sent" });
 });
@@ -508,12 +532,14 @@ app.post("/sendForgotOtp", (req, res) => {
       verified: false,
     });
 
-    resend.emails.send({
-      from: "onboarding@resend.dev",
-      to: email,
-      subject: "Password Reset OTP",
-      text: `Your OTP is: ${otp}`,
-    }).catch(err => console.error(err));
+    resend.emails
+      .send({
+        from: "onboarding@resend.dev",
+        to: email,
+        subject: "Password Reset OTP",
+        text: `Your OTP is: ${otp}`,
+      })
+      .catch((err) => console.error(err));
 
     res.json({ success: true, message: "OTP sent" });
   });
@@ -580,14 +606,16 @@ function sendLoginOtp(user, res) {
     lastSent: Date.now(),
   });
 
-  resend.emails.send({
-    from: "onboarding@resend.dev",
-    to: user.email,
-    subject: "Login Verification Code",
-    text: `Your login verification code is: ${otp}`,
-  }).catch(err => {
-    console.error("Login OTP Email Error:", err);
-  });
+  resend.emails
+    .send({
+      from: "onboarding@resend.dev",
+      to: user.email,
+      subject: "Login Verification Code",
+      text: `Your login verification code is: ${otp}`,
+    })
+    .catch((err) => {
+      console.error("Login OTP Email Error:", err);
+    });
 
   res.json({ success: true, needsOtp: true, email: user.email });
 }
@@ -655,7 +683,7 @@ app.post("/register", (req, res) => {
     "/images/profile2.webp",
     "/images/profile3.webp",
     "/images/profile4.webp",
-    "/images/profile5.webp"
+    "/images/profile5.webp",
   ];
   const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
 
@@ -796,31 +824,47 @@ app.post("/setAlias", (req, res) => {
   const { userId, targetId, type, value } = req.body;
   if (!userId || !targetId) return res.status(400).json({ success: false });
 
-  const column = type === 'name' ? 'custom_name' : 'custom_avatar';
-  
-  db.get("SELECT 1 FROM user_aliases WHERE owner_id = ? AND target_id = ?", [userId, targetId], (err, row) => {
-    if (row) {
-      db.run(`UPDATE user_aliases SET ${column} = ? WHERE owner_id = ? AND target_id = ?`, [value, userId, targetId], (err2) => {
-        res.json({ success: !err2 });
-      });
-    } else {
-      const name = type === 'name' ? value : null;
-      const avatar = type === 'avatar' ? value : null;
-      db.run(`INSERT INTO user_aliases (owner_id, target_id, custom_name, custom_avatar) VALUES (?, ?, ?, ?)`, [userId, targetId, name, avatar], (err2) => {
-        res.json({ success: !err2 });
-      });
-    }
-  });
+  const column = type === "name" ? "custom_name" : "custom_avatar";
+
+  db.get(
+    "SELECT 1 FROM user_aliases WHERE owner_id = ? AND target_id = ?",
+    [userId, targetId],
+    (err, row) => {
+      if (row) {
+        db.run(
+          `UPDATE user_aliases SET ${column} = ? WHERE owner_id = ? AND target_id = ?`,
+          [value, userId, targetId],
+          (err2) => {
+            res.json({ success: !err2 });
+          },
+        );
+      } else {
+        const name = type === "name" ? value : null;
+        const avatar = type === "avatar" ? value : null;
+        db.run(
+          `INSERT INTO user_aliases (owner_id, target_id, custom_name, custom_avatar) VALUES (?, ?, ?, ?)`,
+          [userId, targetId, name, avatar],
+          (err2) => {
+            res.json({ success: !err2 });
+          },
+        );
+      }
+    },
+  );
 });
 
 app.post("/resetAlias", (req, res) => {
   const { userId, targetId } = req.body;
   if (!userId || !targetId) return res.status(400).json({ success: false });
 
-  db.run("DELETE FROM user_aliases WHERE owner_id = ? AND target_id = ?", [userId, targetId], function (err) {
-    if (err) return res.status(500).json({ success: false });
-    res.json({ success: true });
-  });
+  db.run(
+    "DELETE FROM user_aliases WHERE owner_id = ? AND target_id = ?",
+    [userId, targetId],
+    function (err) {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true });
+    },
+  );
 });
 
 app.get("/getPendingLogin/:pendingId", (req, res) => {
@@ -966,10 +1010,10 @@ app.get("/getMyProfile/:userId", (req, res) => {
         (err, fRow) => {
           row.friendsCount = fRow ? fRow.count : 0;
           db.get(
-            "SELECT COUNT(*) as count FROM messages WHERE sender=?",
+            "SELECT COUNT(*) as count FROM posts WHERE user_id=?",
             [userId],
-            (err, mRow) => {
-              row.postsCount = mRow ? mRow.count : 0;
+            (err, pRow) => {
+              row.postsCount = pRow ? pRow.count : 0;
 
               // Calculate score based on unique chatting days per friend
               const scoreQuery = `
@@ -1055,7 +1099,13 @@ app.post("/searchUser", (req, res) => {
      AND u.id NOT IN (SELECT blocked FROM blocks WHERE blocker = ?)
      AND u.id NOT IN (SELECT blocker FROM blocks WHERE blocked = ?)`;
 
-  let params = [userId || 0, `%${name}%`, userId || 0, userId || 0, userId || 0];
+  let params = [
+    userId || 0,
+    `%${name}%`,
+    userId || 0,
+    userId || 0,
+    userId || 0,
+  ];
 
   if (discoverMode && userId) {
     query += ` 
@@ -1378,7 +1428,20 @@ app.get("/getFriends/:userId", (req, res) => {
     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
     `,
-    [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
+    [
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+    ],
     async (err, rows) => {
       if (err) {
         console.error("GET FRIENDS ERROR:", err);
@@ -1601,17 +1664,32 @@ app.get("/getTheme/:userId/:friendId", (req, res) => {
 });
 
 app.post("/uploadStory", (req, res) => {
-  const { userId, media, type, overlays, music, privacy, parentStoryId } = req.body;
-  const mentions = Array.isArray(overlays) 
-    ? overlays.filter(ov => ov.type === 'mention' && ov.userId).map(ov => ov.userId) 
+  const { userId, media, type, overlays, music, privacy, parentStoryId } =
+    req.body;
+  const mentions = Array.isArray(overlays)
+    ? overlays
+        .filter((ov) => ov.type === "mention" && ov.userId)
+        .map((ov) => ov.userId)
     : [];
   db.run(
     "INSERT INTO stories (user_id, media, type, overlays, music, privacy, mentions, parent_story_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [userId, media, type, JSON.stringify(overlays), music ? JSON.stringify(music) : null, privacy || 'friends', JSON.stringify(mentions), parentStoryId || null],
+    [
+      userId,
+      media,
+      type,
+      JSON.stringify(overlays),
+      music ? JSON.stringify(music) : null,
+      privacy || "friends",
+      JSON.stringify(mentions),
+      parentStoryId || null,
+    ],
     function (err) {
-      if (err) { console.error("Error uploading story:", err); return res.json({ success: false }); }
+      if (err) {
+        console.error("Error uploading story:", err);
+        return res.json({ success: false });
+      }
       res.json({ success: true, storyId: this.lastID });
-    }
+    },
   );
 });
 
@@ -1657,10 +1735,14 @@ app.get("/getStories/:userId", (req, res) => {
     ORDER BY s.created_at DESC
   `;
 
-  db.all(query, [userId, userId, userId, userId, userId, userId], (err, rows) => {
-    if (err) return res.json({ success: false });
-    res.json({ success: true, stories: rows });
-  });
+  db.all(
+    query,
+    [userId, userId, userId, userId, userId, userId],
+    (err, rows) => {
+      if (err) return res.json({ success: false });
+      res.json({ success: true, stories: rows });
+    },
+  );
 });
 
 app.post("/markStoryViewed", (req, res) => {
@@ -1677,14 +1759,22 @@ app.post("/markStoryViewed", (req, res) => {
 
       // Only notify if this is a new view (changes > 0)
       if (this.changes > 0) {
-        db.get("SELECT user_id FROM stories WHERE id = ?", [storyId], (err, row) => {
-          if (!err && row) {
-            io.emit("storyViewed", { storyId, viewerId: userId, ownerId: row.user_id });
-          }
-        });
+        db.get(
+          "SELECT user_id FROM stories WHERE id = ?",
+          [storyId],
+          (err, row) => {
+            if (!err && row) {
+              io.emit("storyViewed", {
+                storyId,
+                viewerId: userId,
+                ownerId: row.user_id,
+              });
+            }
+          },
+        );
       }
       res.json({ success: true });
-    }
+    },
   );
 });
 
@@ -1698,54 +1788,85 @@ app.get("/getStoryViewers/:storyId", (req, res) => {
     (err, rows) => {
       if (err) return res.json({ success: false });
       res.json({ success: true, viewers: rows });
-    }
+    },
   );
 });
 
 app.post("/reactToStory", (req, res) => {
   const { storyId, emoji } = req.body;
-  db.get("SELECT reactions FROM stories WHERE id = ?", [storyId], (err, row) => {
-    if (err || !row) return res.json({ success: false });
-    let reactions = JSON.parse(row.reactions || "{}");
-    reactions[emoji] = (reactions[emoji] || 0) + 1;
-    db.run("UPDATE stories SET reactions = ? WHERE id = ?", [JSON.stringify(reactions), storyId], (err) => {
-      res.json({ success: !err, reactions });
-    });
-  });
+  db.get(
+    "SELECT reactions FROM stories WHERE id = ?",
+    [storyId],
+    (err, row) => {
+      if (err || !row) return res.json({ success: false });
+      let reactions = JSON.parse(row.reactions || "{}");
+      reactions[emoji] = (reactions[emoji] || 0) + 1;
+      db.run(
+        "UPDATE stories SET reactions = ? WHERE id = ?",
+        [JSON.stringify(reactions), storyId],
+        (err) => {
+          res.json({ success: !err, reactions });
+        },
+      );
+    },
+  );
 });
 
 app.post("/deleteStory", (req, res) => {
   const { storyId, userId } = req.body;
-  db.get("SELECT id FROM stories WHERE id = ? AND user_id = ?", [storyId, userId], (err, row) => {
-    if (err || !row) return res.status(403).json({ success: false, message: "Unauthorized" });
+  db.get(
+    "SELECT id FROM stories WHERE id = ? AND user_id = ?",
+    [storyId, userId],
+    (err, row) => {
+      if (err || !row)
+        return res
+          .status(403)
+          .json({ success: false, message: "Unauthorized" });
 
-    db.serialize(() => {
-      db.all("SELECT id FROM stories WHERE parent_story_id = ?", [storyId], (err, reshares) => {
-        const idsToDelete = [storyId, ...(reshares || []).map(r => r.id)];
-        const placeholders = idsToDelete.map(() => "?").join(",");
-        
-        db.run(`DELETE FROM stories WHERE id IN (${placeholders})`, idsToDelete, function(err) {
-          if (err) return res.json({ success: false });
+      db.serialize(() => {
+        db.all(
+          "SELECT id FROM stories WHERE parent_story_id = ?",
+          [storyId],
+          (err, reshares) => {
+            const idsToDelete = [storyId, ...(reshares || []).map((r) => r.id)];
+            const placeholders = idsToDelete.map(() => "?").join(",");
 
-          // Update all message types referencing the deleted stories
-          const updatePromises = idsToDelete.map(id => {
-            const pattern = `%"storyId":${id}%`;
-            return new Promise(resolve => {
-              db.run(`UPDATE messages SET type = 'story_removed' WHERE type = 'story_share' AND message LIKE ?`, [pattern], () => {
-                db.run(`UPDATE messages SET type = 'story_removed' WHERE type IN ('story_reaction', 'story_reply') AND caption LIKE ?`, [pattern], resolve);
-              });
-            });
-          });
+            db.run(
+              `DELETE FROM stories WHERE id IN (${placeholders})`,
+              idsToDelete,
+              function (err) {
+                if (err) return res.json({ success: false });
 
-          Promise.all(updatePromises).then(() => {
-            io.emit("storyUpdate");
-            io.emit("storyDeleted", { storyId, deletedIds: idsToDelete });
-            res.json({ success: true });
-          });
-        });
+                // Update all message types referencing the deleted stories
+                const updatePromises = idsToDelete.map((id) => {
+                  const pattern = `%"storyId":${id}%`;
+                  return new Promise((resolve) => {
+                    db.run(
+                      `UPDATE messages SET type = 'story_removed' WHERE type = 'story_share' AND message LIKE ?`,
+                      [pattern],
+                      () => {
+                        db.run(
+                          `UPDATE messages SET type = 'story_removed' WHERE type IN ('story_reaction', 'story_reply') AND caption LIKE ?`,
+                          [pattern],
+                          resolve,
+                        );
+                      },
+                    );
+                  });
+                });
+
+                Promise.all(updatePromises).then(() => {
+                  io.emit("storyUpdate");
+                  io.emit("storyDeleted", { storyId, deletedIds: idsToDelete });
+                  res.json({ success: true });
+                });
+              },
+            );
+          },
+        );
       });
-    });
-  });
+    },
+  );
 });
 
 // This must be after all API routes to ensure they are handled first.
@@ -2482,13 +2603,15 @@ io.on("connection", (socket) => {
 
           db.run(`DELETE FROM messages WHERE id=?`, [msgId], function (delErr) {
             if (delErr) return;
-            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("messageDeleted", {
-              msgId: row.id,
-              type: "everyone",
-              senderId: row.sender,
-              receiverId: row.receiver,
-              wasUnread: row.status !== 'seen'
-            });
+            io.to(`user_${row.sender}`)
+              .to(`user_${row.receiver}`)
+              .emit("messageDeleted", {
+                msgId: row.id,
+                type: "everyone",
+                senderId: row.sender,
+                receiverId: row.receiver,
+                wasUnread: row.status !== "seen",
+              });
           });
         },
       );
@@ -2524,7 +2647,7 @@ io.on("connection", (socket) => {
                 msgId: row.id,
                 type: "me",
                 senderId: row.sender,
-                receiverId: row.receiver
+                receiverId: row.receiver,
               });
             },
           );
@@ -2733,6 +2856,72 @@ io.on("connection", (socket) => {
   socket.on("avatarUpdated", (data) => {
     io.emit("avatarUpdated", data);
   });
+  socket.on("newPost", (data) => {
+    socket.broadcast.emit("postUpdate", data);
+  });
+});
+
+// ================= POST ROUTES =================
+
+app.post("/uploadPost", (req, res) => {
+  const { userId, media, caption, music, tags } = req.body;
+  db.run(
+    "INSERT INTO posts (user_id, media, caption, music, tags) VALUES (?, ?, ?, ?, ?)",
+    [
+      userId,
+      JSON.stringify(media),
+      caption,
+      JSON.stringify(music),
+      JSON.stringify(tags),
+    ],
+    function (err) {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ success: false });
+      }
+      const postId = this.lastID;
+
+      // Handle Tagging Notifications
+      if (tags && Array.isArray(tags)) {
+        db.get("SELECT name, avatar FROM users WHERE id = ?", [userId], (uErr, sender) => {
+          if (sender) {
+            tags.forEach(taggedUserId => {
+              const notifType = `post_tag:${postId}`;
+              db.run(
+                "INSERT INTO notifications(user_id, sender_id, type, status) VALUES(?,?,?,?)",
+                [taggedUserId, userId, notifType, "unread"],
+                (nErr) => {
+                  if (!nErr) {
+                    io.to(`user_${taggedUserId}`).emit("postTaggedNotification", {
+                      postId,
+                      senderId: userId,
+                      senderName: sender.name,
+                      senderAvatar: sender.avatar
+                    });
+                    io.to(`user_${taggedUserId}`).emit("newNotification");
+                  }
+                }
+              );
+            });
+          }
+        });
+      }
+
+      io.emit("newPost", { userId, postId });
+      res.json({ success: true, postId });
+    },
+  );
+});
+
+app.get("/getPosts/:userId", (req, res) => {
+  db.all(
+    "SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC",
+    [req.params.userId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true, posts: rows });
+    },
+  );
 });
 
 // Background task for 24-hour message deletion

@@ -2980,20 +2980,27 @@
     if (musicMetadata.source === "youtube") {
       const iframe = document.createElement("iframe");
       const startTime = musicMetadata.startTime || 0;
-      iframe.width = "0"; // Hidden
-      iframe.height = "0";
-      iframe.src = `https://www.youtube.com/embed/${musicMetadata.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${startTime}`;
+      iframe.width = "1"; // Robust dimension for background playback
+      iframe.height = "1";
+      iframe.src = `https://www.youtube.com/embed/${musicMetadata.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${startTime}&origin=${window.location.origin}`;
       iframe.allow = "autoplay";
       iframe.style.position = "absolute";
       iframe.style.left = "-9999px";
       iframe.style.top = "-9999px";
 
       iframe.onload = () => {
-        // Explicit seek to ensure accurate start
-        iframe.contentWindow.postMessage(
-          `{"event":"command","func":"seekTo","args":[${startTime}, true]}`,
-          "*",
-        );
+        if (iframe.contentWindow) {
+          iframe.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func: 'seekTo',
+            args: [startTime, true]
+          }), '*');
+          iframe.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func: 'playVideo',
+            args: ''
+          }), '*');
+        }
       };
 
       document.body.appendChild(iframe);
@@ -3049,9 +3056,9 @@
       if (!trimPreviewAudioPlayer) {
         if (song.source === "youtube") {
           const iframe = document.createElement("iframe");
-          iframe.width = "0";
-          iframe.height = "0";
-          iframe.src = `https://www.youtube.com/embed/${song.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${loopStartTime}`;
+          iframe.width = "1";
+          iframe.height = "1";
+          iframe.src = `https://www.youtube.com/embed/${song.id}?autoplay=1&controls=0&modestbranding=1&rel=0&enablejsapi=1&start=${loopStartTime}&origin=${window.location.origin}`;
           iframe.allow = "autoplay";
           iframe.style.position = "absolute";
           iframe.style.left = "-9999px";
@@ -3062,10 +3069,18 @@
           trimPreviewAudioPlayer = iframe;
 
           iframe.onload = () => {
-            iframe.contentWindow.postMessage(
-              `{"event":"command","func":"seekTo","args":[${loopStartTime}, true]}`,
-              "*",
-            );
+            if (iframe.contentWindow) {
+              iframe.contentWindow.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'seekTo',
+                args: [loopStartTime, true]
+              }), '*');
+              iframe.contentWindow.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'playVideo',
+                args: ''
+              }), '*');
+            }
           };
         } else if (song.source === "pixabay") {
           const audio = document.createElement("audio");

@@ -530,6 +530,45 @@ document.addEventListener("click", function (e) {
     isNotificationPanelOpen = false;
   }
 });
+
+window.addNotificationToUI = function (n) {
+  const list = document.getElementById("notificationList");
+  if (!list) return;
+
+  const card = document.createElement("div");
+  card.className = "notification-card";
+  card.setAttribute("data-id", n.id);
+
+  let actionText = "";
+  let avatarContent = `<img src="${n.senderAvatar || getAvatarSrc(n.sender_id)}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 255, 255, 0.1);">`;
+
+  if (n.type.startsWith("post_tag:")) {
+    actionText = "tagged you in a post";
+    const postId = n.type.split(":")[1];
+    card.style.cursor = "pointer";
+    card.onclick = () => {
+      if (window._openPostById) window._openPostById(postId, n.sender_id);
+      toggleNotificationPanel(); // close panel
+    };
+  } else if (n.type === "friend_request") {
+    actionText = "sent you a friend request";
+  } else if (n.type === "request_accepted") {
+    actionText = "accepted your friend request";
+  }
+
+  card.innerHTML = `
+        ${avatarContent}
+        <div style="flex:1;">
+            <div style="font-size:13px;">
+                <strong style="color:#fff;">${n.senderName}</strong> 
+                <span style="color:#aaa;">${actionText}</span>
+            </div>
+            <div style="font-size:11px; color:#888; margin-top:4px;">${timeAgo(n.timestamp)}</div>
+        </div>
+    `;
+  list.prepend(card);
+};
+
 async function loadNotifications() {
   // Debounce to handle rapid notifications and ensure a single UI update
   if (notificationUpdateTimer) clearTimeout(notificationUpdateTimer);
@@ -600,6 +639,14 @@ async function loadNotifications() {
         if (n.type === "friend_request") {
           actionText = "sent you a friend request";
           actionButtons = "";
+        } else if (n.type.startsWith("post_tag:")) {
+          actionText = "tagged you in a post";
+          const postId = n.type.split(":")[1];
+          card.style.cursor = "pointer";
+          card.onclick = () => {
+            if (window._openPostById) window._openPostById(postId, n.sender_id);
+            toggleNotificationPanel();
+          };
         } else if (n.type === "request_accepted") {
           actionText = "accepted your friend request";
           actionButtons = `<div style="color:#00ff55; font-size:11px; margin-top:5px;"><i class="fa-solid fa-circle-check"></i> Friends now</div>`;
@@ -1044,7 +1091,17 @@ window.refreshUserUI = function (targetId, type, value) {
 };
 
 window.updateUserUI = function (userData) {
-  const { userId: targetId, name, avatar, cover, bio, city, birthday, email, links } = userData;
+  const {
+    userId: targetId,
+    name,
+    avatar,
+    cover,
+    bio,
+    city,
+    birthday,
+    email,
+    links,
+  } = userData;
   const idStr = String(targetId);
   const myId = localStorage.getItem("userId");
 
@@ -1053,21 +1110,36 @@ window.updateUserUI = function (userData) {
     const parts = dateStr.split("-");
     if (parts.length < 3) return "--";
     const [y, m, d] = parts;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     return `${parseInt(d)} ${months[parseInt(m) - 1]}`;
   };
 
   // 1. Update Chat List Feed items
-  document.querySelectorAll(`.chat-item[data-friend-id="${idStr}"]`).forEach((item) => {
-    if (name) {
-      const nameEl = item.querySelector(".chat-name");
-      if (nameEl) nameEl.innerText = name;
-    }
-    if (avatar) {
-      const imgEl = item.querySelector("img");
-      if (imgEl) imgEl.src = avatar;
-    }
-  });
+  document
+    .querySelectorAll(`.chat-item[data-friend-id="${idStr}"]`)
+    .forEach((item) => {
+      if (name) {
+        const nameEl = item.querySelector(".chat-name");
+        if (nameEl) nameEl.innerText = name;
+      }
+      if (avatar) {
+        const imgEl = item.querySelector("img");
+        if (imgEl) imgEl.src = avatar;
+      }
+    });
 
   // 2. Self-Profile updates
   if (idStr === myId) {
@@ -1084,7 +1156,9 @@ window.updateUserUI = function (userData) {
         document.getElementById("myStoryAvatar"),
         document.getElementById("myAvatarPreview"),
       ];
-      elements.forEach((el) => { if (el) el.src = avatar; });
+      elements.forEach((el) => {
+        if (el) el.src = avatar;
+      });
     }
     if (cover) {
       const coverPreview = document.getElementById("coverPreview");
@@ -1092,7 +1166,8 @@ window.updateUserUI = function (userData) {
     }
     if (bio !== undefined) {
       const dispBio = document.getElementById("dispBio");
-      if (dispBio) dispBio.textContent = bio || "Tell the world about yourself...";
+      if (dispBio)
+        dispBio.textContent = bio || "Tell the world about yourself...";
     }
     if (city !== undefined) {
       const dispCityText = document.getElementById("dispCityText");
@@ -1112,11 +1187,17 @@ window.updateUserUI = function (userData) {
   if (String(currentFriendId) === idStr) {
     if (name) {
       currentFriendName = name;
-      const headerName = document.querySelector(".chat-header-info span:first-child");
+      const headerName = document.querySelector(
+        ".chat-header-info span:first-child",
+      );
       if (headerName) headerName.innerText = name;
-      document.querySelectorAll(`.message.received[data-sender="${idStr}"] .message-sender`).forEach((el) => {
-        el.innerText = name;
-      });
+      document
+        .querySelectorAll(
+          `.message.received[data-sender="${idStr}"] .message-sender`,
+        )
+        .forEach((el) => {
+          el.innerText = name;
+        });
     }
     if (avatar) {
       const headerAvatar = document.querySelector("#chatName img");
@@ -1125,12 +1206,19 @@ window.updateUserUI = function (userData) {
   }
 
   // 4. Friend Profile Modal
-  if (document.getElementById("userProfileModal").style.display === "flex" && String(currentFriendId) === idStr) {
+  if (
+    document.getElementById("userProfileModal").style.display === "flex" &&
+    String(currentFriendId) === idStr
+  ) {
     if (name) document.getElementById("profileModalName").innerText = name;
     if (avatar) document.getElementById("profileModalAvatar").src = avatar;
     if (cover) document.getElementById("profileCoverImg").src = cover;
-    if (bio !== undefined) document.getElementById("profileBioBottom").innerText = bio || "No bio available";
-    if (city !== undefined) document.getElementById("profileCityBottom").innerText = "📍 " + (city || "");
+    if (bio !== undefined)
+      document.getElementById("profileBioBottom").innerText =
+        bio || "No bio available";
+    if (city !== undefined)
+      document.getElementById("profileCityBottom").innerText =
+        "📍 " + (city || "");
     if (email) document.getElementById("profileEmail").innerText = email;
     if (birthday !== undefined) {
       const statBirthday = document.getElementById("statBirthday");
