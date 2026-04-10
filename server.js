@@ -313,6 +313,12 @@ db.serialize(() => {
       UNIQUE(story_id, user_id)
     )
   `);
+
+  // ================= POST INTERACTIONS =================
+  db.run(`CREATE TABLE IF NOT EXISTS post_likes(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`);
+  db.run(`CREATE TABLE IF NOT EXISTS post_comments(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, comment TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  db.run(`CREATE TABLE IF NOT EXISTS post_saves(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`);
+  db.run(`CREATE TABLE IF NOT EXISTS post_shares(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
 });
 // ================= ROUTES =================
 
@@ -1867,6 +1873,111 @@ app.post("/deleteStory", (req, res) => {
       });
     },
   );
+});
+
+// ================= POST INTERACTION ROUTES =================
+
+app.post("/likePost", (req, res) => {
+  const { postId, userId, userName } = req.body;
+  db.get("SELECT * FROM post_likes WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
+    if (row) {
+      db.run("DELETE FROM post_likes WHERE post_id = ? AND user_id = ?", [postId, userId], (err) => {
+        db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, cRow) => {
+          io.emit("postLiked", { postId, userId, userName, liked: false, count: cRow.count || 0 });
+          res.json({ success: true, liked: false, count: cRow.count || 0 });
+        });
+      });
+    } else {
+      db.run("INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)", [postId, userId], (err) => {
+        db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, cRow) => {
+          io.emit("postLiked", { postId, userId, userName, liked: true, count: cRow.count || 0 });
+          res.json({ success: true, liked: true, count: cRow.count || 0 });
+        });
+      });
+    }
+  });
+});
+
+app.post("/savePost", (req, res) => {
+  const { postId, userId, userName } = req.body;
+  db.get("SELECT * FROM post_saves WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
+    if (row) {
+      db.run("DELETE FROM post_saves WHERE post_id = ? AND user_id = ?", [postId, userId], (err) => {
+        db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, cRow) => {
+          io.emit("postSaved", { postId, userId, userName, saved: false, count: cRow.count || 0 });
+          res.json({ success: true, saved: false, count: cRow.count || 0 });
+        });
+      });
+    } else {
+      db.run("INSERT INTO post_saves (post_id, user_id) VALUES (?, ?)", [postId, userId], (err) => {
+        db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, cRow) => {
+          io.emit("postSaved", { postId, userId, userName, saved: true, count: cRow.count || 0 });
+          res.json({ success: true, saved: true, count: cRow.count || 0 });
+        });
+      });
+    }
+  });
+});
+
+app.post("/sharePost", (req, res) => {
+  const { postId, userId, userName } = req.body;
+  db.run("INSERT INTO post_shares (post_id, user_id) VALUES (?, ?)", [postId, userId], function(err) {
+    db.get("SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?", [postId], (err, cRow) => {
+      io.emit("postShared", { postId, userId, userName, count: cRow.count || 0 });
+      res.json({ success: true, count: cRow.count || 0 });
+    });
+  });
+});
+
+app.post("/commentPost", (req, res) => {
+  const { postId, userId, userName, comment } = req.body;
+  db.run("INSERT INTO post_comments (post_id, user_id, comment) VALUES (?, ?, ?)", [postId, userId, comment], function(err) {
+    const commentId = this.lastID;
+    db.get("SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.id = ?", [commentId], (err, newComment) => {
+      db.get("SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?", [postId], (err, cRow) => {
+        io.emit("postCommented", { postId, userId, userName, comment: newComment, count: cRow.count || 0 });
+        res.json({ success: true, comment: newComment, count: cRow.count || 0 });
+      });
+    });
+  });
+});
+
+app.get("/getPostInteractions/:postId/:userId", (req, res) => {
+  const { postId, userId } = req.params;
+  const data = {};
+  db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, row) => {
+    data.likes = row.count || 0;
+    db.get("SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
+      data.isLiked = !!row;
+      db.get("SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?", [postId], (err, row) => {
+        data.comments = row.count || 0;
+        db.get("SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?", [postId], (err, row) => {
+          data.shares = row.count || 0;
+          db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, row) => {
+            data.saves = row.count || 0;
+            db.get("SELECT 1 FROM post_saves WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
+              data.isSaved = !!row;
+              res.json({ success: true, data });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+app.get("/getInteractionUsers/:postId/:type", (req, res) => {
+  const { postId, type } = req.params;
+  let table = (type === "likes") ? "post_likes" : (type === "saves") ? "post_saves" : "post_shares";
+  db.all(`SELECT DISTINCT u.id, u.name, u.avatar FROM ${table} t JOIN users u ON t.user_id = u.id WHERE t.post_id = ?`, [postId], (err, rows) => {
+    res.json({ success: true, users: rows || [] });
+  });
+});
+
+app.get("/getPostComments/:postId", (req, res) => {
+  db.all("SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.post_id = ? ORDER BY pc.timestamp ASC", [req.params.postId], (err, rows) => {
+    res.json({ success: true, comments: rows || [] });
+  });
 });
 
 // This must be after all API routes to ensure they are handled first.

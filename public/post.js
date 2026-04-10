@@ -1,9 +1,13 @@
 (function () {
   const userId = localStorage.getItem("userId");
+  const userName = localStorage.getItem("username");
   const socket = io();
   let postMedia = [];
   let selectedPostMusic = null;
   let selectedPostTaggedUsers = new Set();
+
+  let currentViewingPostId = null;
+  let interactionStates = {}; 
 
   // Independent Post Music State
   let postMusicPreviewPlayer = null;
@@ -445,6 +449,9 @@
     const musicTitle = document.getElementById("postViewerMusicTitle");
     const tagsRow = document.getElementById("postViewerTagsRow");
 
+    currentViewingPostId = post.id;
+    loadPostInteractions(post.id);
+
     let mediaArr = [];
     try {
       mediaArr = JSON.parse(post.media);
@@ -487,6 +494,198 @@
 
     modal.style.display = "flex";
   };
+
+  async function loadPostInteractions(postId) {
+    const res = await fetch(`/getPostInteractions/${postId}/${userId}`);
+    const data = await res.json();
+    if (data.success) {
+      interactionStates[postId] = data.data;
+      updateInteractionUI(postId);
+    }
+  }
+
+  function updateInteractionUI(postId) {
+    if (postId !== currentViewingPostId) return;
+    const state = interactionStates[postId];
+    if (!state) return;
+
+    document.getElementById("likeCount").innerText = state.likes;
+    document.getElementById("commentCount").innerText = state.comments;
+    document.getElementById("shareCount").innerText = state.shares;
+    document.getElementById("saveCount").innerText = state.saves;
+
+    const likeIcon = document.getElementById("likeIcon");
+    likeIcon.className = state.isLiked ? "fa-solid fa-heart" : "fa-regular fa-heart";
+
+    const saveIcon = document.getElementById("saveIcon");
+    saveIcon.className = state.isSaved ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark";
+  }
+
+  window.toggleLikePost = async () => {
+    if (!currentViewingPostId) return;
+    const postId = currentViewingPostId;
+    if (interactionStates[postId].isLiking) return;
+    interactionStates[postId].isLiking = true;
+
+    const res = await fetch("/likePost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, userId, userName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      interactionStates[postId].isLiked = data.liked;
+      interactionStates[postId].likes = data.count;
+      interactionStates[postId].isLiking = false;
+      updateInteractionUI(postId);
+    }
+  };
+
+  window.toggleSavePost = async () => {
+    if (!currentViewingPostId) return;
+    const postId = currentViewingPostId;
+    if (interactionStates[postId].isSaving) return;
+    interactionStates[postId].isSaving = true;
+
+    const res = await fetch("/savePost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, userId, userName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      interactionStates[postId].isSaved = data.saved;
+      interactionStates[postId].saves = data.count;
+      interactionStates[postId].isSaving = false;
+      updateInteractionUI(postId);
+    }
+  };
+
+  window.sharePostInteraction = async () => {
+    if (!currentViewingPostId) return;
+    const postId = currentViewingPostId;
+    const res = await fetch("/sharePost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, userId, userName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      interactionStates[postId].shares = data.count;
+      updateInteractionUI(postId);
+      showPopup("Post Shared!");
+    }
+  };
+
+  window.openPostComments = async () => {
+    if (!currentViewingPostId) return;
+    const postId = currentViewingPostId;
+    const modal = document.getElementById("postCommentsModal");
+    const list = document.getElementById("postCommentsList");
+    list.innerHTML = "Loading...";
+    modal.style.display = "flex";
+
+    const res = await fetch(`/getPostComments/${postId}`);
+    const data = await res.json();
+    list.innerHTML = "";
+    if (data.comments.length === 0) {
+      list.innerHTML = '<p style="color:#555; text-align:center;">No comments yet</p>';
+    } else {
+      data.comments.forEach(c => appendCommentToUI(c));
+    }
+  };
+
+  window.sendPostComment = async () => {
+    const input = document.getElementById("postCommentInput");
+    const comment = input.value.trim();
+    if (!comment || !currentViewingPostId) return;
+    const postId = currentViewingPostId;
+
+    const res = await fetch("/commentPost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, userId, userName, comment })
+    });
+    const data = await res.json();
+    if (data.success) {
+      input.value = "";
+      interactionStates[postId].comments = data.count;
+      updateInteractionUI(postId);
+      // appendCommentToUI(data.comment);
+    }
+  };
+
+  function appendCommentToUI(c) {
+    const list = document.getElementById("postCommentsList");
+    const noComments = list.querySelector("p");
+    if (noComments) noComments.remove();
+
+    const div = document.createElement("div");
+    div.className = "post-comment-item";
+    div.innerHTML = `
+      <img src="${c.avatar || '/images/profile1.webp'}">
+      <div class="comment-content">
+        <div class="comment-user">${c.name}</div>
+        <div class="comment-text">${c.comment}</div>
+        <div class="comment-time">${window.timeAgo ? timeAgo(c.timestamp) : ''}</div>
+      </div>
+    `;
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+  }
+
+  window.openInteractionUsers = async (type) => {
+    if (!currentViewingPostId) return;
+    const modal = document.getElementById("interactionUsersModal");
+    const list = document.getElementById("interactionUsersList");
+    const title = document.getElementById("interactionModalTitle");
+    title.innerText = type.charAt(0).toUpperCase() + type.slice(1);
+    list.innerHTML = "Loading...";
+    modal.style.display = "flex";
+
+    const res = await fetch(`/getInteractionUsers/${currentViewingPostId}/${type}`);
+    const data = await res.json();
+    list.innerHTML = "";
+    data.users.forEach(u => {
+      const d = document.createElement("div");
+      d.className = "friend-item-mini";
+      d.style.marginBottom = "10px";
+      d.innerHTML = `<img src="${u.avatar || '/images/profile1.webp'}"> <div style="color:white; font-weight:bold;">${u.name}</div>`;
+      list.appendChild(d);
+    });
+  };
+
+  // Real-time Interaction Listeners
+  socket.on("postLiked", ({ postId, userId: actorId, liked, count }) => {
+    if (interactionStates[postId]) {
+      interactionStates[postId].likes = count;
+      if (actorId == userId) interactionStates[postId].isLiked = liked;
+      updateInteractionUI(postId);
+    }
+  });
+  socket.on("postSaved", ({ postId, userId: actorId, saved, count }) => {
+    if (interactionStates[postId]) {
+      interactionStates[postId].saves = count;
+      if (actorId == userId) interactionStates[postId].isSaved = saved;
+      updateInteractionUI(postId);
+    }
+  });
+  socket.on("postShared", ({ postId, count }) => {
+    if (interactionStates[postId]) {
+      interactionStates[postId].shares = count;
+      updateInteractionUI(postId);
+    }
+  });
+  socket.on("postCommented", ({ postId, comment, count }) => {
+    if (interactionStates[postId]) {
+      interactionStates[postId].comments = count;
+      updateInteractionUI(postId);
+      const commentsModal = document.getElementById("postCommentsModal");
+      if (postId === currentViewingPostId && commentsModal.style.display === "flex") {
+        appendCommentToUI(comment);
+      }
+    }
+  });
 
   function playPostMusic(music) {
     stopPostMusicPlayback();
