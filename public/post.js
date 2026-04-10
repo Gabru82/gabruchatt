@@ -24,16 +24,26 @@
     plusBtn.onclick = () => openPostModal();
   }
 
-  // Trigger postGalleryModal on statPosts2 click
-  const statPostsBtn = document.getElementById("statPosts2");
-  if (statPostsBtn) {
-    const target = statPostsBtn.closest(".stat-box") || statPostsBtn;
-    target.style.cursor = "pointer";
-    target.onclick = (e) => {
-      e.stopPropagation();
-      openPostGallery(userId);
-    };
+  // Setup Post Gallery Triggers for Own and Friends Profiles
+  function initPostGalleryTriggers() {
+    // Own Profile Stats (statPosts2)
+    const myStatBtn = document.getElementById("statPosts2");
+    if (myStatBtn) {
+      const target = myStatBtn.closest(".stat-box") || myStatBtn;
+      target.style.cursor = "pointer";
+      target.onclick = (e) => { e.stopPropagation(); openPostGallery(userId); };
+    }
+
+    // Friends Profile Stats (statPosts)
+    const friendStatBtn = document.getElementById("statPosts");
+    if (friendStatBtn) {
+      const target = friendStatBtn.closest(".stat-box") || friendStatBtn;
+      target.style.cursor = "pointer";
+      target.onclick = (e) => { e.stopPropagation(); if (window.currentFriendId) openPostGallery(window.currentFriendId); };
+    }
   }
+
+  initPostGalleryTriggers();
 
   window.openPostModal = () => {
     postMedia = [];
@@ -433,6 +443,7 @@
     const captionEl = document.getElementById("postViewerCaption");
     const musicRow = document.getElementById("postViewerMusicRow");
     const musicTitle = document.getElementById("postViewerMusicTitle");
+    const tagsRow = document.getElementById("postViewerTagsRow");
 
     let mediaArr = [];
     try {
@@ -443,10 +454,12 @@
     mediaContainer.innerHTML = mediaArr
       .map((m) =>
         m.type === "video"
-          ? `<video src="${m.data}" autoplay muted loop style="max-width:100%; max-height:100%;"></video>`
-          : `<img src="${m.data}" style="max-width:100%; max-height:100%;">`,
+          ? `<video src="${m.data}" autoplay muted loop style="max-width:100%; max-height:100%; flex-shrink:0;"></video>`
+          : `<img src="${m.data}" style="max-width:100%; max-height:100%; flex-shrink:0;">`,
       )
       .join("");
+    mediaContainer.style.overflowX = mediaArr.length > 1 ? "auto" : "hidden";
+    mediaContainer.style.justifyContent = mediaArr.length > 1 ? "flex-start" : "center";
 
     captionEl.textContent = post.caption || "";
     let music = null;
@@ -460,6 +473,18 @@
     } else {
       musicRow.style.display = "none";
     }
+
+    let tagsArr = [];
+    try {
+      if (post.tags) tagsArr = JSON.parse(post.tags);
+    } catch (e) {}
+    if (tagsArr.length > 0 && tagsRow) {
+      tagsRow.style.display = "block";
+      tagsRow.innerHTML = `<i class="fa-solid fa-user-tag" style="color:#ffcc00; margin-right:5px;"></i> Tagged: ${tagsArr.length} people`;
+    } else if (tagsRow) {
+      tagsRow.style.display = "none";
+    }
+
     modal.style.display = "flex";
   };
 

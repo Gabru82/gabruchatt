@@ -3792,6 +3792,7 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
   closeAllModals();
   scrollToBottomBtn.classList.remove("show"); // Ensure button is hidden on open
   currentFriendId = friendId;
+  window.currentFriendId = friendId;
   currentFriendName = friendName;
   activeChat = friendId;
   delete unreadCounts[friendId];

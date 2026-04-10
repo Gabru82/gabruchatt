@@ -2795,12 +2795,11 @@ io.on("connection", (socket) => {
           return callback({ success: false });
         }
 
-        // 👇 SAME LOGIC YOU ALREADY USE IN /getMyProfile
         db.get(
-          `SELECT COUNT(*) as count FROM messages WHERE sender=?`,
+          `SELECT COUNT(*) as count FROM posts WHERE user_id=?`,
           [userId],
-          (err, mRow) => {
-            user.posts = mRow ? mRow.count : 0;
+          (err, pRow) => {
+            user.posts = pRow ? pRow.count : 0;
 
             const scoreQuery = `
             SELECT COUNT(*) as total_score FROM (
