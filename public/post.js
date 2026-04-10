@@ -7,6 +7,7 @@
   let selectedPostTaggedUsers = new Set();
 
   let currentViewingPostId = null;
+  let currentViewingPost = null;
   let interactionStates = {}; 
 
   // Independent Post Music State
@@ -53,6 +54,7 @@
     postMedia = [];
     selectedPostMusic = null;
     selectedPostTaggedUsers.clear();
+    currentViewingPostId = null;
     document.getElementById("postCaption").value = "";
     document.getElementById("selectedPostMusic").innerText = "None";
     document.getElementById("taggedUsersCount").innerText = "0 people";
@@ -123,7 +125,7 @@
 
   // ================= POST MUSIC PICKER LOGIC =================
 
-  window.openPostMusicPicker = () => {
+  window.openPostMusicPicker = (existingMusic = null) => {
     document.getElementById("postMusicPickerModal").style.display = "flex";
     document.getElementById("postMusicSearchInput").value = "";
     document.getElementById("postMusicResultsList").innerHTML =
@@ -131,7 +133,17 @@
     document.getElementById("postMusicPreviewPlayer").style.display = "none";
     document.getElementById("postMusicTrimmer").style.display = "none";
     document.getElementById("postConfirmMusicBtn").style.display = "none";
-    postSegmentStartTime = 0;
+
+    if (existingMusic) {
+      selectedPostMusic = existingMusic;
+      postSegmentStartTime = existingMusic.startTime || 0;
+      playPostMusicPreview(existingMusic);
+      setupPostMusicTrimmer(existingMusic);
+      document.getElementById("postConfirmMusicBtn").style.display = "block";
+    } else {
+      postSegmentStartTime = 0;
+      selectedPostMusic = null;
+    }
     stopPostMusicPreview();
   };
 
@@ -401,7 +413,22 @@
   document.addEventListener("mouseup", () => (isDraggingPostSlider = false));
   document.addEventListener("touchend", () => (isDraggingPostSlider = false));
 
-  document.getElementById("postConfirmMusicBtn").onclick = () => {
+  document.getElementById("postConfirmMusicBtn").onclick = async () => {
+    if (currentViewingPostId) {
+      const res = await fetch("/updatePostMusic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: currentViewingPostId, userId, music: selectedPostMusic })
+      });
+      const data = await res.json();
+      if (data.success) {
+        socket.emit("postUpdated", { postId: currentViewingPostId, music: selectedPostMusic });
+        if (currentViewingPost) currentViewingPost.music = JSON.stringify(selectedPostMusic);
+        if (window.showPopup) showPopup("Music updated!");
+      }
+      closePostMusicPicker();
+      return;
+    }
     const display = document.getElementById("selectedPostMusic");
     display.innerHTML = `
             <div style="display:flex; align-items:center; gap:5px; justify-content:flex-end;">
@@ -425,6 +452,8 @@
 
   window.closePostViewer = () => {
     document.getElementById("postViewerModal").style.display = "none";
+    currentViewingPostId = null;
+    currentViewingPost = null;
     stopPostMusicPlayback();
   };
 
@@ -450,7 +479,11 @@
     const tagsRow = document.getElementById("postViewerTagsRow");
 
     currentViewingPostId = post.id;
+    currentViewingPost = post;
     loadPostInteractions(post.id);
+
+    const optionsBtn = document.getElementById("postOptionsBtn");
+    if (optionsBtn) optionsBtn.style.display = (post.user_id == userId) ? "block" : "none";
 
     let mediaArr = [];
     try {
@@ -687,6 +720,193 @@
     }
   });
 
+  // ================= POST OPTIONS MENU =================
+  window.openPostActionSheet = () => {
+    if (!currentViewingPost) return;
+    const sheet = document.getElementById("postActionSheet");
+    sheet.style.display = "block";
+    updatePostVisibilityUI(currentViewingPost.isHidden);
+    setTimeout(() => sheet.classList.add("active"), 10);
+  };
+
+  window.closePostActionSheet = () => {
+    const sheet = document.getElementById("postActionSheet");
+    sheet.classList.remove("active");
+    setTimeout(() => sheet.style.display = "none", 300);
+  };
+
+  window.handleEditPostMusic = () => {
+    closePostActionSheet();
+    let music = null;
+    try { if (currentViewingPost.music) music = JSON.parse(currentViewingPost.music); } catch(e){}
+    openPostMusicPicker(music);
+  };
+
+  window.handleEditPostCaption = () => {
+    closePostActionSheet();
+    const modal = document.getElementById("editPostCaptionModal");
+    const input = document.getElementById("editPostCaptionInput");
+    input.value = currentViewingPost.caption || "";
+    modal.style.display = "flex";
+  };
+
+  window.savePostCaption = async () => {
+    const caption = document.getElementById("editPostCaptionInput").value.trim();
+    const res = await fetch("/updatePostCaption", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: currentViewingPostId, userId, caption })
+    });
+    const data = await res.json();
+    if (data.success) {
+      socket.emit("postUpdated", { postId: currentViewingPostId, caption });
+      if (currentViewingPost) currentViewingPost.caption = caption;
+      document.getElementById("editPostCaptionModal").style.display = "none";
+      if (window.showPopup) showPopup("Caption updated!");
+    }
+  };
+
+  window.handleManagePostTags = () => {
+    if (!currentViewingPost) return;
+    closePostActionSheet();
+    let tags = [];
+    try { tags = JSON.parse(currentViewingPost.tags || "[]"); } catch(e){}
+    selectedPostTaggedUsers = new Set(tags);
+    openPostTagPicker();
+
+    const confirmBtn = document.getElementById("confirmPostTagsBtn");
+    const originalOnclick = confirmBtn.onclick;
+    confirmBtn.onclick = async () => {
+      if (currentViewingPostId) {
+        const tagsArr = Array.from(selectedPostTaggedUsers);
+        const res = await fetch("/updatePostTags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId: currentViewingPostId, userId, tags: tagsArr })
+        });
+        const data = await res.json();
+        if (data.success) {
+          socket.emit("postUpdated", { postId: currentViewingPostId, tags: tagsArr });
+          if (currentViewingPost) currentViewingPost.tags = JSON.stringify(tagsArr);
+          if (window.showPopup) showPopup("Tags updated!");
+        }
+        closePostTagPicker();
+      } else { originalOnclick(); }
+      confirmBtn.onclick = originalOnclick;
+    };
+  };
+
+  window.handleTogglePostVisibility = async () => {
+    const res = await fetch("/togglePostVisibility", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: currentViewingPostId, userId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      socket.emit("postVisibilityChanged", { postId: currentViewingPostId, isHidden: data.isHidden, userId });
+      if (currentViewingPost) currentViewingPost.isHidden = data.isHidden;
+      updatePostVisibilityUI(data.isHidden);
+      if (window.showPopup) showPopup(data.isHidden ? "Post hidden" : "Post visible");
+    }
+  };
+
+  function updatePostVisibilityUI(isHidden) {
+    const item = document.getElementById("visibilityToggleItem");
+    if (item) {
+      item.innerHTML = isHidden ? 
+        '<i class="fa-solid fa-eye"></i> Unhide Post' : 
+        '<i class="fa-solid fa-eye-slash"></i> Hide Post';
+    }
+  }
+
+  window.handleDeletePost = () => {
+    if (!currentViewingPostId) return;
+
+    closePostActionSheet();
+    const modal = document.getElementById("confirmModal");
+    const text = document.getElementById("confirmText");
+    const yesBtn = document.getElementById("confirmYesBtn");
+    const noBtn = document.getElementById("confirmNoBtn");
+
+    // Clear any previous handlers to avoid multiple calls
+    yesBtn.onclick = null;
+    noBtn.onclick = null;
+
+    text.innerText = "Are you sure you want to delete this post?";
+    modal.style.display = "flex";
+    modal.style.zIndex = "10020"; // High z-index to appear above the post viewer
+    modal.style.justifyContent = "center";
+    modal.style.alignItems = "center";
+
+    yesBtn.onclick = () => {
+      modal.style.display = "none";
+      fetch("/deletePost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: currentViewingPostId, userId })
+      }).then(res => res.json()).then(data => {
+        if (data.success) {
+          socket.emit("postDeleted", { postId: currentViewingPostId });
+          const item = document.querySelector(`.post-grid-item[data-id="${currentViewingPostId}"]`);
+          if (item) item.remove();
+          closePostViewer();
+          if (window.showPopup) showPopup("Post deleted");
+          const stat = document.getElementById("statPosts2");
+          if (stat) stat.innerText = Math.max(0, parseInt(stat.innerText) - 1);
+        }
+      });
+    };
+
+    noBtn.onclick = () => {
+      modal.style.display = "none";
+    };
+  };
+
+  // ================= REAL-TIME LISTENERS =================
+  socket.on("postUpdated", (data) => {
+    const { postId, music, caption, tags } = data;
+    if (currentViewingPostId == postId) {
+      if (caption !== undefined) document.getElementById("postViewerCaption").textContent = caption;
+      if (music !== undefined) {
+        const musicRow = document.getElementById("postViewerMusicRow");
+        const musicTitle = document.getElementById("postViewerMusicTitle");
+        if (music) {
+          musicRow.style.display = "flex";
+          musicTitle.textContent = music.title;
+          playPostMusic(music);
+        } else {
+          musicRow.style.display = "none";
+          stopPostMusicPlayback();
+        }
+      }
+      if (tags !== undefined) {
+        const tagsRow = document.getElementById("postViewerTagsRow");
+        if (tags && tags.length > 0) {
+          tagsRow.style.display = "block";
+          tagsRow.innerHTML = `<i class="fa-solid fa-user-tag" style="color:#ffcc00; margin-right:5px;"></i> Tagged: ${tags.length} people`;
+        } else { tagsRow.style.display = "none"; }
+      }
+    }
+  });
+
+  socket.on("postDeleted", ({ postId }) => {
+    if (currentViewingPostId == postId) closePostViewer();
+    const item = document.querySelector(`.post-grid-item[data-id="${postId}"]`);
+    if (item) item.remove();
+  });
+
+  socket.on("postVisibilityChanged", ({ postId, isHidden, userId: postOwnerId }) => {
+    if (currentViewingPostId == postId && String(userId) !== String(postOwnerId) && isHidden) {
+      closePostViewer();
+    }
+    const item = document.querySelector(`.post-grid-item[data-id="${postId}"]`);
+    if (item && String(userId) !== String(postOwnerId)) {
+      if (isHidden) item.style.display = "none";
+      else item.style.display = "block";
+    }
+  });
+
   function playPostMusic(music) {
     stopPostMusicPlayback();
     const startTime = music.startTime || 0;
@@ -816,7 +1036,7 @@
   };
 
   window.openPostGallery = async (targetUserId) => {
-    const res = await fetch(`/getPosts/${targetUserId}`);
+    const res = await fetch(`/getPosts/${targetUserId}?requesterId=${userId}`);
     const data = await res.json();
     const grid = document.getElementById("postGrid");
     grid.innerHTML = "";
@@ -833,6 +1053,7 @@
         const firstMedia = mediaArr[0];
         const item = document.createElement("div");
         item.className = "post-grid-item";
+        item.setAttribute("data-id", post.id);
         item.innerHTML =
           firstMedia.type === "video"
             ? `<video src="${firstMedia.data}"></video>`

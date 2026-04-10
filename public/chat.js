@@ -178,10 +178,8 @@ window.closeFullScreenImage = function () {
 // ================= LOGOUT =================
 
 document.getElementById("logout").onclick = () => {
-  if (confirm("Are you sure you want to logout?")) {
-    localStorage.clear();
-    window.location.href = "/index.html";
-  }
+  const modal = document.getElementById("logoutModal");
+  if (modal) modal.style.display = "flex";
 };
 
 // ================= UI IMPROVEMENTS (Auto-resize & Wrapping) =================
@@ -755,13 +753,32 @@ async function markNotificationsRead() {
 }
 
 window.clearAllNotifications = async function () {
-  if (!confirm("Clear all notifications?")) return;
-  const res = await fetch("/clearNotifications", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId }),
-  });
-  if (res.ok) loadNotifications();
+  const modal = document.getElementById("confirmModal");
+  const text = document.getElementById("confirmText");
+  const yesBtn = document.getElementById("confirmYesBtn");
+  const noBtn = document.getElementById("confirmNoBtn");
+
+  if (!modal) return;
+
+  text.innerText = "Clear all notifications?";
+  modal.style.display = "flex";
+  modal.style.zIndex = "999999";
+  modal.style.justifyContent = "center";
+  modal.style.alignItems = "center";
+
+  yesBtn.onclick = async () => {
+    modal.style.display = "none";
+    const res = await fetch("/clearNotifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    if (res.ok) loadNotifications();
+  };
+
+  noBtn.onclick = () => {
+    modal.style.display = "none";
+  };
 };
 
 function updateNotificationBadge(count) {

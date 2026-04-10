@@ -324,6 +324,11 @@ db.serialize(() => {
       console.error("notifications content error:", err.message);
     }
   });
+  db.run("ALTER TABLE posts ADD COLUMN isHidden INTEGER DEFAULT 0", (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("posts isHidden error:", err.message);
+    }
+  });
 });
 // ================= ROUTES =================
 
@@ -3011,6 +3016,15 @@ io.on("connection", (socket) => {
   socket.on("newPost", (data) => {
     socket.broadcast.emit("postUpdate", data);
   });
+  socket.on("postUpdated", (data) => {
+    socket.broadcast.emit("postUpdated", data);
+  });
+  socket.on("postDeleted", (data) => {
+    socket.broadcast.emit("postDeleted", data);
+  });
+  socket.on("postVisibilityChanged", (data) => {
+    socket.broadcast.emit("postVisibilityChanged", data);
+  });
 });
 
 // ================= POST ROUTES =================
@@ -3066,14 +3080,62 @@ app.post("/uploadPost", (req, res) => {
 });
 
 app.get("/getPosts/:userId", (req, res) => {
-  db.all(
-    "SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC",
-    [req.params.userId],
-    (err, rows) => {
-      if (err) return res.status(500).json({ success: false });
-      res.json({ success: true, posts: rows });
-    },
-  );
+  const { userId } = req.params;
+  const requesterId = req.query.requesterId;
+  let query = "SELECT * FROM posts WHERE user_id = ?";
+  let params = [userId];
+
+  if (String(userId) !== String(requesterId)) {
+    query += " AND isHidden = 0";
+  }
+  query += " ORDER BY created_at DESC";
+
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false });
+    res.json({ success: true, posts: rows });
+  });
+});
+
+app.post("/updatePostMusic", (req, res) => {
+  const { postId, userId, music } = req.body;
+  db.run("UPDATE posts SET music = ? WHERE id = ? AND user_id = ?", [JSON.stringify(music), postId, userId], function(err) {
+    if (err) return res.json({ success: false });
+    res.json({ success: true });
+  });
+});
+
+app.post("/updatePostCaption", (req, res) => {
+  const { postId, userId, caption } = req.body;
+  db.run("UPDATE posts SET caption = ? WHERE id = ? AND user_id = ?", [caption, postId, userId], function(err) {
+    if (err) return res.json({ success: false });
+    res.json({ success: true });
+  });
+});
+
+app.post("/updatePostTags", (req, res) => {
+  const { postId, userId, tags } = req.body;
+  db.run("UPDATE posts SET tags = ? WHERE id = ? AND user_id = ?", [JSON.stringify(tags), postId, userId], function(err) {
+    if (err) return res.json({ success: false });
+    res.json({ success: true });
+  });
+});
+
+app.post("/togglePostVisibility", (req, res) => {
+  const { postId, userId } = req.body;
+  db.run("UPDATE posts SET isHidden = CASE WHEN isHidden = 0 THEN 1 ELSE 0 END WHERE id = ? AND user_id = ?", [postId, userId], function(err) {
+    if (err) return res.json({ success: false });
+    db.get("SELECT isHidden FROM posts WHERE id = ?", [postId], (err, row) => {
+      res.json({ success: true, isHidden: row ? row.isHidden : 0 });
+    });
+  });
+});
+
+app.post("/deletePost", (req, res) => {
+  const { postId, userId } = req.body;
+  db.run("DELETE FROM posts WHERE id = ? AND user_id = ?", [postId, userId], function(err) {
+    if (err) return res.json({ success: false });
+    res.json({ success: true });
+  });
 });
 
 // Background task for 24-hour message deletion
