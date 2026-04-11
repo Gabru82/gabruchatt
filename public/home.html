@@ -1834,10 +1834,15 @@
                     <button onclick="switchSnapCamera()" class="tool-btn"><i class="fa-solid fa-rotate"></i></button>
                 </div>
 
+                <!-- Beauty Intensity Slider -->
+                <div class="intensity-slider-container" id="intensitySliderContainer"
+                    style="position: absolute; bottom: 200px; width: 70%; left: 15%; z-index: 10; display: none;">
+                    <input type="range" id="filterIntensity" min="0" max="100" value="100" style="width: 100%; accent-color: #fffc00;">
+                </div>
+
                 <!-- Filter Carousel -->
                 <div class="filter-carousel" id="filterCarousel"
-                    style="position: absolute; bottom: 120px; width: 100%; display: flex; gap: 15px; padding: 10px 20px; overflow-x: auto; scrollbar-width: none; z-index: 10;">
-                    <!-- Filters injected by camera.js -->
+                    style="position: absolute; bottom: 120px; width: 100%; display: flex; gap: 15px; padding: 10px 20px; overflow-x: auto; scrollbar-width: none; z-index: 10; scroll-behavior: smooth;">
                 </div>
 
                 <div class="camera-footer"

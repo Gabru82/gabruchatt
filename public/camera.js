@@ -15,6 +15,39 @@
   let capturedImage = null;
   let selectedReceivers = new Set();
   let currentFacingMode = "user";
+  let beautyIntensity = 1.0;
+  let activePresetName = "Original";
+
+  const beautyPresets = {
+    "Original": { smooth: 0, brightness: 1, contrast: 1, saturation: 1, warmth: 0, tint: 0, clarity: 0, vignette: 0, glow: 0, sharpen: 0 },
+    "Natural": { smooth: 0.3, brightness: 1.05, contrast: 1.0, saturation: 1.05, warmth: 0.05, tint: 0, clarity: 0.1, vignette: 0, glow: 0.1, sharpen: 0 },
+    "Glow": { smooth: 0.5, brightness: 1.1, contrast: 1.05, saturation: 1.1, warmth: 0.1, tint: 0, clarity: 0, vignette: 0.1, glow: 0.4, sharpen: 0 },
+    "Soft Skin": { smooth: 0.8, brightness: 1.05, contrast: 0.95, saturation: 1.0, warmth: 0, tint: 0, clarity: -0.2, vignette: 0, glow: 0.2, sharpen: 0 },
+    "Bright Face": { smooth: 0.4, brightness: 1.2, contrast: 1.1, saturation: 1.0, warmth: 0, tint: 0, clarity: 0.2, vignette: 0, glow: 0.1, sharpen: 0.1 },
+    "Warm Tone": { smooth: 0.3, brightness: 1.0, contrast: 1.0, saturation: 1.1, warmth: 0.3, tint: 0, clarity: 0, vignette: 0.1, glow: 0, sharpen: 0 },
+    "Cool Tone": { smooth: 0.3, brightness: 1.0, contrast: 1.0, saturation: 1.0, warmth: -0.3, tint: 0.1, clarity: 0, vignette: 0.1, glow: 0, sharpen: 0 },
+    "Golden Hour": { smooth: 0.4, brightness: 1.1, contrast: 1.1, saturation: 1.3, warmth: 0.5, tint: -0.1, clarity: 0.1, vignette: 0.2, glow: 0.3, sharpen: 0 },
+    "Pink Glow": { smooth: 0.5, brightness: 1.1, contrast: 1.0, saturation: 1.1, warmth: 0, tint: 0.3, clarity: 0, vignette: 0.1, glow: 0.4, sharpen: 0 },
+    "HD Skin": { smooth: 0.2, brightness: 1.0, contrast: 1.1, saturation: 1.0, warmth: 0, tint: 0, clarity: 0.5, vignette: 0, glow: 0, sharpen: 0.4 },
+    "Matte Skin": { smooth: 0.6, brightness: 1.0, contrast: 1.0, saturation: 0.9, warmth: 0, tint: 0, clarity: -0.1, vignette: 0, glow: 0, sharpen: 0 },
+    "High Contrast": { smooth: 0.2, brightness: 1.0, contrast: 1.4, saturation: 1.2, warmth: 0, tint: 0, clarity: 0.3, vignette: 0.2, glow: 0, sharpen: 0.2 },
+    "Low Contrast": { smooth: 0.5, brightness: 1.05, contrast: 0.7, saturation: 0.9, warmth: 0, tint: 0, clarity: -0.3, vignette: 0, glow: 0.2, sharpen: 0 },
+    "Film Soft": { smooth: 0.4, brightness: 1.0, contrast: 0.9, saturation: 0.8, warmth: 0.1, tint: 0, clarity: -0.2, vignette: 0.3, glow: 0.3, sharpen: 0 },
+    "Vintage Warm": { smooth: 0.3, brightness: 0.95, contrast: 1.1, saturation: 0.7, warmth: 0.4, tint: 0, clarity: 0, vignette: 0.4, glow: 0, sharpen: 0 },
+    "Clean White": { smooth: 0.5, brightness: 1.2, contrast: 1.0, saturation: 0.8, warmth: -0.1, tint: 0, clarity: 0.2, vignette: 0, glow: 0.1, sharpen: 0.1 },
+    "Peach Tone": { smooth: 0.4, brightness: 1.1, contrast: 1.0, saturation: 1.2, warmth: 0.2, tint: 0.2, clarity: 0, vignette: 0.1, glow: 0.2, sharpen: 0 },
+    "Sun Kissed": { smooth: 0.3, brightness: 1.1, contrast: 1.05, saturation: 1.4, warmth: 0.4, tint: -0.05, clarity: 0.1, vignette: 0.1, glow: 0.2, sharpen: 0.1 },
+    "Night Boost": { smooth: 0.4, brightness: 1.4, contrast: 1.2, saturation: 1.1, warmth: 0, tint: 0, clarity: 0.4, vignette: 0.3, glow: 0.2, sharpen: 0.3 },
+    "Neon Glow": { smooth: 0.3, brightness: 1.1, contrast: 1.3, saturation: 1.6, warmth: -0.1, tint: 0.4, clarity: 0.2, vignette: 0.2, glow: 0.5, sharpen: 0.2 },
+    "Beauty Pro": { smooth: 0.7, brightness: 1.1, contrast: 1.05, saturation: 1.1, warmth: 0.1, tint: 0.05, clarity: 0.1, vignette: 0.1, glow: 0.3, sharpen: 0.1 },
+   
+  };
+
+  // Offscreen for multi-pass rendering
+  const bufferCanvas = document.createElement("canvas");
+  const bufferCtx = bufferCanvas.getContext("2d");
+  const maskCanvas = document.createElement("canvas");
+  const maskCtx = maskCanvas.getContext("2d");
 
   // AR Assets Initialization
   const assets = {
@@ -28,16 +61,6 @@
   assets.dog_ears.src = "https://cdn-icons-png.flaticon.com/512/616/616408.png";
   assets.sunglasses.crossOrigin = "anonymous";
   assets.sunglasses.src = "https://cdn-icons-png.flaticon.com/512/655/655781.png";
-
-  const filters = [
-    { name: "Original", type: "none" },
-    { name: "Beauty", type: "beauty" },
-    { name: "Dog", type: "ar", key: "dog" },
-    { name: "Cool", type: "ar", key: "glasses" },
-    { name: "B&W", type: "canvas", filter: "grayscale(100%)" },
-    { name: "Warm", type: "canvas", filter: "sepia(40%) saturate(150%)" },
-    { name: "Vivid", type: "canvas", filter: "contrast(130%) saturate(160%)" },
-  ];
 
   async function initAR() {
     if (faceMesh) return;
@@ -55,39 +78,110 @@
     faceMesh.onResults(onResults);
   }
 
+  function getEngineState() {
+    const preset = beautyPresets[activePresetName];
+    if (!preset || preset.type === "ar") return null;
+    
+    const state = {};
+    for (let k in preset) {
+      if (['brightness', 'contrast', 'saturation'].includes(k)) {
+        state[k] = 1.0 + (preset[k] - 1.0) * beautyIntensity;
+      } else {
+        state[k] = preset[k] * beautyIntensity;
+      }
+    }
+    return state;
+  }
+
   function onResults(results) {
     if (arCanvas.width !== video.videoWidth || arCanvas.height !== video.videoHeight) {
       arCanvas.width = video.videoWidth;
       arCanvas.height = video.videoHeight;
+      bufferCanvas.width = arCanvas.width;
+      bufferCanvas.height = arCanvas.height;
+      maskCanvas.width = arCanvas.width;
+      maskCanvas.height = arCanvas.height;
     }
+
+    const engine = getEngineState();
 
     ctx.save();
     ctx.clearRect(0, 0, arCanvas.width, arCanvas.height);
 
-    const activeFilter = filters[activeFilterIndex];
-    
-    // Apply Beauty or Canvas filters
-    if (activeFilter.type === "beauty") {
-      ctx.filter = "brightness(1.05) contrast(1.1) saturate(1.1) blur(0.4px)";
-    } else if (activeFilter.type === "canvas") {
-      ctx.filter = activeFilter.filter;
-    }
-
-    // Mirror for front camera
+    // Pass 1: Draw Video Frame to Buffer (with Mirroring)
+    bufferCtx.save();
     if (currentFacingMode === "user") {
-      ctx.translate(arCanvas.width, 0);
-      ctx.scale(-1, 1);
+      bufferCtx.translate(bufferCanvas.width, 0);
+      bufferCtx.scale(-1, 1);
+    }
+    bufferCtx.drawImage(results.image, 0, 0, bufferCanvas.width, bufferCanvas.height);
+    bufferCtx.restore();
+
+    // Pass 2: Apply Base Fast Filters
+    if (engine) {
+      ctx.filter = `brightness(${engine.brightness}) contrast(${engine.contrast}) saturate(${engine.saturation}) hue-rotate(${engine.tint * 20}deg)`;
+    }
+    ctx.drawImage(bufferCanvas, 0, 0);
+    ctx.filter = "none";
+
+    // Pass 3: Skin Smoothing
+    if (engine && engine.smooth > 0 && results.multiFaceLandmarks?.length > 0) {
+      const landmarks = results.multiFaceLandmarks[0];
+      const path = new Path2D();
+      drawFaceOval(landmarks, path, arCanvas.width, arCanvas.height);
+      
+      ctx.save();
+      ctx.clip(path);
+      ctx.globalAlpha = engine.smooth * 0.7;
+      ctx.filter = `blur(${Math.max(1, 4 * engine.smooth)}px)`;
+      ctx.drawImage(bufferCanvas, 0, 0);
+      ctx.restore();
     }
 
-    ctx.drawImage(results.image, 0, 0, arCanvas.width, arCanvas.height);
-    ctx.filter = "none"; // Reset for AR overlays
+    // Pass 4: Color Grading (Warmth/Tint)
+    if (engine && (engine.warmth !== 0)) {
+      ctx.save();
+      ctx.globalCompositeOperation = "soft-light";
+      ctx.fillStyle = engine.warmth > 0 ? `rgba(255, 150, 0, ${engine.warmth * 0.3})` : `rgba(0, 150, 255, ${Math.abs(engine.warmth) * 0.3})`;
+      ctx.fillRect(0, 0, arCanvas.width, arCanvas.height);
+      ctx.restore();
+    }
 
-    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0 && activeFilter.type === "ar") {
+    // Pass 5: Vignette & Glow
+    if (engine && (engine.glow > 0 || engine.vignette > 0)) {
+      const cX = arCanvas.width / 2, cY = arCanvas.height / 2;
+      const rad = Math.sqrt(cX**2 + cY**2);
+      if (engine.glow > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        const g = ctx.createRadialGradient(cX, cY, 0, cX, cY, rad);
+        g.addColorStop(0, `rgba(255, 255, 255, ${engine.glow * 0.4})`);
+        g.addColorStop(1, "transparent");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, arCanvas.width, arCanvas.height);
+        ctx.restore();
+      }
+      if (engine.vignette > 0) {
+        const v = ctx.createRadialGradient(cX, cY, rad * 0.2, cX, cY, rad);
+        v.addColorStop(0, "transparent");
+        v.addColorStop(1, `rgba(0, 0, 0, ${engine.vignette * 0.6})`);
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, arCanvas.width, arCanvas.height);
+      }
+    }
+
+    // Pass 6: AR Assets
+    const activePreset = beautyPresets[activePresetName];
+    if (activePreset?.type === "ar" && results.multiFaceLandmarks?.length > 0) {
+      if (currentFacingMode === "user") {
+        ctx.translate(arCanvas.width, 0);
+        ctx.scale(-1, 1);
+      }
       const landmarks = results.multiFaceLandmarks[0];
       const w = arCanvas.width;
       const h = arCanvas.height;
 
-      if (activeFilter.key === "dog") {
+      if (activePreset.key === "dog") {
         const nose = landmarks[1];
         const topHead = landmarks[10];
         const noseSize = w * 0.18;
@@ -106,8 +200,26 @@
         ctx.restore();
       }
     }
+
     ctx.restore();
   }
+
+  function drawFaceOval(landmarks, target, w, h) {
+    const oval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+    drawPath(landmarks, target, w, h, oval);
+  }
+
+  function drawPath(landmarks, target, w, h, indices) {
+    const mirror = currentFacingMode === "user";
+    const getX = (idx) => mirror ? (1 - landmarks[idx].x) * w : landmarks[idx].x * w;
+    
+    target.moveTo(getX(indices[0]), landmarks[indices[0]].y * h);
+    for (let i = 1; i < indices.length; i++) {
+      target.lineTo(getX(indices[i]), landmarks[indices[i]].y * h);
+    }
+    if (target.closePath) target.closePath();
+  }
+
 
   window.openSnapCamera = async () => {
     await initAR();
@@ -142,20 +254,25 @@
   // 2. Filters
   function initFilters() {
     filterCarousel.innerHTML = "";
-    filters.forEach((f, i) => {
+    Object.keys(beautyPresets).forEach((name) => {
       const item = document.createElement("div");
-      item.className = `filter-item ${i === activeFilterIndex ? "active" : ""}`;
-      item.innerText = f.name;
+      item.className = `filter-item ${name === activePresetName ? "active" : ""}`;
+      item.innerText = name;
       item.onclick = () => {
-        activeFilterIndex = i;
-        document
-          .querySelectorAll(".filter-item")
-          .forEach((el) => el.classList.remove("active"));
+        activePresetName = name;
+        document.querySelectorAll(".filter-item").forEach((el) => el.classList.remove("active"));
         item.classList.add("active");
+        
+        const slider = document.getElementById("intensitySliderContainer");
+        if (name === "Original" || beautyPresets[name].type === "ar") slider.style.display = "none";
+        else slider.style.display = "block";
       };
       filterCarousel.appendChild(item);
     });
   }
+
+  document.getElementById("filterIntensity").oninput = (e) => { beautyIntensity = e.target.value / 100; };
+
 
   // 3. Capture
   window.captureSnap = () => {
