@@ -6,6 +6,15 @@ const axios = require("axios");
 require("dotenv").config();
 const app = express();
 app.use(express.json({ limit: "100mb" }));
+
+// ================= FIREBASE ADMIN =================
+const admin = require("firebase-admin");
+// Ensure you have a serviceAccountKey.json in your project root or use env variables
+const serviceAccount = require("./serviceAccountKey.json"); 
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
 app.use(cors());
 process.on("uncaughtException", (err) => {
   console.error("🔥 UNCAUGHT EXCEPTION:", err);
@@ -333,6 +342,15 @@ db.serialize(() => {
       console.error("posts isHidden error:", err.message);
     }
   });
+
+  // ================= FCM TOKENS =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS fcm_tokens(
+      user_id INTEGER,
+      token TEXT,
+      UNIQUE(user_id, token)
+    )
+  `);
 });
 // ================= ROUTES =================
 
@@ -695,6 +713,42 @@ app.post("/verifyLoginOtp", (req, res) => {
     },
   );
 });
+
+app.post("/saveDeviceToken", (req, res) => {
+  const { userId, token } = req.body;
+  if (!userId || !token) return res.status(400).json({ success: false });
+
+  db.run(
+    "INSERT OR IGNORE INTO fcm_tokens(user_id, token) VALUES(?, ?)",
+    [userId, token],
+    (err) => {
+      res.json({ success: !err });
+    }
+  );
+});
+
+async function sendPushNotification(targetUserId, title, body, data = {}) {
+  db.all("SELECT token FROM fcm_tokens WHERE user_id = ?", [targetUserId], async (err, rows) => {
+    if (err || !rows || rows.length === 0) return;
+
+    const tokens = rows.map(r => r.token);
+    const message = {
+      notification: { title, body },
+      data: data, // Custom payload for routing
+      tokens: tokens,
+    };
+
+    try {
+      const response = await admin.messaging().sendEachForMulticast(message);
+      // Optional: Cleanup invalid tokens
+      if (response.failureCount > 0) {
+        console.log(`FCM failed for ${response.failureCount} tokens`);
+      }
+    } catch (error) {
+      console.error("FCM Error:", error);
+    }
+  });
+}
 
 app.post("/register", (req, res) => {
   const { name, email, password } = req.body;
@@ -1252,6 +1306,11 @@ app.post("/sendRequest", (req, res) => {
             "INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)",
             [receiver, sender, "friend_request"],
           );
+          db.get("SELECT name FROM users WHERE id = ?", [sender], (uErr, uRow) => {
+            if (uRow) {
+              sendPushNotification(receiver, "Friend Request", `${uRow.name} sent you a friend request`, { type: 'notification' });
+            }
+        });
           res.json({ success: true });
         },
       );
@@ -2187,6 +2246,7 @@ io.on("connection", (socket) => {
               openedBy: newList, 
               userId: uIdStr 
             });
+            sendPushNotification(row.sender, "Snap Opened", `${row.receiver} just opened your snap!`, { type: 'snap' });
           }
         });
       }
@@ -2540,8 +2600,14 @@ io.on("connection", (socket) => {
                   io.to(`user_${sender}`).emit("messageDelivered", {
                     msgId: finalMsgId,
                   });
+
+                if (!isInChat) {
+                  db.get("SELECT name FROM users WHERE id = ?", [sender], (uErr, uRow) => {
+                    if (uRow) sendPushNotification(receiver, uRow.name, message, { type: 'chat', chatId: sender });
+                  });
                 }
-              },
+                }
+              }
             );
 
             callback?.({ success: true, data: payload });
@@ -2700,10 +2766,16 @@ io.on("connection", (socket) => {
           .to(`user_${sender}`)
           .emit("newMessage", payload);
 
+          sendPushNotification(receiver, "Missed call", `You missed a call from ${sender}`, { type: 'chat', chatId: sender });
+
         // Auto-mark delivered for now since it's a system message mostly
         io.to(`user_${sender}`).emit("messageDelivered", {
           msgId: this.lastID,
         });
+
+          db.get("SELECT name FROM users WHERE id = ?", [sender], (uErr, uRow) => {
+            if (uRow) sendPushNotification(receiver, "Screenshot", `${uRow.name} took a screenshot of the chat!`, { type: 'chat', chatId: sender });
+          });
       },
     );
   });
@@ -3157,6 +3229,7 @@ app.post("/uploadPost", (req, res) => {
                   }
                 }
               );
+              sendPushNotification(taggedUserId, "Tagged in a post", `Someone tagged you in a post`, { type: 'post', postId: String(postId), senderId: String(userId) });
             });
           }
         });

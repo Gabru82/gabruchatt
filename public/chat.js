@@ -5287,4 +5287,19 @@ function sendScreenshotNotification() {
 // ================= LOAD PROFILE SCRIPT =================
 const profileScript = document.createElement("script");
 profileScript.src = "/profile.js";
+
+// ================= DEEP LINKING HANDLING =================
+window.addEventListener('load', () => {
+  const params = new URLSearchParams(window.location.search);
+  const chatId = params.get('chatId');
+  const postId = params.get('postId');
+  
+  if (chatId) {
+    // Wait for friends to load then open chat
+    setTimeout(() => {
+      const friend = cachedFriends.find(f => String(f.id) === String(chatId));
+      if (friend) openChat(friend.id, friend.name, friend.avatar);
+    }, 1000);
+  }
+});
 document.body.appendChild(profileScript);
