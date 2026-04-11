@@ -1,34 +1,123 @@
 (function () {
   const userId = localStorage.getItem("userId");
+  const socket = typeof io !== 'undefined' ? io() : null;
   const cameraModal = document.getElementById("cameraModal");
   const video = document.getElementById("snapVideo");
+  const arCanvas = document.getElementById("arCanvas");
+  const ctx = arCanvas.getContext("2d");
   const filterCarousel = document.getElementById("filterCarousel");
   const sendModal = document.getElementById("cameraSendModal");
   const friendListContainer = document.getElementById("snapFriendList");
 
-  let stream = null;
+  let faceMesh = null;
+  let camera = null;
+  let activeFilterIndex = 0;
   let capturedImage = null;
   let selectedReceivers = new Set();
   let currentFacingMode = "user";
 
+  // AR Assets Initialization
+  const assets = {
+    dog_nose: new Image(),
+    dog_ears: new Image(),
+    sunglasses: new Image()
+  };
+  assets.dog_nose.crossOrigin = "anonymous";
+  assets.dog_nose.src = "https://cdn-icons-png.flaticon.com/512/616/616412.png";
+  assets.dog_ears.crossOrigin = "anonymous";
+  assets.dog_ears.src = "https://cdn-icons-png.flaticon.com/512/616/616408.png";
+  assets.sunglasses.crossOrigin = "anonymous";
+  assets.sunglasses.src = "https://cdn-icons-png.flaticon.com/512/655/655781.png";
+
   const filters = [
-    { name: "Original", css: "none" },
-    { name: "B&W", css: "grayscale(100%)" },
-    { name: "Sepia", css: "sepia(100%)" },
-    { name: "Warm", css: "sepia(30%) saturate(160%) hue-rotate(-10deg)" },
-    { name: "Cool", css: "hue-rotate(180deg) saturate(120%)" },
-    { name: "Vivid", css: "contrast(120%) saturate(150%)" },
-    { name: "Invert", css: "invert(100%)" },
+    { name: "Original", type: "none" },
+    { name: "Beauty", type: "beauty" },
+    { name: "Dog", type: "ar", key: "dog" },
+    { name: "Cool", type: "ar", key: "glasses" },
+    { name: "B&W", type: "canvas", filter: "grayscale(100%)" },
+    { name: "Warm", type: "canvas", filter: "sepia(40%) saturate(150%)" },
+    { name: "Vivid", type: "canvas", filter: "contrast(130%) saturate(160%)" },
   ];
 
-  // 1. Initialize Camera
+  async function initAR() {
+    if (faceMesh) return;
+    faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+    });
+
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+
+    faceMesh.onResults(onResults);
+  }
+
+  function onResults(results) {
+    if (arCanvas.width !== video.videoWidth || arCanvas.height !== video.videoHeight) {
+      arCanvas.width = video.videoWidth;
+      arCanvas.height = video.videoHeight;
+    }
+
+    ctx.save();
+    ctx.clearRect(0, 0, arCanvas.width, arCanvas.height);
+
+    const activeFilter = filters[activeFilterIndex];
+    
+    // Apply Beauty or Canvas filters
+    if (activeFilter.type === "beauty") {
+      ctx.filter = "brightness(1.05) contrast(1.1) saturate(1.1) blur(0.4px)";
+    } else if (activeFilter.type === "canvas") {
+      ctx.filter = activeFilter.filter;
+    }
+
+    // Mirror for front camera
+    if (currentFacingMode === "user") {
+      ctx.translate(arCanvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+
+    ctx.drawImage(results.image, 0, 0, arCanvas.width, arCanvas.height);
+    ctx.filter = "none"; // Reset for AR overlays
+
+    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0 && activeFilter.type === "ar") {
+      const landmarks = results.multiFaceLandmarks[0];
+      const w = arCanvas.width;
+      const h = arCanvas.height;
+
+      if (activeFilter.key === "dog") {
+        const nose = landmarks[1];
+        const topHead = landmarks[10];
+        const noseSize = w * 0.18;
+        const earSize = w * 0.45;
+        ctx.drawImage(assets.dog_nose, nose.x * w - noseSize / 2, nose.y * h - noseSize / 2, noseSize, noseSize);
+        ctx.drawImage(assets.dog_ears, topHead.x * w - earSize / 2, topHead.y * h - earSize * 0.8, earSize, earSize * 0.6);
+      } else if (activeFilter.key === "glasses") {
+        const leftEye = landmarks[133], rightEye = landmarks[362], center = landmarks[168];
+        const dx = (rightEye.x - leftEye.x) * w, dy = (rightEye.y - leftEye.y) * h;
+        const angle = Math.atan2(dy, dx), dist = Math.sqrt(dx * dx + dy * dy);
+        const gW = dist * 2.4, gH = gW * 0.4;
+        ctx.save();
+        ctx.translate(center.x * w, center.y * h);
+        ctx.rotate(angle);
+        ctx.drawImage(assets.sunglasses, -gW / 2, -gH / 2, gW, gH);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
   window.openSnapCamera = async () => {
+    await initAR();
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: currentFacingMode },
-        audio: false,
+      camera = new Camera(video, {
+        onFrame: async () => { await faceMesh.send({ image: video }); },
+        facingMode: currentFacingMode,
+        width: 1280, height: 720
       });
-      video.srcObject = stream;
+      await camera.start();
       cameraModal.style.display = "flex";
       initFilters();
     } catch (err) {
@@ -40,18 +129,14 @@
   document.getElementById("cameraBtnBottom").onclick = () => openSnapCamera();
 
   window.closeSnapCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      stream = null;
-    }
+    if (camera) camera.stop();
     cameraModal.style.display = "none";
     retakeSnap();
   };
 
-  window.switchSnapCamera = () => {
+  window.switchSnapCamera = async () => {
     currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
-    closeSnapCamera();
-    openSnapCamera();
+    if (camera) { await camera.stop(); openSnapCamera(); }
   };
 
   // 2. Filters
@@ -59,14 +144,14 @@
     filterCarousel.innerHTML = "";
     filters.forEach((f, i) => {
       const item = document.createElement("div");
-      item.className = `filter-item ${i === 0 ? "active" : ""}`;
+      item.className = `filter-item ${i === activeFilterIndex ? "active" : ""}`;
       item.innerText = f.name;
       item.onclick = () => {
+        activeFilterIndex = i;
         document
           .querySelectorAll(".filter-item")
           .forEach((el) => el.classList.remove("active"));
         item.classList.add("active");
-        video.style.filter = f.css;
       };
       filterCarousel.appendChild(item);
     });
@@ -74,16 +159,8 @@
 
   // 3. Capture
   window.captureSnap = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-
-    // Apply filter to canvas
-    ctx.filter = getComputedStyle(video).filter;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    capturedImage = canvas.toDataURL("image/jpeg", 0.8);
+    // Capture directly from the AR canvas which already includes video + filters
+    capturedImage = arCanvas.toDataURL("image/jpeg", 0.8);
     document.getElementById("capturedSnapImg").src = capturedImage;
     document.getElementById("snapPreview").style.display = "block";
   };
@@ -126,6 +203,7 @@
       const item = document.createElement("div");
       item.className = `forward-friend-item ${selectedReceivers.has(f.id) ? "selected" : ""}`;
       item.innerHTML = `
+                <div class="f-id" data-id="${f.id}" style="display:none;"></div>
                 <img src="${f.avatar || "/images/profile1.webp"}">
                 <div class="forward-friend-info">
                     <div class="forward-friend-name">${f.name}</div>
@@ -152,13 +230,19 @@
     const items = document.querySelectorAll(
       "#snapFriendList .forward-friend-item",
     );
-    const allSelected = selectedReceivers.size === items.length;
-
+    const shouldSelectAll = selectedReceivers.size < items.length;
+    
+    selectedReceivers.clear();
     items.forEach((item) => {
-      const id = parseInt(item.getAttribute("data-id")); // Assuming you add data-id or similar
-      // For simplicity in this block, we'll re-fetch IDs if needed or just use current items
+      const id = parseInt(item.querySelector('.f-id').dataset.id);
+      if (shouldSelectAll) {
+        selectedReceivers.add(id);
+        item.classList.add("selected");
+      } else {
+        item.classList.remove("selected");
+      }
     });
-    // Implementation note: Logic would typically map visible friends to selection
+    updateSendBtnUI();
   };
 
   window.confirmSendSnap = () => {
