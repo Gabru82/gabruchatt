@@ -159,7 +159,8 @@ db.serialize(() => {
       type TEXT DEFAULT 'text',
       status TEXT DEFAULT 'sent',
       seen_at DATETIME,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      is_opened INTEGER DEFAULT 0
     )
   `);
 
@@ -171,6 +172,9 @@ db.serialize(() => {
   db.run("ALTER TABLE messages ADD COLUMN edited_for_me TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN reactions TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN reply_to INTEGER", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN is_opened INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN opened_by TEXT", () => {});
+  db.run("ALTER TABLE messages ADD COLUMN is_saved INTEGER DEFAULT 0", () => {});
 
   // ================= THEMES =================
   db.run(`
@@ -2129,6 +2133,90 @@ io.on("connection", (socket) => {
     db.run("UPDATE users SET last_seen=? WHERE id=?", [now, id]);
   });
 
+  socket.on("sendSnap", (data) => {
+    const { senderId, receivers, image, timestamp } = data;
+    const now = timestamp || new Date().toISOString();
+
+    receivers.forEach((receiverId) => {
+      db.run(
+        `INSERT INTO messages(sender, receiver, message, status, type, timestamp, is_opened, opened_by, is_saved) VALUES(?,?,?,?,?,?,?,?,?)`,
+        [senderId, receiverId, image, "sent", "snap", now, 0, "", 0],
+        function (err) {
+          if (err) return console.error("Snap Send Error:", err);
+
+          const payload = {
+            from: senderId,
+            to: receiverId,
+            message: image,
+            msgId: this.lastID,
+            status: "sent",
+            type: "snap",
+            timestamp: now,
+            isOpened: 0,
+            openedBy: "",
+            isSaved: 0
+          };
+
+          io.to(`user_${receiverId}`).emit("newMessage", payload);
+          // Also send back to sender for their history
+          io.to(`user_${senderId}`).emit("newMessage", payload);
+        }
+      );
+    });
+  });
+
+  socket.on("snapOpened", ({ msgId, userId }) => {
+    db.get("SELECT opened_by, sender, receiver FROM messages WHERE id=?", [msgId], (err, row) => {
+      if (err || !row) return;
+      
+      let openedBy = (row.opened_by || "").split(",").filter(Boolean);
+      const uIdStr = String(userId);
+      
+      if (!openedBy.includes(uIdStr)) {
+        openedBy.push(uIdStr);
+        const newList = openedBy.join(",");
+        
+        // Mark fully seen if both participants have opened it
+        const isFullyOpened = openedBy.length >= 2;
+        const statusUpdate = isFullyOpened ? ", status='seen', seen_at=CURRENT_TIMESTAMP" : "";
+        
+        db.run(`UPDATE messages SET opened_by=? ${statusUpdate} WHERE id=?`, [newList, msgId], (updErr) => {
+          if (!updErr) {
+            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("snapOpenedUpdate", { 
+              msgId, 
+              openedBy: newList, 
+              userId: uIdStr 
+            });
+          }
+        });
+      }
+    });
+  });
+
+  socket.on("snapSaved", ({ msgId }) => {
+    db.run("UPDATE messages SET is_saved=1 WHERE id=?", [msgId], (err) => {
+      if (!err) {
+        db.get("SELECT sender, receiver FROM messages WHERE id=?", [msgId], (gErr, row) => {
+          if (row) {
+            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("snapSavedUpdate", { msgId });
+          }
+        });
+      }
+    });
+  });
+
+  socket.on("snapUnsaved", ({ msgId }) => {
+    db.run("UPDATE messages SET is_saved=0 WHERE id=?", [msgId], (err) => {
+      if (!err) {
+        db.get("SELECT sender, receiver FROM messages WHERE id=?", [msgId], (gErr, row) => {
+          if (row) {
+            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("snapUnsavedUpdate", { msgId });
+          }
+        });
+      }
+    });
+  });
+
   socket.on("newStory", (data) => {
     socket.broadcast.emit("storyUpdate", data);
   });
@@ -2420,6 +2508,7 @@ io.on("connection", (socket) => {
               caption: caption,
               timestamp: timestamp,
               replyTo: replyTo || null,
+              isOpened: 0
             };
 
             // Determine status based on receiver's read receipt setting

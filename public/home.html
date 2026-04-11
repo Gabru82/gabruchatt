@@ -1586,7 +1586,7 @@
         </div>
 
         <!-- POST MUSIC PICKER MODAL -->
-        <div id="postMusicPickerModal" class="theme-popup" >
+        <div id="postMusicPickerModal" class="theme-popup">
             <div class="theme-popup-content"
                 style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 450px;">
                 <button class="close-btn" onclick="closePostMusicPicker()"
@@ -1820,6 +1820,85 @@
         </div>
 
 
+        <!-- SNAPCHAT CAMERA MODAL -->
+        <div id="cameraModal" class="story-modal" style="background: #000; z-index: 10010;">
+            <div class="camera-container"
+                style="height: 100%; position: relative; display: flex; flex-direction: column;">
+                <video id="snapVideo" autoplay playsinline
+                    style="width: 100%; height: 100%; object-fit: cover;"></video>
+
+                <div class="camera-header"
+                    style="position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; z-index: 10;">
+                    <button onclick="closeSnapCamera()" class="tool-btn"><i class="fa-solid fa-xmark"></i></button>
+                    <button onclick="switchSnapCamera()" class="tool-btn"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+
+                <!-- Filter Carousel -->
+                <div class="filter-carousel" id="filterCarousel"
+                    style="position: absolute; bottom: 120px; width: 100%; display: flex; gap: 15px; padding: 10px 20px; overflow-x: auto; scrollbar-width: none; z-index: 10;">
+                    <!-- Filters injected by camera.js -->
+                </div>
+
+                <div class="camera-footer"
+                    style="position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; align-items: center; z-index: 10;">
+                    <div class="capture-btn-outer" onclick="captureSnap()"
+                        style="width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                        <div class="capture-btn-inner"
+                            style="width: 60px; height: 60px; border-radius: 50%; background: white;"></div>
+                    </div>
+                </div>
+
+                <!-- Capture Preview -->
+                <div id="snapPreview"
+                    style="display: none; position: absolute; inset: 0; background: #000; z-index: 20;">
+                    <img id="capturedSnapImg" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div class="preview-actions"
+                        style="position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px;">
+                        <button onclick="saveSnapLocal()" class="action-btn-outline"
+                            style="background: rgba(0,0,0,0.5); border-radius: 25px; padding: 12px 25px;"><i
+                                class="fa-solid fa-download"></i> Save</button>
+                        <button onclick="openSnapSendModal()" class="publish-btn-story"
+                            style="background: #fffc00; color: #000;"><i class="fa-solid fa-paper-plane"></i> Send
+                            Love</button>
+                    </div>
+                    <button onclick="retakeSnap()" class="tool-btn"
+                        style="position: absolute; top: 20px; left: 20px;"><i
+                            class="fa-solid fa-arrow-left"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAMERA SEND MODAL -->
+        <div id="cameraSendModal" class="theme-popup" style="z-index: 10015;">
+            <div class="theme-popup-content"
+                style="width: 90%; max-width: 400px; max-height: 80vh; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Send to...</h3>
+                    <button onclick="toggleSelectAllSnaps()" id="snapSelectAllBtn"
+                        style="background: none; border: none; color: #4facfe; font-size: 13px; cursor: pointer;">Select
+                        All</button>
+                </div>
+
+                <div class="search-wrapper" style="margin-bottom: 15px;">
+                    <input type="text" id="snapFriendSearch" placeholder="Search friends..."
+                        style="width: 100%; padding: 10px; background: #111; border: 1px solid #333; color: white; border-radius: 8px;">
+                </div>
+
+                <div id="snapFriendList" style="flex: 1; overflow-y: auto; text-align: left; padding-right: 5px;">
+                    <!-- Friends injected here -->
+                </div>
+
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button onclick="confirmSendSnap()" id="sendSnapFinalBtn" class="save-btn"
+                        style="flex: 2; background: #fffc00; color: #000; display: none;">Send to 0 friends</button>
+                    <button onclick="document.getElementById('cameraSendModal').style.display='none'"
+                        class="action-btn-outline" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+
+
 
 
 
@@ -1832,6 +1911,8 @@
     <script src="chat.js"></script>
     <script src="story.js"></script>
     <script src="post.js"></script>
+    <script src="camera.js"></script>
+
 </body>
 
 </html>

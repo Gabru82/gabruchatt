@@ -3955,3 +3955,47 @@ input:checked + .slider:before {
     color: #666;
     margin-top: 4px;
 }
+    .filter-item {
+            min-width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.3);
+            overflow: hidden;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: 0.2s;
+            background: #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            text-align: center;
+            color: white;
+        }
+        .filter-item.active {
+            border-color: #fffc00;
+            transform: scale(1.1);
+        }
+        .snap-placeholder {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: rgba(255, 252, 0, 0.1);
+            border: 1px solid #fffc00;
+            border-radius: 12px;
+            color: #fffc00;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .snap-placeholder.viewed {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: #444;
+            color: #888;
+            cursor: default;
+        }
+        .snap-view-img {
+            width: 100%;
+            border-radius: 12px;
+            animation: fadeIn 0.3s ease;
+        }

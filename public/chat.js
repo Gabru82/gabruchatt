@@ -47,6 +47,7 @@ function formatPreviewText(message, type) {
     profile_share: "👤 Shared a profile",
     story_reaction: "❤️ Reacted to story",
     story_reply: "💬 Replied to story",
+    snap: "Love❤️ ",
     story_removed: "Story removed",
   };
   if (labels[type]) return labels[type];
@@ -2468,6 +2469,9 @@ socket.on("newMessage", (data) => {
       data.caption,
       null,
       data.replyTo,
+      data.isOpened,
+      data.openedBy || "",
+      data.isSaved || 0
     );
 
     // Handle Scroll or Preview
@@ -2496,6 +2500,58 @@ socket.on("newMessage", (data) => {
 
   updateFriendList();
 });
+socket.on("snapOpenedUpdate", ({ msgId, openedBy, userId: openerId }) => {
+  const el = document.querySelector(`.snap-placeholder[data-msg-id="${msgId}"]`);
+  if (!el) return;
+
+  const openedArray = (openedBy || "").split(",").filter(Boolean);
+  const isMeInOpened = openedArray.includes(userId);
+
+  if (isMeInOpened) {
+    el.classList.add("viewed");
+    el.querySelector("span").innerText = "Opened";
+    el.querySelector("i").className = "fa-solid fa-envelope-open";
+  }
+});
+socket.on("snapSavedUpdate", ({ msgId }) => {
+  const container = document.querySelector(`.snap-message-container[data-msg-id="${msgId}"]`);
+  if (container) {
+    container.classList.add("is-saved");
+    const viewContent = container.querySelector('.snap-view-content');
+    if (viewContent) {
+      let statusLabel = container.querySelector('.snap-status-label');
+      if (!statusLabel) {
+        statusLabel = document.createElement('div');
+        statusLabel.className = 'snap-status-label';
+        statusLabel.style.cssText = "font-size:10px; color:#888; margin-top:4px;";
+        const img = container.querySelector('img');
+        if (img) img.after(statusLabel);
+      }
+      statusLabel.textContent = "Saved in chat";
+      const btn = container.querySelector('.snap-save-btn, .snap-save-toggle');
+      if (btn) {
+        btn.className = 'snap-save-toggle';
+        btn.innerHTML = '<i class="fa-solid fa-bookmark"></i> Unsave';
+        btn.onclick = () => window.unsaveSnap(msgId);
+      }
+    }
+  }
+});
+socket.on("snapUnsavedUpdate", ({ msgId }) => {
+  const container = document.querySelector(`.snap-message-container[data-msg-id="${msgId}"]`);
+  if (container) {
+    container.classList.remove("is-saved");
+    const statusLabel = container.querySelector('.snap-status-label');
+    if (statusLabel) statusLabel.remove();
+    const btn = container.querySelector('.snap-save-toggle');
+    if (btn) {
+      btn.className = 'snap-save-btn';
+      btn.innerHTML = '<i class="fa-solid fa-bookmark"></i> Save';
+      btn.onclick = () => window.saveSnap(msgId);
+    }
+  }
+});
+
 socket.on("messageSeenAll", ({ from, seenAt }) => {
   if (currentFriendId != from) return;
 
@@ -2674,6 +2730,9 @@ function appendMessage(
   caption = null,
   reactions = null, // 👈 ADD THIS
   replyTo = null,
+  isOpened = 0,
+  openedBy = "",
+  isSaved = 0
 ) {
   if (msgId && renderedMessages.has(msgId)) return;
 
@@ -2911,6 +2970,33 @@ function appendMessage(
       const editedTag = msgId && arguments[3] === "edited" ? " (edited)" : "";
       contentHtml = `<div class="message-text">${sanitizedMessage}${editedTag}</div>`;
     }
+    
+    if (type === "snap") {
+      const openedArray = (openedBy || "").split(",").filter(Boolean);
+      const isViewed = openedArray.includes(userId);
+      const icon = isViewed ? 'fa-envelope-open' : 'fa-bolt-lightning';
+      const text = isViewed ? 'Opened' : 'Love • Tap to view';
+      const savedClass = isSaved === 1 ? 'is-saved' : '';
+
+      contentHtml = `
+        <div class="snap-message-container ${savedClass}" data-msg-id="${msgId}">
+          ${isSaved === 1 ? `
+            <div class="snap-view-content">
+              <img src="${message}" class="chat-media" onclick="openFullScreenImage(this.src)">
+              <div class="snap-status-label" style="font-size:10px; color:#888; margin-top:4px;">Saved in chat</div>
+              <button class="snap-save-toggle" onclick="unsaveSnap('${msgId}')" style="background:none; border:none; color:#888; font-size:10px; cursor:pointer; display:block; margin-top:4px;">
+                  <i class="fa-solid fa-bookmark"></i> Unsave
+              </button>
+            </div>
+          ` : `
+            <div class="snap-placeholder ${isViewed ? 'viewed' : ''}" data-msg-id="${msgId}" onclick="viewSnapMessage('${msgId}', '${message}')">
+              <i class="fa-solid ${icon}"></i>
+              <span>${text}</span>
+            </div>
+          `}
+        </div>
+      `;
+    }
 
     // Note: We used contentHtml below instead of raw message
 
@@ -2988,6 +3074,29 @@ function appendMessage(
     showMessageMenu(e, div);
   });
 }
+
+async function refreshSingleMessage(msgId) {
+  // Get current participants to hit the correct API
+  if (!currentFriendId) return;
+  const res = await fetch(`/getMessages/${userId}/${currentFriendId}`);
+  const data = await res.json();
+  const msg = data.messages.find(m => m.id == msgId);
+  if (msg) {
+    const existingEl = document.querySelector(`[data-id="${msgId}"]`);
+    if (existingEl) {
+      renderedMessages.delete(msgId);
+      // Find position
+      const nextSibling = existingEl.nextElementSibling;
+      existingEl.remove();
+      
+      // Use append but handle placement
+      appendMessage(msg.sender, msg.message, msg.id, msg.status, msg.seen_at, msg.type, msg.timestamp, msg.caption, msg.reactions, msg.reply_to, msg.is_opened, msg.opened_by, msg.is_saved);
+      const newEl = document.querySelector(`[data-id="${msgId}"]`);
+      if (nextSibling && newEl) nextSibling.parentNode.insertBefore(newEl, nextSibling);
+    }
+  }
+}
+
 document.querySelectorAll(".menu-item").forEach((item) => {
   // ✅ SKIP profile menu items
   if (item.closest(".profile-menu-dropdown")) return;
@@ -3546,6 +3655,7 @@ sendBtn.onclick = () => {
             msg.caption,
             null,
             msg.replyTo,
+            0
           );
           messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom on send
         },
@@ -3590,6 +3700,7 @@ sendBtn.onclick = () => {
         null,
         null,
         msg.replyTo,
+        0
       );
       messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom on send
     },
@@ -3976,6 +4087,9 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
       msg.caption,
       msg.reactions,
       msg.reply_to,
+      msg.is_opened,
+      msg.opened_by,
+      msg.is_saved
     );
   });
 
