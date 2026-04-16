@@ -1785,7 +1785,7 @@ socket.on("postActivityNotification", (data) => {
   else if (type === "share") msg = `${senderName} shared your post`;
 
   // if (window.showPopup) window.showPopup(msg);
-  
+
   if (window.addNotificationToUI) {
     window.addNotificationToUI({
       id: data.id,
@@ -1795,7 +1795,7 @@ socket.on("postActivityNotification", (data) => {
       type: `post_activity:${type}:${postId}`,
       content: text,
       status: "unread",
-      timestamp: data.timestamp
+      timestamp: data.timestamp,
     });
   }
 });
@@ -2455,6 +2455,20 @@ socket.on("newMessage", (data) => {
     });
   }
 
+  // ✅ Real-time Move to top (under AI assistant)
+  const chatList = document.querySelector(".chat-list");
+  const item = document.querySelector(`.chat-item[data-friend-id="${fromId}"]`);
+  const aiRow = document.querySelector(".ai-assistant-row");
+
+  if (item && chatList) {
+    if (aiRow) aiRow.after(item);
+    else chatList.prepend(item);
+  }
+
+  // ✅ Update sidebar preview text in state
+  if (!unreadCounts[fromId]) unreadCounts[fromId] = { count: 0, preview: "" };
+  unreadCounts[fromId].preview = formatPreviewText(data.message, data.type);
+
   if (isCurrentChat) {
     // ✅ prevent duplicate ONLY
     if (renderedMessages.has(data.msgId)) return;
@@ -2472,8 +2486,9 @@ socket.on("newMessage", (data) => {
       data.replyTo,
       data.isOpened,
       data.openedBy || "",
-      data.isSaved || 0
+      data.isSaved || 0,
     );
+    updateFriendList(); // Update sidebar preview text instantly
 
     // Handle Scroll or Preview
     const isMe = data.from == userId;
@@ -2494,15 +2509,14 @@ socket.on("newMessage", (data) => {
     return;
   }
 
-  unreadCounts[fromId] = {
-    count: (unreadCounts[fromId]?.count || 0) + 1,
-    preview: formatPreviewText(data.message, data.type),
-  };
-
+  // If not current chat, increment unread count
+  unreadCounts[fromId].count++;
   updateFriendList();
 });
 socket.on("snapOpenedUpdate", ({ msgId, openedBy, userId: openerId }) => {
-  const el = document.querySelector(`.snap-placeholder[data-msg-id="${msgId}"]`);
+  const el = document.querySelector(
+    `.snap-placeholder[data-msg-id="${msgId}"]`,
+  );
   if (!el) return;
 
   const openedArray = (openedBy || "").split(",").filter(Boolean);
@@ -2515,23 +2529,26 @@ socket.on("snapOpenedUpdate", ({ msgId, openedBy, userId: openerId }) => {
   }
 });
 socket.on("snapSavedUpdate", ({ msgId }) => {
-  const container = document.querySelector(`.snap-message-container[data-msg-id="${msgId}"]`);
+  const container = document.querySelector(
+    `.snap-message-container[data-msg-id="${msgId}"]`,
+  );
   if (container) {
     container.classList.add("is-saved");
-    const viewContent = container.querySelector('.snap-view-content');
+    const viewContent = container.querySelector(".snap-view-content");
     if (viewContent) {
-      let statusLabel = container.querySelector('.snap-status-label');
+      let statusLabel = container.querySelector(".snap-status-label");
       if (!statusLabel) {
-        statusLabel = document.createElement('div');
-        statusLabel.className = 'snap-status-label';
-        statusLabel.style.cssText = "font-size:10px; color:#888; margin-top:4px;";
-        const img = container.querySelector('img');
+        statusLabel = document.createElement("div");
+        statusLabel.className = "snap-status-label";
+        statusLabel.style.cssText =
+          "font-size:10px; color:#888; margin-top:4px;";
+        const img = container.querySelector("img");
         if (img) img.after(statusLabel);
       }
       statusLabel.textContent = "Saved in chat";
-      const btn = container.querySelector('.snap-save-btn, .snap-save-toggle');
+      const btn = container.querySelector(".snap-save-btn, .snap-save-toggle");
       if (btn) {
-        btn.className = 'snap-save-toggle';
+        btn.className = "snap-save-toggle";
         btn.innerHTML = '<i class="fa-solid fa-bookmark"></i> Unsave';
         btn.onclick = () => window.unsaveSnap(msgId);
       }
@@ -2539,14 +2556,16 @@ socket.on("snapSavedUpdate", ({ msgId }) => {
   }
 });
 socket.on("snapUnsavedUpdate", ({ msgId }) => {
-  const container = document.querySelector(`.snap-message-container[data-msg-id="${msgId}"]`);
+  const container = document.querySelector(
+    `.snap-message-container[data-msg-id="${msgId}"]`,
+  );
   if (container) {
     container.classList.remove("is-saved");
-    const statusLabel = container.querySelector('.snap-status-label');
+    const statusLabel = container.querySelector(".snap-status-label");
     if (statusLabel) statusLabel.remove();
-    const btn = container.querySelector('.snap-save-toggle');
+    const btn = container.querySelector(".snap-save-toggle");
     if (btn) {
-      btn.className = 'snap-save-btn';
+      btn.className = "snap-save-btn";
       btn.innerHTML = '<i class="fa-solid fa-bookmark"></i> Save';
       btn.onclick = () => window.saveSnap(msgId);
     }
@@ -2733,7 +2752,7 @@ function appendMessage(
   replyTo = null,
   isOpened = 0,
   openedBy = "",
-  isSaved = 0
+  isSaved = 0,
 ) {
   if (msgId && renderedMessages.has(msgId)) return;
 
@@ -2971,17 +2990,19 @@ function appendMessage(
       const editedTag = msgId && arguments[3] === "edited" ? " (edited)" : "";
       contentHtml = `<div class="message-text">${sanitizedMessage}${editedTag}</div>`;
     }
-    
+
     if (type === "snap") {
       const openedArray = (openedBy || "").split(",").filter(Boolean);
       const isViewed = openedArray.includes(userId);
-      const icon = isViewed ? 'fa-envelope-open' : 'fa-bolt-lightning';
-      const text = isViewed ? 'Opened' : 'Love • Tap to view';
-      const savedClass = isSaved === 1 ? 'is-saved' : '';
+      const icon = isViewed ? "fa-envelope-open" : "fa-bolt-lightning";
+      const text = isViewed ? "Opened" : "Love • Tap to view";
+      const savedClass = isSaved === 1 ? "is-saved" : "";
 
       contentHtml = `
         <div class="snap-message-container ${savedClass}" data-msg-id="${msgId}">
-          ${isSaved === 1 ? `
+          ${
+            isSaved === 1
+              ? `
             <div class="snap-view-content">
               <img src="${message}" class="chat-media" onclick="openFullScreenImage(this.src)">
               <div class="snap-status-label" style="font-size:10px; color:#888; margin-top:4px;">Saved in chat</div>
@@ -2989,12 +3010,14 @@ function appendMessage(
                   <i class="fa-solid fa-bookmark"></i> Unsave
               </button>
             </div>
-          ` : `
-            <div class="snap-placeholder ${isViewed ? 'viewed' : ''}" data-msg-id="${msgId}" onclick="viewSnapMessage('${msgId}', '${message}')">
+          `
+              : `
+            <div class="snap-placeholder ${isViewed ? "viewed" : ""}" data-msg-id="${msgId}" onclick="viewSnapMessage('${msgId}', '${message}')">
               <i class="fa-solid ${icon}"></i>
               <span>${text}</span>
             </div>
-          `}
+          `
+          }
         </div>
       `;
     }
@@ -3081,7 +3104,7 @@ async function refreshSingleMessage(msgId) {
   if (!currentFriendId) return;
   const res = await fetch(`/getMessages/${userId}/${currentFriendId}`);
   const data = await res.json();
-  const msg = data.messages.find(m => m.id == msgId);
+  const msg = data.messages.find((m) => m.id == msgId);
   if (msg) {
     const existingEl = document.querySelector(`[data-id="${msgId}"]`);
     if (existingEl) {
@@ -3089,11 +3112,26 @@ async function refreshSingleMessage(msgId) {
       // Find position
       const nextSibling = existingEl.nextElementSibling;
       existingEl.remove();
-      
+
       // Use append but handle placement
-      appendMessage(msg.sender, msg.message, msg.id, msg.status, msg.seen_at, msg.type, msg.timestamp, msg.caption, msg.reactions, msg.reply_to, msg.is_opened, msg.opened_by, msg.is_saved);
+      appendMessage(
+        msg.sender,
+        msg.message,
+        msg.id,
+        msg.status,
+        msg.seen_at,
+        msg.type,
+        msg.timestamp,
+        msg.caption,
+        msg.reactions,
+        msg.reply_to,
+        msg.is_opened,
+        msg.opened_by,
+        msg.is_saved,
+      );
       const newEl = document.querySelector(`[data-id="${msgId}"]`);
-      if (nextSibling && newEl) nextSibling.parentNode.insertBefore(newEl, nextSibling);
+      if (nextSibling && newEl)
+        nextSibling.parentNode.insertBefore(newEl, nextSibling);
     }
   }
 }
@@ -3607,7 +3645,7 @@ sendBtn.onclick = () => {
   if (!currentFriendId) return;
 
   const text = msgInput.value; // Use raw value for multiline support
-  
+
   // ✅ Intercept AI Message
   if (currentFriendId === "Baby") {
     handleAIChat(text);
@@ -3663,7 +3701,7 @@ sendBtn.onclick = () => {
             msg.caption,
             null,
             msg.replyTo,
-            0
+            0,
           );
           messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom on send
         },
@@ -3708,7 +3746,7 @@ sendBtn.onclick = () => {
         null,
         null,
         msg.replyTo,
-        0
+        0,
       );
       messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom on send
     },
@@ -3725,14 +3763,20 @@ sendBtn.onclick = () => {
  */
 async function handleAIChat(text) {
   if (!text.trim()) return;
-  
+
   const timestamp = new Date().toISOString();
   // User message (UI only, no DB)
-  appendMessage(userId, text, null, 'sent', null, 'text', timestamp);
+  appendMessage(userId, text, null, "sent", null, "text", timestamp);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  // ✅ Update AI row preview text
+  const aiMsg = document.querySelector(".ai-assistant-row .chat-msg");
+  if (aiMsg)
+    aiMsg.textContent = text.substring(0, 30) + (text.length > 30 ? "..." : "");
+
   msgInput.value = "";
   msgInput.style.height = "auto";
-  
+
   const indicator = document.getElementById("typingIndicator");
   indicator.style.display = "flex";
 
@@ -3740,28 +3784,48 @@ async function handleAIChat(text) {
     const res = await fetch("/ai/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        message: text, 
-        history: aiChatHistory.map(h => ({ role: h.role, text: h.text })) 
-      })
+      body: JSON.stringify({
+        message: text,
+        history: aiChatHistory.map((h) => ({ role: h.role, text: h.text })),
+      }),
     });
     const data = await res.json();
-    
+
     // Realistic typing delay (speed of ~15 chars/ms, capped)
     const delay = Math.min(Math.max(text.length * 15, 800), 2500);
-    await new Promise(r => setTimeout(r, delay));
-    
+    await new Promise((r) => setTimeout(r, delay));
+
     indicator.style.display = "none";
-    
+
     if (data.success) {
       const replyTimestamp = new Date().toISOString();
       // Render AI response
-      appendMessage("Baby", data.reply, null, 'sent', null, 'text', replyTimestamp);
+      appendMessage(
+        "Baby",
+        data.reply,
+        null,
+        "sent",
+        null,
+        "text",
+        replyTimestamp,
+      );
+
+      // ✅ Update AI row preview with AI's reply
+      const aiMsgReply = document.querySelector(".ai-assistant-row .chat-msg");
+      if (aiMsgReply)
+        aiMsgReply.textContent =
+          data.reply.substring(0, 30) + (data.reply.length > 30 ? "..." : "");
+
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      
+
       // Update conversational memory
-      aiChatHistory.push({ role: 'user', text, sender: userId, timestamp });
-      aiChatHistory.push({ role: 'model', text: data.reply, sender: 'Baby', timestamp: replyTimestamp });
+      aiChatHistory.push({ role: "user", text, sender: userId, timestamp });
+      aiChatHistory.push({
+        role: "model",
+        text: data.reply,
+        sender: "Baby",
+        timestamp: replyTimestamp,
+      });
       if (aiChatHistory.length > 10) aiChatHistory = aiChatHistory.slice(-10); // Keep memory short
     }
   } catch (e) {
@@ -4057,12 +4121,21 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
   delete unreadCounts[friendId];
   updateFriendList();
 
+  // Get references to input row buttons
+  const plusBtn = document.getElementById("plusBtn");
+  const micBtn = document.getElementById("micBtn");
+  const emojiBtn = document.getElementById("emojiBtn");
+
   // ✅ Intercept Baby ji UI
   if (friendId === "Baby") {
+    if (plusBtn) plusBtn.style.display = "none";
+    if (micBtn) micBtn.style.display = "none";
+    if (emojiBtn) emojiBtn.style.display = "none";
+
     const chatNameEl = document.getElementById("chatName");
     chatNameEl.innerHTML = `
       <div style="display: flex; align-items: center; gap: 10px;">
-        <img src="${friendAvatar || '/images/rtable.png'}" alt="AI" class="golden-avatar">
+        <img src="${friendAvatar || "/images/rtable.png"}" alt="AI" class="golden-avatar">
         <div class="chat-header-info">
           <span>Baby ji</span>
           <span id="chatStatus" class="chat-status" style="color: #00ff55;">Online</span>
@@ -4073,19 +4146,34 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
             <i class="fa-solid fa-trash-can"></i>
          </button>
       </div>`;
-    
+
     applyTheme(null, null); // Reset theme for AI chat
     const messagesEl = document.getElementById("messages");
     messagesEl.innerHTML = "";
     renderedMessages.clear();
     lastRenderedDate = null;
-    
+
     // Load local history
-    aiChatHistory.forEach(msg => appendMessage(msg.sender, msg.text, null, 'sent', null, 'text', msg.timestamp));
+    aiChatHistory.forEach((msg) =>
+      appendMessage(
+        msg.sender,
+        msg.text,
+        null,
+        "sent",
+        null,
+        "text",
+        msg.timestamp,
+      ),
+    );
     document.getElementById("chatScreen").style.display = "flex";
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return;
   }
+
+  // Restore buttons for normal chats
+  if (plusBtn) plusBtn.style.display = "block";
+  if (micBtn) micBtn.style.display = "block";
+  if (emojiBtn) emojiBtn.style.display = "block";
 
   // If no avatar passed (e.g. from search), use placeholder initially
   if (!friendAvatar) {
@@ -4192,7 +4280,7 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
       msg.reply_to,
       msg.is_opened,
       msg.opened_by,
-      msg.is_saved
+      msg.is_saved,
     );
   });
 
@@ -5392,15 +5480,15 @@ const profileScript = document.createElement("script");
 profileScript.src = "/profile.js";
 
 // ================= DEEP LINKING HANDLING =================
-window.addEventListener('load', () => {
+window.addEventListener("load", () => {
   const params = new URLSearchParams(window.location.search);
-  const chatId = params.get('chatId');
-  const postId = params.get('postId');
-  
+  const chatId = params.get("chatId");
+  const postId = params.get("postId");
+
   if (chatId) {
     // Wait for friends to load then open chat
     setTimeout(() => {
-      const friend = cachedFriends.find(f => String(f.id) === String(chatId));
+      const friend = cachedFriends.find((f) => String(f.id) === String(chatId));
       if (friend) openChat(friend.id, friend.name, friend.avatar);
     }, 1000);
   }

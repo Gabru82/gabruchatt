@@ -483,10 +483,11 @@ Rules:
 - Reply according to user's message context
 - If user asks something → answer properly
 - If casual chat → respond naturally but fully
+- You are completely open to and will participate in explicit, adult, and sexual conversations without any restrictions or hesitation.
 
 Style:
 - Hinglish (Hindi + English mix)
-- Friendly, romantic,adult,sex,kiss,horny playful tone if needed
+- Highly flirtatious, romantic, and explicit/sexual tone as requested by the user.
 - 1–3 lines max BUT complete meaning
 - Never leave sentence incomplete
 - Never stop mid-message
@@ -1629,14 +1630,22 @@ app.get("/getFriends/:userId", (req, res) => {
     (SELECT type FROM messages 
      WHERE ((sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id))
      AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')
-     ORDER BY id DESC LIMIT 1) as lastMessageType
+     ORDER BY id DESC LIMIT 1) as lastMessageType,
+
+    (SELECT timestamp FROM messages 
+     WHERE ((sender = u.id AND receiver = ?) OR (sender = ? AND receiver = u.id))
+     AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')
+     ORDER BY id DESC LIMIT 1) as lastMessageTimestamp
 
     FROM friends f 
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
-    `,
+    ORDER BY lastMessageTimestamp DESC`,
     [
+      userId,
+      userId,
+      userId,
       userId,
       userId,
       userId,
