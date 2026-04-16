@@ -15,7 +15,7 @@ admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
   }),
 });
 
@@ -185,9 +185,15 @@ db.serialize(() => {
   db.run("ALTER TABLE messages ADD COLUMN edited_for_me TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN reactions TEXT", () => {});
   db.run("ALTER TABLE messages ADD COLUMN reply_to INTEGER", () => {});
-  db.run("ALTER TABLE messages ADD COLUMN is_opened INTEGER DEFAULT 0", () => {});
+  db.run(
+    "ALTER TABLE messages ADD COLUMN is_opened INTEGER DEFAULT 0",
+    () => {},
+  );
   db.run("ALTER TABLE messages ADD COLUMN opened_by TEXT", () => {});
-  db.run("ALTER TABLE messages ADD COLUMN is_saved INTEGER DEFAULT 0", () => {});
+  db.run(
+    "ALTER TABLE messages ADD COLUMN is_saved INTEGER DEFAULT 0",
+    () => {},
+  );
 
   // ================= THEMES =================
   db.run(`
@@ -332,10 +338,18 @@ db.serialize(() => {
   `);
 
   // ================= POST INTERACTIONS =================
-  db.run(`CREATE TABLE IF NOT EXISTS post_likes(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`);
-  db.run(`CREATE TABLE IF NOT EXISTS post_comments(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, comment TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-  db.run(`CREATE TABLE IF NOT EXISTS post_saves(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`);
-  db.run(`CREATE TABLE IF NOT EXISTS post_shares(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  db.run(
+    `CREATE TABLE IF NOT EXISTS post_likes(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`,
+  );
+  db.run(
+    `CREATE TABLE IF NOT EXISTS post_comments(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, comment TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+  );
+  db.run(
+    `CREATE TABLE IF NOT EXISTS post_saves(post_id INTEGER, user_id INTEGER, PRIMARY KEY(post_id, user_id))`,
+  );
+  db.run(
+    `CREATE TABLE IF NOT EXISTS post_shares(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, user_id INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+  );
   db.run("ALTER TABLE notifications ADD COLUMN content TEXT", (err) => {
     if (err && !err.message.includes("duplicate column")) {
       console.error("notifications content error:", err.message);
@@ -446,6 +460,74 @@ app.get("/searchSongs", async (req, res) => {
   });
 });
 
+// ================= AI ASSISTANT API =================
+app.post("/ai/chat", async (req, res) => {
+  const { message, history = [] } = req.body;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({
+      success: false,
+      message: "AI API Key missing",
+    });
+  }
+
+  try {
+    // ✅ System behavior (makes AI human-like)
+    const systemPrompt = `
+You are a human-like chat assistant inside a messaging app.
+Reply casually in Hinglish, short messages, friendly tone.
+Avoid long paragraphs. Be natural.
+`;
+
+    // ✅ Convert history properly
+    const contents = [
+      {
+        role: "user",
+        parts: [{ text: systemPrompt }],
+      },
+    ];
+
+    // Add previous history safely
+    history.slice(-6).forEach((h) => {
+      contents.push({
+        role: h.role === "model" ? "model" : "user",
+        parts: [{ text: h.parts?.[0]?.text || h.text || "" }],
+      });
+    });
+
+    // Add current message
+    contents.push({
+      role: "user",
+      parts: [{ text: message }],
+    });
+
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        contents,
+        generationConfig: {
+          temperature: 0.9,
+          topP: 0.9,
+          maxOutputTokens: 200,
+        },
+      },
+    );
+
+    const reply =
+      response.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Hmm... samajh nahi aaya 😅";
+
+    res.json({ success: true, reply });
+  } catch (error) {
+    console.error("AI Assistant Error:", error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "AI Assistant is temporarily unavailable.",
+    });
+  }
+});
 // ================= LOCATION SEARCH API =================
 app.get("/searchLocations", async (req, res) => {
   const { query } = req.query;
@@ -727,31 +809,35 @@ app.post("/saveDeviceToken", (req, res) => {
     [userId, token],
     (err) => {
       res.json({ success: !err });
-    }
+    },
   );
 });
 
 async function sendPushNotification(targetUserId, title, body, data = {}) {
-  db.all("SELECT token FROM fcm_tokens WHERE user_id = ?", [targetUserId], async (err, rows) => {
-    if (err || !rows || rows.length === 0) return;
+  db.all(
+    "SELECT token FROM fcm_tokens WHERE user_id = ?",
+    [targetUserId],
+    async (err, rows) => {
+      if (err || !rows || rows.length === 0) return;
 
-    const tokens = rows.map(r => r.token);
-    const message = {
-      notification: { title, body },
-      data: data, // Custom payload for routing
-      tokens: tokens,
-    };
+      const tokens = rows.map((r) => r.token);
+      const message = {
+        notification: { title, body },
+        data: data, // Custom payload for routing
+        tokens: tokens,
+      };
 
-    try {
-      const response = await admin.messaging().sendEachForMulticast(message);
-      // Optional: Cleanup invalid tokens
-      if (response.failureCount > 0) {
-        console.log(`FCM failed for ${response.failureCount} tokens`);
+      try {
+        const response = await admin.messaging().sendEachForMulticast(message);
+        // Optional: Cleanup invalid tokens
+        if (response.failureCount > 0) {
+          console.log(`FCM failed for ${response.failureCount} tokens`);
+        }
+      } catch (error) {
+        console.error("FCM Error:", error);
       }
-    } catch (error) {
-      console.error("FCM Error:", error);
-    }
-  });
+    },
+  );
 }
 
 app.post("/register", (req, res) => {
@@ -1310,11 +1396,20 @@ app.post("/sendRequest", (req, res) => {
             "INSERT INTO notifications(user_id, sender_id, type) VALUES(?,?,?)",
             [receiver, sender, "friend_request"],
           );
-          db.get("SELECT name FROM users WHERE id = ?", [sender], (uErr, uRow) => {
-            if (uRow) {
-              sendPushNotification(receiver, "Friend Request", `${uRow.name} sent you a friend request`, { type: 'notification' });
-            }
-        });
+          db.get(
+            "SELECT name FROM users WHERE id = ?",
+            [sender],
+            (uErr, uRow) => {
+              if (uRow) {
+                sendPushNotification(
+                  receiver,
+                  "Friend Request",
+                  `${uRow.name} sent you a friend request`,
+                  { type: "notification" },
+                );
+              }
+            },
+          );
           res.json({ success: true });
         },
       );
@@ -1956,109 +2051,261 @@ app.post("/deleteStory", (req, res) => {
 
 app.post("/likePost", (req, res) => {
   const { postId, userId, userName } = req.body;
-  db.get("SELECT * FROM post_likes WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
-    if (row) {
-      db.run("DELETE FROM post_likes WHERE post_id = ? AND user_id = ?", [postId, userId], (err) => {
-        db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, cRow) => {
-          io.emit("postLiked", { postId, userId, userName, liked: false, count: cRow.count || 0 });
-          res.json({ success: true, liked: false, count: cRow.count || 0 });
-        });
-      });
-    } else {
-      db.run("INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)", [postId, userId], (err) => {
-        db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, cRow) => {
-          io.emit("postLiked", { postId, userId, userName, liked: true, count: cRow.count || 0 });
-          sendPostActivityNotification(postId, userId, "like");
-          res.json({ success: true, liked: true, count: cRow.count || 0 });
-        });
-      });
-    }
-  });
+  db.get(
+    "SELECT * FROM post_likes WHERE post_id = ? AND user_id = ?",
+    [postId, userId],
+    (err, row) => {
+      if (row) {
+        db.run(
+          "DELETE FROM post_likes WHERE post_id = ? AND user_id = ?",
+          [postId, userId],
+          (err) => {
+            db.get(
+              "SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?",
+              [postId],
+              (err, cRow) => {
+                io.emit("postLiked", {
+                  postId,
+                  userId,
+                  userName,
+                  liked: false,
+                  count: cRow.count || 0,
+                });
+                res.json({
+                  success: true,
+                  liked: false,
+                  count: cRow.count || 0,
+                });
+              },
+            );
+          },
+        );
+      } else {
+        db.run(
+          "INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)",
+          [postId, userId],
+          (err) => {
+            db.get(
+              "SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?",
+              [postId],
+              (err, cRow) => {
+                io.emit("postLiked", {
+                  postId,
+                  userId,
+                  userName,
+                  liked: true,
+                  count: cRow.count || 0,
+                });
+                sendPostActivityNotification(postId, userId, "like");
+                res.json({
+                  success: true,
+                  liked: true,
+                  count: cRow.count || 0,
+                });
+              },
+            );
+          },
+        );
+      }
+    },
+  );
 });
 
 app.post("/savePost", (req, res) => {
   const { postId, userId, userName } = req.body;
-  db.get("SELECT * FROM post_saves WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
-    if (row) {
-      db.run("DELETE FROM post_saves WHERE post_id = ? AND user_id = ?", [postId, userId], (err) => {
-        db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, cRow) => {
-          io.emit("postSaved", { postId, userId, userName, saved: false, count: cRow.count || 0 });
-          res.json({ success: true, saved: false, count: cRow.count || 0 });
-        });
-      });
-    } else {
-      db.run("INSERT INTO post_saves (post_id, user_id) VALUES (?, ?)", [postId, userId], (err) => {
-        db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, cRow) => {
-          io.emit("postSaved", { postId, userId, userName, saved: true, count: cRow.count || 0 });
-          sendPostActivityNotification(postId, userId, "save");
-          res.json({ success: true, saved: true, count: cRow.count || 0 });
-        });
-      });
-    }
-  });
+  db.get(
+    "SELECT * FROM post_saves WHERE post_id = ? AND user_id = ?",
+    [postId, userId],
+    (err, row) => {
+      if (row) {
+        db.run(
+          "DELETE FROM post_saves WHERE post_id = ? AND user_id = ?",
+          [postId, userId],
+          (err) => {
+            db.get(
+              "SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?",
+              [postId],
+              (err, cRow) => {
+                io.emit("postSaved", {
+                  postId,
+                  userId,
+                  userName,
+                  saved: false,
+                  count: cRow.count || 0,
+                });
+                res.json({
+                  success: true,
+                  saved: false,
+                  count: cRow.count || 0,
+                });
+              },
+            );
+          },
+        );
+      } else {
+        db.run(
+          "INSERT INTO post_saves (post_id, user_id) VALUES (?, ?)",
+          [postId, userId],
+          (err) => {
+            db.get(
+              "SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?",
+              [postId],
+              (err, cRow) => {
+                io.emit("postSaved", {
+                  postId,
+                  userId,
+                  userName,
+                  saved: true,
+                  count: cRow.count || 0,
+                });
+                sendPostActivityNotification(postId, userId, "save");
+                res.json({
+                  success: true,
+                  saved: true,
+                  count: cRow.count || 0,
+                });
+              },
+            );
+          },
+        );
+      }
+    },
+  );
 });
 
 app.post("/sharePost", (req, res) => {
   const { postId, userId, userName } = req.body;
-  db.run("INSERT INTO post_shares (post_id, user_id) VALUES (?, ?)", [postId, userId], function(err) {
-    db.get("SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?", [postId], (err, cRow) => {
-      io.emit("postShared", { postId, userId, userName, count: cRow.count || 0 });
-      sendPostActivityNotification(postId, userId, "share");
-      res.json({ success: true, count: cRow.count || 0 });
-    });
-  });
+  db.run(
+    "INSERT INTO post_shares (post_id, user_id) VALUES (?, ?)",
+    [postId, userId],
+    function (err) {
+      db.get(
+        "SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?",
+        [postId],
+        (err, cRow) => {
+          io.emit("postShared", {
+            postId,
+            userId,
+            userName,
+            count: cRow.count || 0,
+          });
+          sendPostActivityNotification(postId, userId, "share");
+          res.json({ success: true, count: cRow.count || 0 });
+        },
+      );
+    },
+  );
 });
 
 app.post("/commentPost", (req, res) => {
   const { postId, userId, userName, comment } = req.body;
-  db.run("INSERT INTO post_comments (post_id, user_id, comment) VALUES (?, ?, ?)", [postId, userId, comment], function(err) {
-    const commentId = this.lastID;
-    db.get("SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.id = ?", [commentId], (err, newComment) => {
-      db.get("SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?", [postId], (err, cRow) => {
-        io.emit("postCommented", { postId, userId, userName, comment: newComment, count: cRow.count || 0 });
-        sendPostActivityNotification(postId, userId, "comment", comment);
-        res.json({ success: true, comment: newComment, count: cRow.count || 0 });
-      });
-    });
-  });
+  db.run(
+    "INSERT INTO post_comments (post_id, user_id, comment) VALUES (?, ?, ?)",
+    [postId, userId, comment],
+    function (err) {
+      const commentId = this.lastID;
+      db.get(
+        "SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.id = ?",
+        [commentId],
+        (err, newComment) => {
+          db.get(
+            "SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?",
+            [postId],
+            (err, cRow) => {
+              io.emit("postCommented", {
+                postId,
+                userId,
+                userName,
+                comment: newComment,
+                count: cRow.count || 0,
+              });
+              sendPostActivityNotification(postId, userId, "comment", comment);
+              res.json({
+                success: true,
+                comment: newComment,
+                count: cRow.count || 0,
+              });
+            },
+          );
+        },
+      );
+    },
+  );
 });
 
 app.get("/getPostInteractions/:postId/:userId", (req, res) => {
   const { postId, userId } = req.params;
   const data = {};
-  db.get("SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?", [postId], (err, row) => {
-    data.likes = row.count || 0;
-    db.get("SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
-      data.isLiked = !!row;
-      db.get("SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?", [postId], (err, row) => {
-        data.comments = row.count || 0;
-        db.get("SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?", [postId], (err, row) => {
-          data.shares = row.count || 0;
-          db.get("SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?", [postId], (err, row) => {
-            data.saves = row.count || 0;
-            db.get("SELECT 1 FROM post_saves WHERE post_id = ? AND user_id = ?", [postId, userId], (err, row) => {
-              data.isSaved = !!row;
-              res.json({ success: true, data });
-            });
-          });
-        });
-      });
-    });
-  });
+  db.get(
+    "SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?",
+    [postId],
+    (err, row) => {
+      data.likes = row.count || 0;
+      db.get(
+        "SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?",
+        [postId, userId],
+        (err, row) => {
+          data.isLiked = !!row;
+          db.get(
+            "SELECT COUNT(*) as count FROM post_comments WHERE post_id = ?",
+            [postId],
+            (err, row) => {
+              data.comments = row.count || 0;
+              db.get(
+                "SELECT COUNT(*) as count FROM post_shares WHERE post_id = ?",
+                [postId],
+                (err, row) => {
+                  data.shares = row.count || 0;
+                  db.get(
+                    "SELECT COUNT(*) as count FROM post_saves WHERE post_id = ?",
+                    [postId],
+                    (err, row) => {
+                      data.saves = row.count || 0;
+                      db.get(
+                        "SELECT 1 FROM post_saves WHERE post_id = ? AND user_id = ?",
+                        [postId, userId],
+                        (err, row) => {
+                          data.isSaved = !!row;
+                          res.json({ success: true, data });
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
+    },
+  );
 });
 
 app.get("/getInteractionUsers/:postId/:type", (req, res) => {
   const { postId, type } = req.params;
-  let table = (type === "likes") ? "post_likes" : (type === "saves") ? "post_saves" : "post_shares";
-  db.all(`SELECT DISTINCT u.id, u.name, u.avatar FROM ${table} t JOIN users u ON t.user_id = u.id WHERE t.post_id = ?`, [postId], (err, rows) => {
-    res.json({ success: true, users: rows || [] });
-  });
+  let table =
+    type === "likes"
+      ? "post_likes"
+      : type === "saves"
+        ? "post_saves"
+        : "post_shares";
+  db.all(
+    `SELECT DISTINCT u.id, u.name, u.avatar FROM ${table} t JOIN users u ON t.user_id = u.id WHERE t.post_id = ?`,
+    [postId],
+    (err, rows) => {
+      res.json({ success: true, users: rows || [] });
+    },
+  );
 });
 
 app.get("/getPostComments/:postId", (req, res) => {
-  db.all("SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.post_id = ? ORDER BY pc.timestamp ASC", [req.params.postId], (err, rows) => {
-    res.json({ success: true, comments: rows || [] });
-  });
+  db.all(
+    "SELECT pc.*, u.name, u.avatar FROM post_comments pc JOIN users u ON pc.user_id = u.id WHERE pc.post_id = ? ORDER BY pc.timestamp ASC",
+    [req.params.postId],
+    (err, rows) => {
+      res.json({ success: true, comments: rows || [] });
+    },
+  );
 });
 
 // This must be after all API routes to ensure they are handled first.
@@ -2072,29 +2319,33 @@ function sendPostActivityNotification(postId, senderId, type, text = null) {
     const ownerId = post.user_id;
     const notifType = `post_activity:${type}:${postId}`;
 
-    db.get("SELECT name, avatar FROM users WHERE id = ?", [senderId], (uErr, sender) => {
-      if (uErr || !sender) return;
+    db.get(
+      "SELECT name, avatar FROM users WHERE id = ?",
+      [senderId],
+      (uErr, sender) => {
+        if (uErr || !sender) return;
 
-      db.run(
-        "INSERT INTO notifications(user_id, sender_id, type, content, status) VALUES(?,?,?,?,?)",
-        [ownerId, senderId, notifType, text, "unread"],
-        function (nErr) {
-          if (!nErr) {
-            io.to(`user_${ownerId}`).emit("postActivityNotification", {
-              id: this.lastID,
-              type,
-              postId,
-              senderId,
-              senderName: sender.name,
-              senderAvatar: sender.avatar,
-              text,
-              timestamp: new Date().toISOString()
-            });
-            io.to(`user_${ownerId}`).emit("newNotification");
-          }
-        }
-      );
-    });
+        db.run(
+          "INSERT INTO notifications(user_id, sender_id, type, content, status) VALUES(?,?,?,?,?)",
+          [ownerId, senderId, notifType, text, "unread"],
+          function (nErr) {
+            if (!nErr) {
+              io.to(`user_${ownerId}`).emit("postActivityNotification", {
+                id: this.lastID,
+                type,
+                postId,
+                senderId,
+                senderName: sender.name,
+                senderAvatar: sender.avatar,
+                text,
+                timestamp: new Date().toISOString(),
+              });
+              io.to(`user_${ownerId}`).emit("newNotification");
+            }
+          },
+        );
+      },
+    );
   });
 }
 
@@ -2217,54 +2468,77 @@ io.on("connection", (socket) => {
             timestamp: now,
             isOpened: 0,
             openedBy: "",
-            isSaved: 0
+            isSaved: 0,
           };
 
           io.to(`user_${receiverId}`).emit("newMessage", payload);
           // Also send back to sender for their history
           io.to(`user_${senderId}`).emit("newMessage", payload);
-        }
+        },
       );
     });
   });
 
   socket.on("snapOpened", ({ msgId, userId }) => {
-    db.get("SELECT opened_by, sender, receiver FROM messages WHERE id=?", [msgId], (err, row) => {
-      if (err || !row) return;
-      
-      let openedBy = (row.opened_by || "").split(",").filter(Boolean);
-      const uIdStr = String(userId);
-      
-      if (!openedBy.includes(uIdStr)) {
-        openedBy.push(uIdStr);
-        const newList = openedBy.join(",");
-        
-        // Mark fully seen if both participants have opened it
-        const isFullyOpened = openedBy.length >= 2;
-        const statusUpdate = isFullyOpened ? ", status='seen', seen_at=CURRENT_TIMESTAMP" : "";
-        
-        db.run(`UPDATE messages SET opened_by=? ${statusUpdate} WHERE id=?`, [newList, msgId], (updErr) => {
-          if (!updErr) {
-            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("snapOpenedUpdate", { 
-              msgId, 
-              openedBy: newList, 
-              userId: uIdStr 
-            });
-            sendPushNotification(row.sender, "Snap Opened", `${row.receiver} just opened your snap!`, { type: 'snap' });
-          }
-        });
-      }
-    });
+    db.get(
+      "SELECT opened_by, sender, receiver FROM messages WHERE id=?",
+      [msgId],
+      (err, row) => {
+        if (err || !row) return;
+
+        let openedBy = (row.opened_by || "").split(",").filter(Boolean);
+        const uIdStr = String(userId);
+
+        if (!openedBy.includes(uIdStr)) {
+          openedBy.push(uIdStr);
+          const newList = openedBy.join(",");
+
+          // Mark fully seen if both participants have opened it
+          const isFullyOpened = openedBy.length >= 2;
+          const statusUpdate = isFullyOpened
+            ? ", status='seen', seen_at=CURRENT_TIMESTAMP"
+            : "";
+
+          db.run(
+            `UPDATE messages SET opened_by=? ${statusUpdate} WHERE id=?`,
+            [newList, msgId],
+            (updErr) => {
+              if (!updErr) {
+                io.to(`user_${row.sender}`)
+                  .to(`user_${row.receiver}`)
+                  .emit("snapOpenedUpdate", {
+                    msgId,
+                    openedBy: newList,
+                    userId: uIdStr,
+                  });
+                sendPushNotification(
+                  row.sender,
+                  "Snap Opened",
+                  `${row.receiver} just opened your snap!`,
+                  { type: "snap" },
+                );
+              }
+            },
+          );
+        }
+      },
+    );
   });
 
   socket.on("snapSaved", ({ msgId }) => {
     db.run("UPDATE messages SET is_saved=1 WHERE id=?", [msgId], (err) => {
       if (!err) {
-        db.get("SELECT sender, receiver FROM messages WHERE id=?", [msgId], (gErr, row) => {
-          if (row) {
-            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("snapSavedUpdate", { msgId });
-          }
-        });
+        db.get(
+          "SELECT sender, receiver FROM messages WHERE id=?",
+          [msgId],
+          (gErr, row) => {
+            if (row) {
+              io.to(`user_${row.sender}`)
+                .to(`user_${row.receiver}`)
+                .emit("snapSavedUpdate", { msgId });
+            }
+          },
+        );
       }
     });
   });
@@ -2272,11 +2546,17 @@ io.on("connection", (socket) => {
   socket.on("snapUnsaved", ({ msgId }) => {
     db.run("UPDATE messages SET is_saved=0 WHERE id=?", [msgId], (err) => {
       if (!err) {
-        db.get("SELECT sender, receiver FROM messages WHERE id=?", [msgId], (gErr, row) => {
-          if (row) {
-            io.to(`user_${row.sender}`).to(`user_${row.receiver}`).emit("snapUnsavedUpdate", { msgId });
-          }
-        });
+        db.get(
+          "SELECT sender, receiver FROM messages WHERE id=?",
+          [msgId],
+          (gErr, row) => {
+            if (row) {
+              io.to(`user_${row.sender}`)
+                .to(`user_${row.receiver}`)
+                .emit("snapUnsavedUpdate", { msgId });
+            }
+          },
+        );
       }
     });
   });
@@ -2572,7 +2852,7 @@ io.on("connection", (socket) => {
               caption: caption,
               timestamp: timestamp,
               replyTo: replyTo || null,
-              isOpened: 0
+              isOpened: 0,
             };
 
             // Determine status based on receiver's read receipt setting
@@ -2605,13 +2885,21 @@ io.on("connection", (socket) => {
                     msgId: finalMsgId,
                   });
 
-                if (!isInChat) {
-                  db.get("SELECT name FROM users WHERE id = ?", [sender], (uErr, uRow) => {
-                    if (uRow) sendPushNotification(receiver, uRow.name, message, { type: 'chat', chatId: sender });
-                  });
+                  if (!isInChat) {
+                    db.get(
+                      "SELECT name FROM users WHERE id = ?",
+                      [sender],
+                      (uErr, uRow) => {
+                        if (uRow)
+                          sendPushNotification(receiver, uRow.name, message, {
+                            type: "chat",
+                            chatId: sender,
+                          });
+                      },
+                    );
+                  }
                 }
-                }
-              }
+              },
             );
 
             callback?.({ success: true, data: payload });
@@ -2770,16 +3058,31 @@ io.on("connection", (socket) => {
           .to(`user_${sender}`)
           .emit("newMessage", payload);
 
-          sendPushNotification(receiver, "Missed call", `You missed a call from ${sender}`, { type: 'chat', chatId: sender });
+        sendPushNotification(
+          receiver,
+          "Missed call",
+          `You missed a call from ${sender}`,
+          { type: "chat", chatId: sender },
+        );
 
         // Auto-mark delivered for now since it's a system message mostly
         io.to(`user_${sender}`).emit("messageDelivered", {
           msgId: this.lastID,
         });
 
-          db.get("SELECT name FROM users WHERE id = ?", [sender], (uErr, uRow) => {
-            if (uRow) sendPushNotification(receiver, "Screenshot", `${uRow.name} took a screenshot of the chat!`, { type: 'chat', chatId: sender });
-          });
+        db.get(
+          "SELECT name FROM users WHERE id = ?",
+          [sender],
+          (uErr, uRow) => {
+            if (uRow)
+              sendPushNotification(
+                receiver,
+                "Screenshot",
+                `${uRow.name} took a screenshot of the chat!`,
+                { type: "chat", chatId: sender },
+              );
+          },
+        );
       },
     );
   });
@@ -3214,29 +3517,45 @@ app.post("/uploadPost", (req, res) => {
 
       // Handle Tagging Notifications
       if (tags && Array.isArray(tags)) {
-        db.get("SELECT name, avatar FROM users WHERE id = ?", [userId], (uErr, sender) => {
-          if (sender) {
-            tags.forEach(taggedUserId => {
-              const notifType = `post_tag:${postId}`;
-              db.run(
-                "INSERT INTO notifications(user_id, sender_id, type, status) VALUES(?,?,?,?)",
-                [taggedUserId, userId, notifType, "unread"],
-                (nErr) => {
-                  if (!nErr) {
-                    io.to(`user_${taggedUserId}`).emit("postTaggedNotification", {
-                      postId,
-                      senderId: userId,
-                      senderName: sender.name,
-                      senderAvatar: sender.avatar
-                    });
-                    io.to(`user_${taggedUserId}`).emit("newNotification");
-                  }
-                }
-              );
-              sendPushNotification(taggedUserId, "Tagged in a post", `Someone tagged you in a post`, { type: 'post', postId: String(postId), senderId: String(userId) });
-            });
-          }
-        });
+        db.get(
+          "SELECT name, avatar FROM users WHERE id = ?",
+          [userId],
+          (uErr, sender) => {
+            if (sender) {
+              tags.forEach((taggedUserId) => {
+                const notifType = `post_tag:${postId}`;
+                db.run(
+                  "INSERT INTO notifications(user_id, sender_id, type, status) VALUES(?,?,?,?)",
+                  [taggedUserId, userId, notifType, "unread"],
+                  (nErr) => {
+                    if (!nErr) {
+                      io.to(`user_${taggedUserId}`).emit(
+                        "postTaggedNotification",
+                        {
+                          postId,
+                          senderId: userId,
+                          senderName: sender.name,
+                          senderAvatar: sender.avatar,
+                        },
+                      );
+                      io.to(`user_${taggedUserId}`).emit("newNotification");
+                    }
+                  },
+                );
+                sendPushNotification(
+                  taggedUserId,
+                  "Tagged in a post",
+                  `Someone tagged you in a post`,
+                  {
+                    type: "post",
+                    postId: String(postId),
+                    senderId: String(userId),
+                  },
+                );
+              });
+            }
+          },
+        );
       }
 
       io.emit("newPost", { userId, postId });
@@ -3264,44 +3583,68 @@ app.get("/getPosts/:userId", (req, res) => {
 
 app.post("/updatePostMusic", (req, res) => {
   const { postId, userId, music } = req.body;
-  db.run("UPDATE posts SET music = ? WHERE id = ? AND user_id = ?", [JSON.stringify(music), postId, userId], function(err) {
-    if (err) return res.json({ success: false });
-    res.json({ success: true });
-  });
+  db.run(
+    "UPDATE posts SET music = ? WHERE id = ? AND user_id = ?",
+    [JSON.stringify(music), postId, userId],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true });
+    },
+  );
 });
 
 app.post("/updatePostCaption", (req, res) => {
   const { postId, userId, caption } = req.body;
-  db.run("UPDATE posts SET caption = ? WHERE id = ? AND user_id = ?", [caption, postId, userId], function(err) {
-    if (err) return res.json({ success: false });
-    res.json({ success: true });
-  });
+  db.run(
+    "UPDATE posts SET caption = ? WHERE id = ? AND user_id = ?",
+    [caption, postId, userId],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true });
+    },
+  );
 });
 
 app.post("/updatePostTags", (req, res) => {
   const { postId, userId, tags } = req.body;
-  db.run("UPDATE posts SET tags = ? WHERE id = ? AND user_id = ?", [JSON.stringify(tags), postId, userId], function(err) {
-    if (err) return res.json({ success: false });
-    res.json({ success: true });
-  });
+  db.run(
+    "UPDATE posts SET tags = ? WHERE id = ? AND user_id = ?",
+    [JSON.stringify(tags), postId, userId],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true });
+    },
+  );
 });
 
 app.post("/togglePostVisibility", (req, res) => {
   const { postId, userId } = req.body;
-  db.run("UPDATE posts SET isHidden = CASE WHEN isHidden = 0 THEN 1 ELSE 0 END WHERE id = ? AND user_id = ?", [postId, userId], function(err) {
-    if (err) return res.json({ success: false });
-    db.get("SELECT isHidden FROM posts WHERE id = ?", [postId], (err, row) => {
-      res.json({ success: true, isHidden: row ? row.isHidden : 0 });
-    });
-  });
+  db.run(
+    "UPDATE posts SET isHidden = CASE WHEN isHidden = 0 THEN 1 ELSE 0 END WHERE id = ? AND user_id = ?",
+    [postId, userId],
+    function (err) {
+      if (err) return res.json({ success: false });
+      db.get(
+        "SELECT isHidden FROM posts WHERE id = ?",
+        [postId],
+        (err, row) => {
+          res.json({ success: true, isHidden: row ? row.isHidden : 0 });
+        },
+      );
+    },
+  );
 });
 
 app.post("/deletePost", (req, res) => {
   const { postId, userId } = req.body;
-  db.run("DELETE FROM posts WHERE id = ? AND user_id = ?", [postId, userId], function(err) {
-    if (err) return res.json({ success: false });
-    res.json({ success: true });
-  });
+  db.run(
+    "DELETE FROM posts WHERE id = ? AND user_id = ?",
+    [postId, userId],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true });
+    },
+  );
 });
 
 // Background task for 24-hour message deletion

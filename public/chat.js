@@ -10,6 +10,7 @@ if (!app) {
 }
 const messageSound = new Audio("/sound/message.mp3");
 const callSound = new Audio("/sound/call.mp3");
+let aiChatHistory = []; // Local memory for AI conversation
 
 // improve playback
 messageSound.preload = "auto";
@@ -3606,6 +3607,13 @@ sendBtn.onclick = () => {
   if (!currentFriendId) return;
 
   const text = msgInput.value; // Use raw value for multiline support
+  
+  // ✅ Intercept AI Message
+  if (currentFriendId === "ai_assistant") {
+    handleAIChat(text);
+    return;
+  }
+
   // ================= 🔥 EDIT MODE =================
   if (editingMsgId) {
     if (!editType) {
@@ -3711,6 +3719,56 @@ sendBtn.onclick = () => {
   msgInput.style.height = "auto"; // Reset height after sending
   stopTyping();
 };
+
+/**
+ * Handles communication with the AI Assistant API
+ */
+async function handleAIChat(text) {
+  if (!text.trim()) return;
+  
+  const timestamp = new Date().toISOString();
+  // User message (UI only, no DB)
+  appendMessage(userId, text, null, 'sent', null, 'text', timestamp);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  msgInput.value = "";
+  msgInput.style.height = "auto";
+  
+  const indicator = document.getElementById("typingIndicator");
+  indicator.style.display = "flex";
+
+  try {
+    const res = await fetch("/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        message: text, 
+        history: aiChatHistory.map(h => ({ role: h.role, text: h.text })) 
+      })
+    });
+    const data = await res.json();
+    
+    // Realistic typing delay (speed of ~15 chars/ms, capped)
+    const delay = Math.min(Math.max(text.length * 15, 800), 2500);
+    await new Promise(r => setTimeout(r, delay));
+    
+    indicator.style.display = "none";
+    
+    if (data.success) {
+      const replyTimestamp = new Date().toISOString();
+      // Render AI response
+      appendMessage("ai_assistant", data.reply, null, 'sent', null, 'text', replyTimestamp);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Update conversational memory
+      aiChatHistory.push({ role: 'user', text, sender: userId, timestamp });
+      aiChatHistory.push({ role: 'model', text: data.reply, sender: 'ai_assistant', timestamp: replyTimestamp });
+      if (aiChatHistory.length > 10) aiChatHistory = aiChatHistory.slice(-10); // Keep memory short
+    }
+  } catch (e) {
+    indicator.style.display = "none";
+    showPopup("AI Assistant failed to reply.");
+  }
+}
 
 msgInput.onkeydown = (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -3837,6 +3895,21 @@ async function loadFriends() {
 
   const chatList = document.querySelector(".chat-list");
   chatList.innerHTML = "";
+
+  // ✅ Prepend AI Assistant to the top of the list
+  const aiItem = document.createElement("div");
+  aiItem.className = "chat-item ai-assistant-row";
+  aiItem.dataset.friendId = "ai_assistant";
+  aiItem.innerHTML = `
+    <img src="/images/rtable.png" style="border: 2px solid #ffcc00; padding: 2px;">
+    <div class="chat-info">
+      <div class="chat-name">AI Assistant ✨</div>
+      <div class="chat-msg">Ask me anything!</div>
+    </div>
+    <div class="chat-days">AI</div>
+  `;
+  aiItem.onclick = () => openChat("ai_assistant", "AI Assistant", "/images/rtable.png");
+  chatList.appendChild(aiItem);
 
   // ✅ POPULATE UNREAD COUNTS FROM DB
   data.friends.forEach((friend) => {
@@ -3983,6 +4056,36 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
   activeChat = friendId;
   delete unreadCounts[friendId];
   updateFriendList();
+
+  // ✅ Intercept AI Assistant UI
+  if (friendId === "ai_assistant") {
+    const chatNameEl = document.getElementById("chatName");
+    chatNameEl.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="${friendAvatar || '/images/rtable.png'}" alt="AI" class="golden-avatar">
+        <div class="chat-header-info">
+          <span>AI Assistant</span>
+          <span id="chatStatus" class="chat-status" style="color: #00ff55;">Online</span>
+        </div>
+      </div>
+      <div class="chat-actions">
+         <button class="chat-action-btn" onclick="aiChatHistory = []; openChat('ai_assistant', 'AI Assistant'); showPopup('Memory Cleared')">
+            <i class="fa-solid fa-trash-can"></i>
+         </button>
+      </div>`;
+    
+    applyTheme(null, null); // Reset theme for AI chat
+    const messagesEl = document.getElementById("messages");
+    messagesEl.innerHTML = "";
+    renderedMessages.clear();
+    lastRenderedDate = null;
+    
+    // Load local history
+    aiChatHistory.forEach(msg => appendMessage(msg.sender, msg.text, null, 'sent', null, 'text', msg.timestamp));
+    document.getElementById("chatScreen").style.display = "flex";
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return;
+  }
 
   // If no avatar passed (e.g. from search), use placeholder initially
   if (!friendAvatar) {
