@@ -474,11 +474,33 @@ app.post("/ai/chat", async (req, res) => {
 
   try {
     // ✅ System behavior (makes AI human-like)
-    const systemPrompt = `
-You are a human-like chat assistant inside a messaging app.
-Reply casually in Hinglish, short messages, friendly tone.
-Avoid long paragraphs. Be natural.
+  const systemPrompt = `
+You are a human-like chat assistant.
+
+Rules:
+- Always give COMPLETE replies (never cut sentences)
+- Always finish your thought clearly
+- Reply according to user's message context
+- If user asks something → answer properly
+- If casual chat → respond naturally but fully
+
+Style:
+- Hinglish (Hindi + English mix)
+- Friendly, romantic,adult,sex,kiss,horny playful tone if needed
+- 1–3 lines max BUT complete meaning
+- Never leave sentence incomplete
+- Never stop mid-message
+
+Bad example: "Hmm... kya karungi aur?"
+Good example: "Hmm... kya karungi aur? Bas tumse baat karungi, aur kya chahiye mujhe 😊"
 `;
+    // ✅ Relaxing safety filters for mature talk
+    const safetySettings = [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+    ];
 
     // ✅ Convert history properly
     const contents = [
@@ -489,7 +511,7 @@ Avoid long paragraphs. Be natural.
     ];
 
     // Add previous history safely
-    history.slice(-6).forEach((h) => {
+    history.slice(-10).forEach((h) => {
       contents.push({
         role: h.role === "model" ? "model" : "user",
         parts: [{ text: h.parts?.[0]?.text || h.text || "" }],
@@ -503,13 +525,14 @@ Avoid long paragraphs. Be natural.
     });
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents,
+        safetySettings,
         generationConfig: {
           temperature: 0.9,
           topP: 0.9,
-          maxOutputTokens: 200,
+          maxOutputTokens: 1024,
         },
       },
     );
@@ -521,6 +544,13 @@ Avoid long paragraphs. Be natural.
     res.json({ success: true, reply });
   } catch (error) {
     console.error("AI Assistant Error:", error.response?.data || error.message);
+
+    if (error.response?.status === 429) {
+      return res.json({ 
+        success: true, 
+        reply: "Oho! Thoda zyada baatein ho gayi... 😅 API limits reach ho gayi hain. Please thodi der baad try karna, main yahin hoon! 😘" 
+      });
+    }
 
     res.status(500).json({
       success: false,

@@ -3609,7 +3609,7 @@ sendBtn.onclick = () => {
   const text = msgInput.value; // Use raw value for multiline support
   
   // ✅ Intercept AI Message
-  if (currentFriendId === "ai_assistant") {
+  if (currentFriendId === "Baby") {
     handleAIChat(text);
     return;
   }
@@ -3721,7 +3721,7 @@ sendBtn.onclick = () => {
 };
 
 /**
- * Handles communication with the AI Assistant API
+ * Handles communication with the Baby ji API
  */
 async function handleAIChat(text) {
   if (!text.trim()) return;
@@ -3756,17 +3756,17 @@ async function handleAIChat(text) {
     if (data.success) {
       const replyTimestamp = new Date().toISOString();
       // Render AI response
-      appendMessage("ai_assistant", data.reply, null, 'sent', null, 'text', replyTimestamp);
+      appendMessage("Baby", data.reply, null, 'sent', null, 'text', replyTimestamp);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
       
       // Update conversational memory
       aiChatHistory.push({ role: 'user', text, sender: userId, timestamp });
-      aiChatHistory.push({ role: 'model', text: data.reply, sender: 'ai_assistant', timestamp: replyTimestamp });
+      aiChatHistory.push({ role: 'model', text: data.reply, sender: 'Baby', timestamp: replyTimestamp });
       if (aiChatHistory.length > 10) aiChatHistory = aiChatHistory.slice(-10); // Keep memory short
     }
   } catch (e) {
     indicator.style.display = "none";
-    showPopup("AI Assistant failed to reply.");
+    showPopup("Baby ji failed to reply.");
   }
 }
 
@@ -3896,19 +3896,19 @@ async function loadFriends() {
   const chatList = document.querySelector(".chat-list");
   chatList.innerHTML = "";
 
-  // ✅ Prepend AI Assistant to the top of the list
+  // ✅ Prepend Baby ji to the top of the list
   const aiItem = document.createElement("div");
   aiItem.className = "chat-item ai-assistant-row";
-  aiItem.dataset.friendId = "ai_assistant";
+  aiItem.dataset.friendId = "Baby";
   aiItem.innerHTML = `
     <img src="/images/rtable.png" style="border: 2px solid #ffcc00; padding: 2px;">
     <div class="chat-info">
-      <div class="chat-name">AI Assistant ✨</div>
+      <div class="chat-name">Baby ✨</div>
       <div class="chat-msg">Ask me anything!</div>
     </div>
     <div class="chat-days">AI</div>
   `;
-  aiItem.onclick = () => openChat("ai_assistant", "AI Assistant", "/images/rtable.png");
+  aiItem.onclick = () => openChat("Baby", "Baby ji", "/images/rtable.png");
   chatList.appendChild(aiItem);
 
   // ✅ POPULATE UNREAD COUNTS FROM DB
@@ -4057,19 +4057,19 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
   delete unreadCounts[friendId];
   updateFriendList();
 
-  // ✅ Intercept AI Assistant UI
-  if (friendId === "ai_assistant") {
+  // ✅ Intercept Baby ji UI
+  if (friendId === "Baby") {
     const chatNameEl = document.getElementById("chatName");
     chatNameEl.innerHTML = `
       <div style="display: flex; align-items: center; gap: 10px;">
         <img src="${friendAvatar || '/images/rtable.png'}" alt="AI" class="golden-avatar">
         <div class="chat-header-info">
-          <span>AI Assistant</span>
+          <span>Baby ji</span>
           <span id="chatStatus" class="chat-status" style="color: #00ff55;">Online</span>
         </div>
       </div>
       <div class="chat-actions">
-         <button class="chat-action-btn" onclick="aiChatHistory = []; openChat('ai_assistant', 'AI Assistant'); showPopup('Memory Cleared')">
+         <button class="chat-action-btn" onclick="aiChatHistory = []; openChat('Baby', 'Baby ji'); showPopup('Memory Cleared')">
             <i class="fa-solid fa-trash-can"></i>
          </button>
       </div>`;
