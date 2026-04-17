@@ -3848,6 +3848,21 @@ input:checked + .slider:before {
   transform: scale(1.1);
   background: rgba(255, 255, 255, 0.2);
 }
+.groupbtn {
+ 
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.groupbtn:hover {
+  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.2);
+}
 
 /* ================= POST GRID ================= */
 .post-grid {

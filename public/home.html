@@ -130,6 +130,9 @@
                     </div>
                 </div>
                 <i id="addFriendBtn" class="fa-solid fa-user-plus"></i>
+                <button id="groupbtn" class="groupbtn">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
 
                 <div class="notification-icon-wrapper" onclick="toggleNotificationPanel()">
                     <i class="fa-solid fa-bell"></i>
@@ -264,6 +267,22 @@
                         <h4>Discover People</h4>
                         <div id="modernDiscoverList" class="user-cards-list"></div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CREATE GROUP MODAL -->
+        <div id="createGroupModal" class="theme-popup" style="z-index: 10005;">
+            <div class="theme-popup-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 400px;">
+                <button class="close-btn" onclick="closeCreateGroupModal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer;">&times;</button>
+                <h3 style="margin-bottom: 10px;">Create Group</h3>
+                <input type="text" id="groupNameInput" placeholder="Group Name" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #222; color: white; margin-bottom: 15px;">
+                <p style="font-size: 12px; color: #888; text-align: left; margin-bottom: 5px;">Select Members:</p>
+                <div id="groupFriendList" style="flex: 1; overflow-y: auto; margin-bottom: 15px; text-align: left; padding-right: 5px;">
+                    <!-- Friends injected here -->
+                </div>
+                <div style="display: flex; justify-content: center; padding-top: 10px;">
+                    <button id="submitCreateGroupBtn" class="save-btn" style="width: auto; padding: 12px 60px;">Create Group</button>
                 </div>
             </div>
         </div>
@@ -1084,6 +1103,11 @@
                     <i class="fa-solid fa-clock"></i> Chat Delete Timer
                 </div>
 
+                <div class="sheet-item" id="profileHideChatItem" onclick="toggleProfileHideChat()">
+                    <i class="fa-solid fa-eye-slash"></i>
+                    <span id="profileHideChatText">Hide Chat</span>
+                </div>
+
                 <div class="sheet-item" onclick="shareProfile()">
                     <i class="fa-solid fa-share-nodes"></i> Share Profile
                 </div>
@@ -1102,6 +1126,21 @@
 
                 <div class="sheet-cancel" onclick="closeProfileMenu()">Cancel</div>
 
+            </div>
+        </div>
+
+        <!-- Chat Item Options Sheet (Long Press) -->
+        <div id="chatItemActionSheet" class="action-sheet">
+            <div class="action-sheet-overlay" onclick="closeChatItemOptions()"></div>
+            <div class="action-sheet-content">
+                <div class="sheet-handle"></div>
+                <div class="sheet-item" id="chatItemHideBtn" onclick="handleChatItemHide()">
+                    <i class="fa-solid fa-eye-slash"></i> Hide Chat
+                </div>
+                <div class="sheet-item danger" onclick="handleChatItemDelete()">
+                    <i class="fa-solid fa-trash"></i> Delete from List
+                </div>
+                <div class="sheet-cancel" onclick="closeChatItemOptions()">Cancel</div>
             </div>
         </div>
 
@@ -1837,7 +1876,8 @@
                 <!-- Beauty Intensity Slider -->
                 <div class="intensity-slider-container" id="intensitySliderContainer"
                     style="position: absolute; bottom: 200px; width: 70%; left: 15%; z-index: 10; display: none;">
-                    <input type="range" id="filterIntensity" min="0" max="100" value="100" style="width: 100%; accent-color: #fffc00;">
+                    <input type="range" id="filterIntensity" min="0" max="100" value="100"
+                        style="width: 100%; accent-color: #fffc00;">
                 </div>
 
                 <!-- Filter Carousel -->
@@ -1915,7 +1955,8 @@
     <!-- MediaPipe FaceMesh & AR Utilities -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="chat.js"></script>

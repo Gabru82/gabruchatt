@@ -17,6 +17,33 @@ messageSound.preload = "auto";
 callSound.preload = "auto";
 callSound.loop = true;
 let isChatOpen = false;
+
+// ================= VISIBILITY HELPERS =================
+function isChatHidden(id) {
+  const hidden = JSON.parse(localStorage.getItem("hiddenChats") || "[]");
+  return hidden.includes(String(id));
+}
+function isChatRemoved(id) {
+  const removed = JSON.parse(localStorage.getItem("removedChats") || "[]");
+  return removed.includes(String(id));
+}
+function setChatHidden(id, hide) {
+  let hidden = JSON.parse(localStorage.getItem("hiddenChats") || "[]");
+  if (hide) { if (!hidden.includes(String(id))) hidden.push(String(id)); }
+  else { hidden = hidden.filter(h => h !== String(id)); }
+  localStorage.setItem("hiddenChats", JSON.stringify(hidden));
+}
+function setChatRemoved(id, remove) {
+  let removed = JSON.parse(localStorage.getItem("removedChats") || "[]");
+  if (remove) { if (!removed.includes(String(id))) removed.push(String(id)); }
+  else { removed = removed.filter(r => r !== String(id)); }
+  localStorage.setItem("removedChats", JSON.stringify(removed));
+}
+function getChatVisibility(id) {
+  return { isHidden: isChatHidden(id), isRemoved: isChatRemoved(id) };
+}
+// ======================================================
+
 let cachedFriends = [];
 
 function formatPreviewText(message, type) {
@@ -816,6 +843,52 @@ function openProfileMenu(e) {
   setTimeout(() => {
     sheet.classList.add("active");
   }, 10);
+  updateProfileHideUI();
+}
+
+function updateProfileHideUI() {
+  if (!currentFriendId) return;
+  const isHidden = isChatHidden(currentFriendId);
+  document.getElementById("profileHideChatText").innerText = isHidden ? "Unhide Chat" : "Hide Chat";
+  document.getElementById("profileHideChatItem").querySelector("i").className = isHidden ? "fa-solid fa-eye" : "fa-solid fa-eye-slash";
+}
+
+window.toggleProfileHideChat = function() {
+  if (!currentFriendId) return;
+  const isHidden = isChatHidden(currentFriendId);
+  setChatHidden(currentFriendId, !isHidden);
+  loadFriends(); // Refresh list real-time
+  closeProfileMenu();
+};
+
+let longPressedFriendId = null;
+function openChatItemOptions(id, name) {
+  longPressedFriendId = id;
+  const sheet = document.getElementById("chatItemActionSheet");
+  const hideBtn = document.getElementById("chatItemHideBtn");
+  const isHidden = isChatHidden(id);
+  
+  hideBtn.innerHTML = isHidden ? 
+    '<i class="fa-solid fa-eye"></i> Unhide Chat' : 
+    '<i class="fa-solid fa-eye-slash"></i> Hide Chat';
+    
+  sheet.style.display = "block";
+  setTimeout(() => sheet.classList.add("active"), 10);
+}
+
+window.closeChatItemOptions = function() {
+  const sheet = document.getElementById("chatItemActionSheet");
+  sheet.classList.remove("active");
+  setTimeout(() => { sheet.style.display = "none"; }, 300);
+};
+
+window.handleChatItemHide = function() {
+  if (longPressedFriendId) { setChatHidden(longPressedFriendId, !isChatHidden(longPressedFriendId)); loadFriends(); }
+  closeChatItemOptions();
+};
+window.handleChatItemDelete = function() {
+  if (longPressedFriendId) { setChatRemoved(longPressedFriendId, true); loadFriends(); }
+  closeChatItemOptions();
 }
 
 function closeProfileMenu() {
@@ -2437,6 +2510,9 @@ socket.on("newMessage", (data) => {
   const fromId = data.from == userId ? data.to : data.from;
 
   const isMuted = localStorage.getItem(`muteChat_${fromId}`) === "true";
+  
+  // If a new message arrives, bring back a "removed" chat to the list
+  if (isChatRemoved(fromId)) { setChatRemoved(fromId, false); loadFriends(); }
 
   const isCurrentChat =
     currentFriendId &&
@@ -3984,6 +4060,9 @@ async function loadFriends() {
   });
 
   data.friends.forEach((friend) => {
+    // Only render if not hidden or removed from list
+    if (isChatHidden(friend.id) || isChatRemoved(friend.id)) return;
+
     const item = document.createElement("div");
 
     item.className = "chat-item";
@@ -4005,6 +4084,14 @@ async function loadFriends() {
     `;
 
     item.onclick = () => openChat(friend.id, friend.name, friend.avatar);
+    
+    // Long press and Context Menu
+    let lp;
+    item.addEventListener('touchstart', () => { lp = setTimeout(() => openChatItemOptions(friend.id, friend.name), 600); });
+    item.addEventListener('touchend', () => clearTimeout(lp));
+    item.addEventListener('touchmove', () => clearTimeout(lp));
+    item.oncontextmenu = (e) => { e.preventDefault(); openChatItemOptions(friend.id, friend.name); };
+
     chatList.appendChild(item);
   });
   updateFriendList();
@@ -4073,7 +4160,11 @@ function performFriendSearch(query) {
     filtered.forEach((friend) => {
       const div = document.createElement("div");
       div.className = "search-result-item";
-      div.innerHTML = `<img src="${getAvatarSrc(friend)}"><div class="search-result-info"><div class="search-result-name">${friend.name}</div></div>`;
+      const visibility = getChatVisibility(friend.id);
+      let label = visibility.isHidden ? ' <span style="font-size:10px; color:#888;">(Hidden)</span>' : '';
+      if (visibility.isRemoved) label = ' <span style="font-size:10px; color:#888;">(Recent)</span>';
+      
+      div.innerHTML = `<img src="${getAvatarSrc(friend)}"><div class="search-result-info"><div class="search-result-name">${friend.name}${label}</div></div>`;
       div.onclick = () => {
         openChat(friend.id, friend.name, friend.avatar);
         hideFriendSearch();
@@ -4119,6 +4210,10 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
   currentFriendName = friendName;
   activeChat = friendId;
   delete unreadCounts[friendId];
+  
+  // Bring back removed chats when manually opened via search
+  if (isChatRemoved(friendId)) { setChatRemoved(friendId, false); }
+
   updateFriendList();
 
   // Get references to input row buttons
