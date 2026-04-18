@@ -969,6 +969,31 @@
         </div>
         <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" />
 
+
+              <!-- GROUP PROFILE MODAL -->
+        <div id="groupProfileModal" class="user-profile-modal">
+            <div class="user-profile-content">
+                <div class="profile-cover-section" style="background: linear-gradient(45deg, #4facfe, #00f2fe); height: 150px; position: relative;">
+                    <button class="close-profile-btn" onclick="document.getElementById('groupProfileModal').style.display='none'">✕</button>
+                </div>
+                <div class="profile-overlay-info" style="margin-top: -50px; padding: 0 20px;">
+                    <img id="groupModalAvatar" class="profile-modal-avatar" src="/images/rtable.png" style="border: 4px solid #111;">
+                    <div class="profile-text">
+                        <h2 id="groupModalName">Group Name</h2>
+                        <p id="groupModalMemberCount" style="color: #888; font-size: 14px;">0 Members</p>
+                    </div>
+                </div>
+                <div style="padding: 20px; width: 100%;">
+                    <h3 style="margin-bottom: 15px; font-size: 16px; border-left: 3px solid #4facfe; padding-left: 10px;">Members</h3>
+                    <div id="groupMembersList" style="display: flex; flex-direction: column; gap: 12px; max-height: 300px; overflow-y: auto; padding-right: 5px;"></div>
+                    <div style="margin-top: 30px; border-top: 1px solid #333; padding-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                        <button onclick="handleLeaveGroupFromProfile()" class="action-btn-outline" style="color: #ff4d4d; border-color: #ff4d4d;"><i class="fa-solid fa-right-from-bracket"></i> Leave Group</button>
+                        <button onclick="handleBlockGroupFromProfile()" class="action-btn-outline" style="color: #ff4d4d; border-color: #ff4d4d;"><i class="fa-solid fa-ban"></i> Block Group</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- // friend profile model // -->
         <div id="userProfileModal" class="user-profile-modal">
             <div class="user-profile-content">
@@ -1139,6 +1164,9 @@
                 </div>
                 <div class="sheet-item danger" onclick="handleChatItemDelete()">
                     <i class="fa-solid fa-trash"></i> Delete from List
+                </div>
+                <div class="sheet-item danger" id="chatItemLeaveBtn" onclick="handleLeaveGroup()" style="display: none;">
+                    <i class="fa-solid fa-right-from-bracket"></i> Leave Group
                 </div>
                 <div class="sheet-cancel" onclick="closeChatItemOptions()">Cancel</div>
             </div>

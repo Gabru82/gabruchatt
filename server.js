@@ -369,8 +369,207 @@ db.serialize(() => {
       UNIQUE(user_id, token)
     )
   `);
+
+  // ================= GROUP CHAT TABLES =================
+  db.run(`
+    CREATE TABLE IF NOT EXISTS groups(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      creator_id INTEGER,
+      avatar TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS group_members(
+      group_id INTEGER,
+      user_id INTEGER,
+      joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(group_id, user_id),
+      FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS group_messages(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER,
+      sender_id INTEGER,
+      message TEXT,
+      type TEXT DEFAULT 'text',
+      caption TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS group_themes(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER UNIQUE,
+      theme_type TEXT,
+      theme_value TEXT,
+      FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+    )
+  `);
 });
 // ================= ROUTES =================
+
+// ================= GROUP CHAT ROUTES =================
+
+app.post("/createGroup", (req, res) => {
+  const { name, creatorId, members } = req.body;
+  if (!name || !creatorId || !members || members.length === 0) {
+    return res.status(400).json({ success: false });
+  }
+
+  db.get("SELECT name FROM users WHERE id = ?", [creatorId], (uErr, creator) => {
+    if (uErr || !creator) return res.status(500).json({ success: false });
+    const creatorName = creator.name;
+
+    db.run("INSERT INTO groups (name, creator_id) VALUES (?, ?)", [name, creatorId], function(err) {
+      if (err) return res.status(500).json({ success: false });
+      const groupId = this.lastID;
+
+      const allMembers = [...new Set([...members.map(id => parseInt(id)), parseInt(creatorId)])];
+      const stmt = db.prepare("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)");
+      
+      allMembers.forEach(uid => {
+        stmt.run(groupId, uid);
+        if (parseInt(uid) !== parseInt(creatorId)) {
+          const logText = `${creatorName} add you in group`;
+          db.run("INSERT INTO notifications(user_id, sender_id, type, content, status) VALUES(?,?,?,?,?)",
+            [uid, creatorId, 'group_invite:' + groupId, logText, 'unread'],
+            (nErr) => {
+              if (!nErr) {
+                io.to(`user_${uid}`).emit("newNotification");
+                io.to(`user_${uid}`).emit("groupCreated", { id: groupId, name, creatorName });
+              }
+            }
+          );
+        }
+      });
+      stmt.finalize(() => res.json({ success: true, groupId }));
+    });
+  });
+});
+
+app.post("/leaveGroup", (req, res) => {
+  const { userId, groupId } = req.body;
+  if (!userId || !groupId) return res.status(400).json({ success: false });
+
+  // 1. Get the user's real name before removal
+  db.get("SELECT name FROM users WHERE id = ?", [userId], (uErr, user) => {
+    if (uErr || !user) return res.status(500).json({ success: false });
+    const userName = user.name;
+
+    // 2. Remove the user from the group
+    db.run(
+      "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+      [groupId, userId],
+      function (err) {
+        if (err) return res.status(500).json({ success: false });
+
+        const logMessage = `${userName} left the group`;
+        const now = new Date().toISOString();
+
+        // 3. Insert a log message into the group chat history
+        db.run(
+          "INSERT INTO group_messages (group_id, sender_id, message, type, timestamp) VALUES (?, ?, ?, ?, ?)",
+          [groupId, userId, logMessage, 'group_log', now],
+          function (msgErr) {
+            if (!msgErr) {
+              // 4. Broadcast the log to active group members
+              io.to(`group_${groupId}`).emit("newGroupMessage", {
+                msgId: this.lastID,
+                groupId,
+                senderId: userId,
+                senderName: "System",
+                message: logMessage,
+                type: 'group_log',
+                timestamp: now
+              });
+            }
+            res.json({ success: true });
+          }
+        );
+      }
+    );
+  });
+});
+
+app.get("/getGroups/:userId", (req, res) => {
+  const { userId } = req.params;
+  db.all(
+    `SELECT g.*, 
+     (SELECT message FROM group_messages WHERE group_id = g.id ORDER BY timestamp DESC LIMIT 1) as lastMessage,
+     (SELECT type FROM group_messages WHERE group_id = g.id ORDER BY timestamp DESC LIMIT 1) as lastMessageType,
+     (SELECT timestamp FROM group_messages WHERE group_id = g.id ORDER BY timestamp DESC LIMIT 1) as lastMessageTimestamp
+     FROM groups g
+     JOIN group_members gm ON g.id = gm.group_id
+     WHERE gm.user_id = ?
+     ORDER BY COALESCE(lastMessageTimestamp, g.created_at) DESC`,
+    [userId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true, groups: rows || [] });
+    }
+  );
+});
+
+app.get("/getGroupMessages/:groupId", (req, res) => {
+  const { groupId } = req.params;
+  db.all(
+    `SELECT gm.*, u.name as senderName, u.avatar as senderAvatar
+     FROM group_messages gm
+     JOIN users u ON gm.sender_id = u.id
+     WHERE gm.group_id = ?
+     ORDER BY gm.timestamp ASC`,
+    [groupId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true, messages: rows || [] });
+    }
+  );
+});
+
+app.get("/getGroupMembers/:groupId/:userId", (req, res) => {
+  const { groupId, userId } = req.params;
+  db.all(
+    `SELECT u.id, u.name, u.avatar,
+     (SELECT 1 FROM friends WHERE (user1 = u.id AND user2 = ?) OR (user1 = ? AND user2 = u.id)) as isFriend,
+     (SELECT 1 FROM friend_requests WHERE sender = ? AND receiver = u.id AND status = 'pending') as isPending
+     FROM group_members gm
+     JOIN users u ON gm.user_id = u.id
+     WHERE gm.group_id = ?`,
+    [userId, userId, userId, groupId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ success: false });
+      res.json({ success: true, members: rows });
+    }
+  );
+});
+
+app.post("/setGroupTheme", (req, res) => {
+  const { groupId, themeType, themeValue } = req.body;
+  db.run(
+    `INSERT OR REPLACE INTO group_themes (group_id, theme_type, theme_value) VALUES (?, ?, ?)`,
+    [groupId, themeType, themeValue],
+    function (err) {
+      if (err) return res.json({ success: false });
+      res.json({ success: true });
+    }
+  );
+});
+
+app.get("/getGroupTheme/:groupId", (req, res) => {
+  const { groupId } = req.params;
+  db.get("SELECT theme_type, theme_value FROM group_themes WHERE group_id = ?", [groupId], (err, row) => {
+    if (err) return res.status(500).json({ theme: null });
+    res.json({ theme: row || null });
+  });
+});
 
 // ================= MUSIC SEARCH API =================
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
@@ -1618,6 +1817,7 @@ app.get("/getFriends/:userId", (req, res) => {
     SELECT DISTINCT u.id, 
     COALESCE(ua.custom_name, u.name) as name, 
     COALESCE(ua.custom_avatar, u.avatar) as avatar,
+    f.created_at,
     (SELECT COUNT(*) FROM messages 
      WHERE sender = u.id AND receiver = ? AND status != 'seen'
      AND (deleted_for IS NULL OR ',' || deleted_for || ',' NOT LIKE '%,' || ? || ',%')) as unreadCount,
@@ -1641,7 +1841,7 @@ app.get("/getFriends/:userId", (req, res) => {
     JOIN users u ON (u.id = f.user1 OR u.id = f.user2)
     LEFT JOIN user_aliases ua ON ua.target_id = u.id AND ua.owner_id = ?
     WHERE (f.user1 = ? OR f.user2 = ?) AND u.id != ? AND u.account_status = 1
-    ORDER BY lastMessageTimestamp DESC`,
+    ORDER BY COALESCE(lastMessageTimestamp, f.created_at) DESC`,
     [
       userId,
       userId,
@@ -2992,16 +3192,24 @@ io.on("connection", (socket) => {
     },
   );
 
-  socket.on("themeChange", ({ to, themeType, themeValue }) => {
+  socket.on("themeChange", ({ to, themeType, themeValue, isGroup }) => {
     const sender = String(socket.userId);
-    const receiver = String(to);
-
-    // Forward the theme change event to the other user
-    io.to(`user_${receiver}`).emit("themeChanged", {
-      from: sender,
-      themeType,
-      themeValue,
-    });
+    if (isGroup) {
+      io.to(`group_${to}`).emit("themeChanged", {
+        from: sender,
+        groupId: to,
+        themeType,
+        themeValue,
+        isGroup: true
+      });
+    } else {
+      io.to(`user_${to}`).emit("themeChanged", {
+        from: sender,
+        themeType,
+        themeValue,
+        isGroup: false
+      });
+    }
   });
 
   // ================= MARK ALL SEEN =================
@@ -3046,6 +3254,42 @@ io.on("connection", (socket) => {
       from: sender,
       typing: true,
     });
+  });
+
+  socket.on("joinGroup", (groupId) => {
+    socket.join(`group_${groupId}`);
+  });
+
+  socket.on("sendGroupMessage", (data, callback) => {
+    const { groupId, message, type, caption } = data;
+    const senderId = socket.userId;
+    const timestamp = new Date().toISOString();
+
+    db.run(
+      "INSERT INTO group_messages (group_id, sender_id, message, type, caption, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+      [groupId, senderId, message, type || 'text', caption || null, timestamp],
+      function(err) {
+        if (err) return callback?.({ success: false });
+        const msgId = this.lastID;
+        
+        db.get("SELECT name, avatar FROM users WHERE id=?", [senderId], (uErr, user) => {
+          const payload = {
+            msgId,
+            groupId,
+            senderId,
+            senderName: user.name,
+            senderAvatar: user.avatar,
+            message,
+            type: type || 'text',
+            caption,
+            timestamp
+          };
+          
+          socket.to(`group_${groupId}`).emit("newGroupMessage", payload);
+          callback?.({ success: true, data: payload });
+        });
+      }
+    );
   });
 
   socket.on("stopTyping", ({ to }) => {

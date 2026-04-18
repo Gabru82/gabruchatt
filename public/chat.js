@@ -17,6 +17,7 @@ messageSound.preload = "auto";
 callSound.preload = "auto";
 callSound.loop = true;
 let isChatOpen = false;
+let isGroupChat = false;
 
 // ================= VISIBILITY HELPERS =================
 function isChatHidden(id) {
@@ -521,6 +522,70 @@ window.requestFromShare = async function (targetId, msgId) {
 
 setupShareModal();
 
+// ================= GROUP CHAT MODAL LOGIC =================
+
+let selectedGroupMembers = new Set();
+
+window.closeCreateGroupModal = function () {
+  document.getElementById("createGroupModal").style.display = "none";
+  selectedGroupMembers.clear();
+};
+
+document.getElementById("groupbtn").onclick = async () => {
+  const modal = document.getElementById("createGroupModal");
+  const list = document.getElementById("groupFriendList");
+  
+  list.innerHTML = '<p style="text-align:center; color:#888;">Loading friends...</p>';
+  modal.style.display = "flex";
+
+  const res = await fetch(`/getFriends/${userId}`);
+  const data = await res.json();
+  list.innerHTML = "";
+
+  data.friends.forEach((friend) => {
+    const item = document.createElement("div");
+    item.className = "forward-friend-item";
+    item.onclick = () => {
+      if (selectedGroupMembers.has(friend.id)) {
+        selectedGroupMembers.delete(friend.id);
+        item.classList.remove("selected");
+      } else {
+        selectedGroupMembers.add(friend.id);
+        item.classList.add("selected");
+      }
+    };
+
+    item.innerHTML = `
+      <img src="${getAvatarSrc(friend)}">
+      <div class="forward-friend-info">
+          <div class="forward-friend-name">${friend.name}</div>
+      </div>
+      <div class="selection-check"><i class="fa-solid fa-circle-check"></i></div>
+    `;
+    list.appendChild(item);
+  });
+};
+
+document.getElementById("submitCreateGroupBtn").onclick = async () => {
+  const name = document.getElementById("groupNameInput").value.trim();
+  if (!name || selectedGroupMembers.size === 0) {
+    showPopup("Enter a group name and select members!");
+    return;
+  }
+
+  const res = await fetch("/createGroup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, creatorId: userId, members: Array.from(selectedGroupMembers) }),
+  });
+
+  if (res.ok) {
+    showPopup("Group created!");
+    closeCreateGroupModal();
+    loadFriends();
+  }
+};
+
 window.closeSharedMediaOptions = function () {
   document.getElementById("sharedMediaOptionsModal").classList.remove("active");
   document.getElementById("sharedMediaOptionsModal").style.display = "none";
@@ -862,16 +927,21 @@ window.toggleProfileHideChat = function() {
 };
 
 let longPressedFriendId = null;
-function openChatItemOptions(id, name) {
+let longPressedIsGroup = false;
+function openChatItemOptions(id, name, isGroup = false) {
   longPressedFriendId = id;
+  longPressedIsGroup = isGroup;
   const sheet = document.getElementById("chatItemActionSheet");
   const hideBtn = document.getElementById("chatItemHideBtn");
+  const leaveBtn = document.getElementById("chatItemLeaveBtn");
   const isHidden = isChatHidden(id);
   
   hideBtn.innerHTML = isHidden ? 
     '<i class="fa-solid fa-eye"></i> Unhide Chat' : 
     '<i class="fa-solid fa-eye-slash"></i> Hide Chat';
-    
+
+  if (leaveBtn) leaveBtn.style.display = isGroup ? "flex" : "none";
+
   sheet.style.display = "block";
   setTimeout(() => sheet.classList.add("active"), 10);
 }
@@ -889,7 +959,93 @@ window.handleChatItemHide = function() {
 window.handleChatItemDelete = function() {
   if (longPressedFriendId) { setChatRemoved(longPressedFriendId, true); loadFriends(); }
   closeChatItemOptions();
-}
+};
+
+window.handleLeaveGroup = async function() {
+  if (!longPressedFriendId || !longPressedIsGroup) return;
+  
+  const res = await fetch("/leaveGroup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, groupId: longPressedFriendId })
+  });
+
+  if (res.ok) {
+    if (isGroupChat && String(currentFriendId) === String(longPressedFriendId)) {
+        document.getElementById("chatScreen").style.display = "none";
+        isChatOpen = false;
+        isGroupChat = false;
+        currentFriendId = null;
+        socket.emit("leaveChat");
+    }
+    showPopup("Left group");
+    loadFriends();
+  } else {
+    showPopup("Failed to leave group");
+  }
+  closeChatItemOptions();
+};
+
+window.openGroupProfile = async function() {
+    const modal = document.getElementById("groupProfileModal");
+    const nameEl = document.getElementById("groupModalName");
+    const listEl = document.getElementById("groupMembersList");
+    const countEl = document.getElementById("groupModalMemberCount");
+    
+    nameEl.innerText = currentFriendName;
+    modal.style.display = "flex";
+    listEl.innerHTML = '<p style="color: #888; text-align: center;">Loading members...</p>';
+    
+    const res = await fetch(`/getGroupMembers/${currentFriendId}/${userId}`);
+    const data = await res.json();
+    
+    if (data.success) {
+        listEl.innerHTML = "";
+        countEl.innerText = `${data.members.length} Members`;
+        data.members.forEach(m => {
+            const item = document.createElement("div");
+            item.className = "friend-item-mini";
+            item.style.justifyContent = "space-between";
+            const isMe = String(m.id) === String(userId);
+            let actionBtn = "";
+            if (!isMe && !m.isFriend) {
+                actionBtn = m.isPending 
+                    ? `<button class="card-btn-pending" style="padding: 4px 10px; font-size: 11px;">Pending</button>`
+                    : `<button class="card-btn-add" style="padding: 4px 10px; font-size: 11px;" onclick="sendFriendRequestFromGroup(${m.id}, this)">Add Friend</button>`;
+            }
+            item.innerHTML = `<div style="display: flex; align-items: center; gap: 10px;">
+                <img src="${m.avatar || '/images/profile1.webp'}" style="width: 40px; height: 40px; border-radius: 50%;">
+                <div><div style="font-weight: 600; color: white;">${m.name} ${isMe ? '(You)' : ''}</div><div style="font-size: 11px; color: #888;">${isMe ? 'Creator/Member' : (m.isFriend ? 'Friend' : 'Member')}</div></div></div>${actionBtn}`;
+            listEl.appendChild(item);
+        });
+    }
+};
+
+window.sendFriendRequestFromGroup = async function(id, btn) {
+    btn.disabled = true;
+    const res = await fetch("/sendRequest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, receiver: id }) });
+    if (res.ok) { socket.emit("friendRequestSent", { receiver: id }); btn.innerText = "Pending"; btn.className = "card-btn-pending"; }
+};
+
+window.handleLeaveGroupFromProfile = function() {
+    longPressedFriendId = currentFriendId;
+    longPressedIsGroup = true;
+    handleLeaveGroup();
+    document.getElementById("groupProfileModal").style.display = "none";
+};
+
+window.handleBlockGroupFromProfile = function() {
+    setChatHidden(currentFriendId, true);
+    setChatRemoved(currentFriendId, true);
+    document.getElementById("chatScreen").style.display = "none";
+    document.getElementById("groupProfileModal").style.display = "none";
+    isChatOpen = false;
+    isGroupChat = false;
+    currentFriendId = null;
+    socket.emit("leaveChat");
+    loadFriends();
+    showPopup("Group Blocked");
+};
 
 function closeProfileMenu() {
   const sheet = document.getElementById("profileActionSheet");
@@ -1938,7 +2094,10 @@ socket.on("storyDeleted", (data) => {
   }
 });
 
-socket.on("friendAdded", () => {
+socket.on("groupCreated", (data) => {
+  if (data.creatorName && data.creatorName !== localStorage.getItem("username")) {
+    showPopup(`${data.creatorName} add you in group`);
+  }
   loadFriends();
 });
 
@@ -1952,6 +2111,35 @@ socket.on("userBlocked", (data) => {
   const targetId =
     String(data.blockerId) === String(userId) ? data.blockedId : data.blockerId;
   removeFriendFromUI(targetId);
+});
+
+socket.on("groupCreated", () => {
+  loadFriends();
+});
+
+socket.on("newGroupMessage", (data) => {
+  const key = `group_${data.groupId}`;
+  if (!unreadCounts[key]) unreadCounts[key] = { count: 0, preview: "" };
+  unreadCounts[key].preview = formatPreviewText(data.message, data.type);
+
+  if (isGroupChat && String(currentFriendId) === String(data.groupId)) {
+    delete unreadCounts[key];
+    appendMessage(data.senderId, data.message, data.msgId, "sent", null, data.type, data.timestamp, data.caption, null, null, 0, "", 0, data.senderName);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  } else {
+    unreadCounts[key].count++;
+  }
+
+  // Move Group to top and update preview in sidebar
+  const chatList = document.querySelector(".chat-list");
+  const item = document.querySelector(`.chat-item[data-friend-id="${data.groupId}"][data-is-group="true"]`);
+  const aiRow = document.querySelector(".ai-assistant-row");
+  if (item && chatList) {
+    if (aiRow) aiRow.after(item);
+    else chatList.prepend(item);
+  }
+
+  updateFriendList();
 });
 
 // ================= FRIEND SEARCH =================
@@ -2465,21 +2653,22 @@ document.querySelectorAll(".theme-preview").forEach((preview) => {
 
 async function saveTheme(themeType, themeValue) {
   if (!currentFriendId) return;
-  await fetch("/setTheme", {
+  const endpoint = isGroupChat ? "/setGroupTheme" : "/setTheme";
+  const body = isGroupChat 
+    ? { groupId: currentFriendId, themeType, themeValue }
+    : { userId, friendId: currentFriendId, themeType, themeValue };
+
+  await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId,
-      friendId: currentFriendId,
-      themeType,
-      themeValue,
-    }),
+    body: JSON.stringify(body),
   });
-  // Notify friend in real-time
+
   socket.emit("themeChange", {
     to: currentFriendId,
     themeType,
     themeValue,
+    isGroup: isGroupChat
   });
 }
 
@@ -2499,8 +2688,9 @@ function applyTheme(themeType, themeValue) {
 }
 
 socket.on("themeChanged", (data) => {
-  // from is the user who changed the theme
-  if (currentFriendId && data.from == currentFriendId) {
+  if (isGroupChat && data.isGroup && data.groupId == currentFriendId) {
+    applyTheme(data.themeType, data.themeValue);
+  } else if (!isGroupChat && !data.isGroup && data.from == currentFriendId) {
     applyTheme(data.themeType, data.themeValue);
   }
 });
@@ -2515,6 +2705,7 @@ socket.on("newMessage", (data) => {
   if (isChatRemoved(fromId)) { setChatRemoved(fromId, false); loadFriends(); }
 
   const isCurrentChat =
+    !isGroupChat &&
     currentFriendId &&
     (data.from == currentFriendId || data.to == currentFriendId);
 
@@ -2533,7 +2724,7 @@ socket.on("newMessage", (data) => {
 
   // ✅ Real-time Move to top (under AI assistant)
   const chatList = document.querySelector(".chat-list");
-  const item = document.querySelector(`.chat-item[data-friend-id="${fromId}"]`);
+  const item = document.querySelector(`.chat-item[data-friend-id="${fromId}"][data-is-group="false"]`);
   const aiRow = document.querySelector(".ai-assistant-row");
 
   if (item && chatList) {
@@ -2542,8 +2733,9 @@ socket.on("newMessage", (data) => {
   }
 
   // ✅ Update sidebar preview text in state
-  if (!unreadCounts[fromId]) unreadCounts[fromId] = { count: 0, preview: "" };
-  unreadCounts[fromId].preview = formatPreviewText(data.message, data.type);
+  const key = `user_${fromId}`;
+  if (!unreadCounts[key]) unreadCounts[key] = { count: 0, preview: "" };
+  unreadCounts[key].preview = formatPreviewText(data.message, data.type);
 
   if (isCurrentChat) {
     // ✅ prevent duplicate ONLY
@@ -2586,7 +2778,7 @@ socket.on("newMessage", (data) => {
   }
 
   // If not current chat, increment unread count
-  unreadCounts[fromId].count++;
+  unreadCounts[key].count++;
   updateFriendList();
 });
 socket.on("snapOpenedUpdate", ({ msgId, openedBy, userId: openerId }) => {
@@ -2828,7 +3020,7 @@ function appendMessage(
   replyTo = null,
   isOpened = 0,
   openedBy = "",
-  isSaved = 0,
+  isSaved = 0, senderNameOverride = null
 ) {
   if (msgId && renderedMessages.has(msgId)) return;
 
@@ -2867,7 +3059,8 @@ function appendMessage(
   if (
     type === "call_log" ||
     type === "screenshot_log" ||
-    type === "timer_log"
+    type === "timer_log" ||
+    type === "group_log"
   ) {
     div.className = `message ${type.replace("_", "-")}`;
     const timeStr = timestamp
@@ -2892,6 +3085,9 @@ function appendMessage(
       text = isMe
         ? `You set chat timer to ${message}`
         : `Chat timer updated to ${message}`;
+    } else if (type === "group_log") {
+      icon = "🚪";
+      text = message;
     }
 
     div.innerHTML = `${icon} ${text} <span class="call-log-time">${timeStr}</span>`;
@@ -3136,7 +3332,7 @@ function appendMessage(
   `;
     }
     div.innerHTML = `
-  <div class="message-sender">${isMe ? "Me" : currentFriendName || "Friend"}</div>
+  <div class="message-sender">${isMe ? "Me" : senderNameOverride || currentFriendName || "Friend"}</div>
    ${replyHtml}
   ${contentHtml}
   ${tickHtml}
@@ -3544,7 +3740,7 @@ socket.on("messageDeleted", (data) => {
   // 2. Global UI update (Chat List)
   const otherId = String(senderId) === String(userId) ? receiverId : senderId;
   const chatItem = document.querySelector(
-    `.chat-item[data-friend-id="${otherId}"]`,
+    `.chat-item[data-friend-id="${otherId}"][data-is-group="false"]`,
   );
 
   if (chatItem) {
@@ -3554,8 +3750,9 @@ socket.on("messageDeleted", (data) => {
       wasUnread &&
       String(receiverId) === String(userId)
     ) {
-      if (unreadCounts[otherId] && unreadCounts[otherId].count > 0) {
-        unreadCounts[otherId].count--;
+      const key = `user_${otherId}`;
+      if (unreadCounts[key] && unreadCounts[key].count > 0) {
+        unreadCounts[key].count--;
       }
     }
 
@@ -3725,6 +3922,24 @@ sendBtn.onclick = () => {
   // ✅ Intercept AI Message
   if (currentFriendId === "Baby") {
     handleAIChat(text);
+    return;
+  }
+
+  if (isGroupChat) {
+    socket.emit("sendGroupMessage", {
+      groupId: currentFriendId,
+      message: text,
+      type: "text"
+    }, (res) => {
+      if (res && res.success) {
+        const msg = res.data;
+        appendMessage(userId, msg.message, msg.msgId, "sent", null, "text", msg.timestamp);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    });
+    msgInput.value = "";
+    msgInput.style.height = "auto";
+    stopTyping();
     return;
   }
 
@@ -3975,7 +4190,7 @@ socket.on("userTyping", (data) => {
     typingTimers.delete(data.from);
   }
 
-  typingUsers.set(data.from, data.typing);
+  typingUsers.set(`user_${data.from}`, data.typing);
   updateFriendList();
 
   if (data.from == currentFriendId) {
@@ -3986,7 +4201,7 @@ socket.on("userTyping", (data) => {
 
   if (data.typing) {
     const timerId = setTimeout(() => {
-      typingUsers.set(data.from, false);
+      typingUsers.set(`user_${data.from}`, false);
       updateFriendList();
       typingTimers.delete(data.from);
     }, 4000);
@@ -4001,18 +4216,20 @@ function updateFriendList() {
   const items = document.querySelectorAll(".chat-item");
 
   items.forEach((item) => {
-    const friendId = parseInt(item.dataset.friendId);
-    const unread = unreadCounts[friendId];
+    const friendId = item.dataset.friendId;
+    const isGroupItem = item.dataset.isGroup === "true";
+    const key = isGroupItem ? `group_${friendId}` : `user_${friendId}`;
     const streak = parseInt(item.dataset.streak) || 0;
     const streakHtml = streak > 0 ? `🔥 ${streak}` : "💬";
 
     const msgEl = item.querySelector(".chat-msg");
     const days = item.querySelector(".chat-days");
 
-    if (typingUsers.get(friendId)) {
+    if (typingUsers.get(key)) {
       msgEl.textContent = "typing...";
       days.innerHTML = "⏳";
-    } else if (unread) {
+    } else if (unreadCounts[key]) {
+      const unread = unreadCounts[key];
       msgEl.textContent = unread.preview || "Click to chat";
       if (unread.count > 0) {
         days.innerHTML = `<span class="unread-badge">${unread.count}</span>`;
@@ -4027,11 +4244,16 @@ function updateFriendList() {
 }
 
 async function loadFriends() {
-  const res = await fetch(`/getFriends/${userId}`);
-  const data = await res.json();
+  const [friendsRes, groupsRes] = await Promise.all([
+    fetch(`/getFriends/${userId}`),
+    fetch(`/getGroups/${userId}`)
+  ]);
+  
+  const friendsData = await friendsRes.json();
+  const groupsData = await groupsRes.json();
 
   // Cache for searching
-  cachedFriends = data.friends || [];
+  cachedFriends = friendsData.friends || [];
 
   const chatList = document.querySelector(".chat-list");
   chatList.innerHTML = "";
@@ -4052,47 +4274,90 @@ async function loadFriends() {
   chatList.appendChild(aiItem);
 
   // ✅ POPULATE UNREAD COUNTS FROM DB
-  data.friends.forEach((friend) => {
-    unreadCounts[friend.id] = {
+  friendsData.friends.forEach((friend) => {
+    unreadCounts[`user_${friend.id}`] = {
       count: friend.unreadCount || 0,
       preview: formatPreviewText(friend.lastMessage, friend.lastMessageType),
     };
   });
 
-  data.friends.forEach((friend) => {
+  groupsData.groups.forEach((group) => {
+    unreadCounts[`group_${group.id}`] = {
+      count: 0,
+      preview: formatPreviewText(group.lastMessage, group.lastMessageType),
+    };
+  });
+
+  // Merge and sort by last interaction
+  const allItems = [
+    ...(friendsData.friends || []).map(f => ({ ...f, isGroup: false })),
+    ...(groupsData.groups || []).map(g => ({ ...g, isGroup: true }))
+  ].sort((a, b) => {
+      const timeA = new Date(a.lastMessageTimestamp || a.created_at || 0);
+      const timeB = new Date(b.lastMessageTimestamp || b.created_at || 0);
+      return timeB - timeA;
+  });
+
+  allItems.forEach((item) => {
     // Only render if not hidden or removed from list
-    if (isChatHidden(friend.id) || isChatRemoved(friend.id)) return;
+    if (isChatHidden(item.id) || isChatRemoved(item.id)) return;
 
-    const item = document.createElement("div");
+    if (item.isGroup) {
+        const div = document.createElement("div");
+        div.className = "chat-item";
+        div.dataset.friendId = item.id;
+        div.dataset.isGroup = "true";
+        div.innerHTML = `
+            <img src="/images/rtable.png" style="border: 2px solid #4facfe;">
+            <div class="chat-info">
+                <div class="chat-name">${item.name}</div>
+                <div class="chat-msg">${formatPreviewText(item.lastMessage, item.lastMessageType) || "Click to chat"}</div>
+            </div>
+            <div class="chat-days">Group</div>
+        `;
+        div.onclick = () => openGroupChat(item.id, item.name);
 
-    item.className = "chat-item";
-    item.dataset.friendId = friend.id;
-    item.dataset.streak = friend.streak || 0;
+        let lp;
+        div.addEventListener('touchstart', () => { lp = setTimeout(() => openChatItemOptions(item.id, item.name, true), 600); });
+        div.addEventListener('touchend', () => clearTimeout(lp));
+        div.addEventListener('touchmove', () => clearTimeout(lp));
+        div.oncontextmenu = (e) => { e.preventDefault(); openChatItemOptions(item.id, item.name, true); };
 
-    const fireHtml = friend.streak > 0 ? `🔥 ${friend.streak}` : "💬";
+        chatList.appendChild(div);
+        return;
+    }
+
+    const div = document.createElement("div");
+
+    div.className = "chat-item";
+    div.dataset.friendId = item.id;
+    div.dataset.isGroup = "false";
+    div.dataset.streak = item.streak || 0;
+
+    const fireHtml = item.streak > 0 ? `🔥 ${item.streak}` : "💬";
 
     const lastMsgPreview =
-      formatPreviewText(friend.lastMessage, friend.lastMessageType) ||
+      formatPreviewText(item.lastMessage, item.lastMessageType) ||
       "Click to chat";
-    item.innerHTML = `
-      <img src="${getAvatarSrc(friend)}">
+    div.innerHTML = `
+      <img src="${getAvatarSrc(item)}">
       <div class="chat-info">
-        <div class="chat-name">${friend.name}</div>
+        <div class="chat-name">${item.name}</div>
         <div class="chat-msg">${lastMsgPreview}</div>
       </div>
       <div class="chat-days">${fireHtml}</div>
     `;
 
-    item.onclick = () => openChat(friend.id, friend.name, friend.avatar);
+    div.onclick = () => openChat(item.id, item.name, item.avatar);
     
     // Long press and Context Menu
     let lp;
-    item.addEventListener('touchstart', () => { lp = setTimeout(() => openChatItemOptions(friend.id, friend.name), 600); });
-    item.addEventListener('touchend', () => clearTimeout(lp));
-    item.addEventListener('touchmove', () => clearTimeout(lp));
-    item.oncontextmenu = (e) => { e.preventDefault(); openChatItemOptions(friend.id, friend.name); };
+    div.addEventListener('touchstart', () => { lp = setTimeout(() => openChatItemOptions(item.id, item.name), 600); });
+    div.addEventListener('touchend', () => clearTimeout(lp));
+    div.addEventListener('touchmove', () => clearTimeout(lp));
+    div.oncontextmenu = (e) => { e.preventDefault(); openChatItemOptions(item.id, item.name); };
 
-    chatList.appendChild(item);
+    chatList.appendChild(div);
   });
   updateFriendList();
 }
@@ -4200,8 +4465,54 @@ function closeAllModals() {
   }
 }
 
+window.openGroupChat = async function (groupId, groupName) {
+  isChatOpen = true;
+  isGroupChat = true;
+  currentFriendId = groupId;
+  currentFriendName = groupName;
+  activeChat = groupId;
+  delete unreadCounts[`group_${groupId}`];
+  updateFriendList();
+  closeAllModals();
+
+  const chatNameEl = document.getElementById("chatName");
+  chatNameEl.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="openGroupProfile()">
+      <img src="/images/rtable.png" alt="Group" class="golden-avatar">
+      <div class="chat-header-info">
+        <span>${groupName}</span>
+        <span class="chat-status">Group Chat</span>
+      </div>
+    </div>
+    <div class="chat-actions">
+      <button class="chat-action-btn" id="chatOptionsBtn"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+    </div>`;
+
+  document.getElementById("chatOptionsBtn").onclick = () => { themeOptionsPopup.style.display = "flex"; };
+
+  const messagesEl = document.getElementById("messages");
+  messagesEl.innerHTML = "";
+  renderedMessages.clear();
+  lastRenderedDate = null;
+
+  const themeRes = await fetch(`/getGroupTheme/${groupId}`);
+  const themeData = await themeRes.json();
+  applyTheme(themeData.theme?.theme_type, themeData.theme?.theme_value);
+
+  const res = await fetch(`/getGroupMessages/${groupId}`);
+  const data = await res.json();
+  data.messages.forEach(msg => {
+    appendMessage(msg.sender_id, msg.message, msg.id, "sent", null, msg.type, msg.timestamp, msg.caption, null, null, 0, "", 0, msg.senderName);
+  });
+
+  socket.emit("joinGroup", groupId);
+  document.getElementById("chatScreen").style.display = "flex";
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+};
+
 window.openChat = async function (friendId, friendName, friendAvatar = null) {
   isChatOpen = true;
+  isGroupChat = false;
   loadMuteState();
   closeAllModals();
   scrollToBottomBtn.classList.remove("show"); // Ensure button is hidden on open
@@ -4209,7 +4520,7 @@ window.openChat = async function (friendId, friendName, friendAvatar = null) {
   window.currentFriendId = friendId;
   currentFriendName = friendName;
   activeChat = friendId;
-  delete unreadCounts[friendId];
+  delete unreadCounts[`user_${friendId}`];
   
   // Bring back removed chats when manually opened via search
   if (isChatRemoved(friendId)) { setChatRemoved(friendId, false); }
@@ -4410,6 +4721,7 @@ document.getElementById("backChat").onclick = () => {
   document.getElementById("chatScreen").style.display = "none";
   scrollToBottomBtn.classList.remove("show");
   isChatOpen = false;
+  isGroupChat = false;
   activeChat = null; // ✅ ADD THIS
   currentFriendId = null;
   currentFriendName = null;
